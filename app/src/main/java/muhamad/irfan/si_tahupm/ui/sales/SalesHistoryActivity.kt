@@ -38,12 +38,27 @@ class SalesHistoryActivity : BaseListScreenActivity() {
                 subtitle = it.source + " • " + it.items.joinToString(", ") { item -> (DemoRepository.getProduct(item.productId)?.name ?: "Produk") + " x" + item.qty },
                 badge = it.paymentMethod,
                 amount = Formatters.currency(it.total),
+                actionLabel = "Hapus",
                 tone = if (it.source == "KASIR") RowTone.GOLD else RowTone.BLUE
             )
         })
     }
 
     override fun onRowClick(item: RowItem) {
-        showDetailModal(item.title, DemoRepository.buildReceiptText(item.id))
+        showReceiptModal("Struk ${item.id}", DemoRepository.buildReceiptText(item.id))
+    }
+
+    override fun onRowAction(item: RowItem) {
+        showConfirmationModal(
+            title = "Hapus transaksi penjualan?",
+            message = "Transaksi ${item.id} akan dihapus dan stok produk akan dikembalikan. Lanjutkan?"
+        ) {
+            runCatching { DemoRepository.deleteSale(item.id) }
+                .onSuccess {
+                    showMessage("Transaksi penjualan berhasil dihapus.")
+                    refresh()
+                }
+                .onFailure { showMessage(it.message ?: "Gagal menghapus transaksi penjualan") }
+        }
     }
 }

@@ -55,11 +55,16 @@ class ProductListActivity : BaseListScreenActivity() {
     }
 
     override fun onRowAction(item: RowItem) {
-        runCatching { DemoRepository.softDeleteProduct(item.id) }
-            .onSuccess {
-                showMessage("Produk berhasil dihapus secara soft delete.")
-                refresh()
-            }
-            .onFailure { showMessage(it.message ?: "Gagal menghapus produk") }
+        showConfirmationModal(
+            title = "Hapus produk?",
+            message = "Produk ${item.title} akan di-soft delete. Transaksi lama tetap tersimpan. Lanjutkan?"
+        ) {
+            runCatching { DemoRepository.softDeleteProduct(item.id) }
+                .onSuccess {
+                    showMessage("Produk berhasil dihapus secara soft delete.")
+                    refresh()
+                }
+                .onFailure { showMessage(it.message ?: "Gagal menghapus produk") }
+        }
     }
 }

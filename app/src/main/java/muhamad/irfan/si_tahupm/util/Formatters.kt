@@ -30,18 +30,14 @@ object Formatters {
         }
     }
 
-    fun toDateOnly(value: String?): String {
-        val date = parseDate(value)
-        return dateOnlyParser.format(date)
-    }
-
+    fun toDateOnly(value: String?): String = dateOnlyParser.format(parseDate(value))
     fun readableDate(value: String?): String = longDate.format(parseDate(value))
-
     fun readableShortDate(value: String?): String = shortDate.format(parseDate(value))
-
     fun readableTime(value: String?): String = shortTime.format(parseDate(value))
-
     fun readableDateTime(value: String?): String = longDateTime.format(parseDate(value))
+
+    fun currentDateOnly(): String = dateOnlyParser.format(Date())
+    fun currentTimeOnly(): String = shortTime.format(Date())
 
     fun isoDate(date: String, time: String): String = "${date}T${time}"
 

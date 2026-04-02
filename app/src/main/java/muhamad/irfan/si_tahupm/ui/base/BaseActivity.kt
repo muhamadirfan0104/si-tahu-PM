@@ -3,19 +3,72 @@ package muhamad.irfan.si_tahupm.ui.base
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.snackbar.Snackbar
+import muhamad.irfan.si_tahupm.R
 import muhamad.irfan.si_tahupm.data.DemoRepository
 import muhamad.irfan.si_tahupm.data.UserRole
 import muhamad.irfan.si_tahupm.util.ModalHelper
-import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.snackbar.Snackbar
+import muhamad.irfan.si_tahupm.util.PrintHelper
 import java.io.File
 
 open class BaseActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         DemoRepository.init(applicationContext)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
+        window.statusBarColor = ContextCompat.getColor(this, R.color.screen_bg_light)
+        window.navigationBarColor = ContextCompat.getColor(this, R.color.card_surface)
+    }
+
+    override fun onContentChanged() {
+        super.onContentChanged()
+        applySystemBarInsets()
+    }
+
+    private fun applySystemBarInsets() {
+        val root = findViewById<View>(android.R.id.content) ?: return
+        val toolbar = root.findViewById<MaterialToolbar?>(R.id.toolbar)
+        val bottomNavigation = root.findViewById<BottomNavigationView?>(R.id.bottomNavigation)
+
+        if (toolbar != null) {
+            val initialTop = toolbar.paddingTop
+            ViewCompat.setOnApplyWindowInsetsListener(toolbar) { view, insets ->
+                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                view.updatePadding(top = initialTop + systemBars.top)
+                insets
+            }
+            ViewCompat.requestApplyInsets(toolbar)
+        } else {
+            val initialTop = root.paddingTop
+            ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                view.updatePadding(top = initialTop + systemBars.top)
+                insets
+            }
+            ViewCompat.requestApplyInsets(root)
+        }
+
+        if (bottomNavigation != null) {
+            val initialBottom = bottomNavigation.paddingBottom
+            ViewCompat.setOnApplyWindowInsetsListener(bottomNavigation) { view, insets ->
+                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                view.updatePadding(bottom = initialBottom + systemBars.bottom)
+                insets
+            }
+            ViewCompat.requestApplyInsets(bottomNavigation)
+        }
     }
 
     protected fun bindToolbar(toolbar: MaterialToolbar, title: String, subtitle: String? = null, showBack: Boolean = true) {
@@ -36,8 +89,41 @@ open class BaseActivity : AppCompatActivity() {
         return DemoRepository.sessionUser()?.id ?: DemoRepository.loginAs(UserRole.ADMIN).id
     }
 
-    protected fun showDetailModal(title: String, message: String) {
-        ModalHelper.showDetailModal(this, title, message)
+    protected fun showDetailModal(
+        title: String,
+        message: String,
+        neutralLabel: String? = null,
+        onNeutral: (() -> Unit)? = null,
+        negativeLabel: String? = null,
+        onNegative: (() -> Unit)? = null,
+        monospace: Boolean = true
+    ) {
+        ModalHelper.showDetailModal(
+            context = this,
+            title = title,
+            message = message,
+            neutralLabel = neutralLabel,
+            onNeutral = onNeutral,
+            negativeLabel = negativeLabel,
+            onNegative = onNegative,
+            monospace = monospace
+        )
+    }
+
+    protected fun showConfirmationModal(title: String, message: String, confirmLabel: String = "Hapus", onConfirm: () -> Unit) {
+        ModalHelper.showConfirmationModal(this, title, message, confirmLabel, onConfirm)
+    }
+
+    protected fun showReceiptModal(title: String, receiptText: String, printLabel: String = "Cetak Struk") {
+        showDetailModal(
+            title = title,
+            message = receiptText,
+            neutralLabel = "Bagikan",
+            onNeutral = { sharePlainText(title, receiptText) },
+            negativeLabel = printLabel,
+            onNegative = { PrintHelper.printPlainText(this, title, receiptText) },
+            monospace = true
+        )
     }
 
     protected fun sharePlainText(title: String, text: String) {

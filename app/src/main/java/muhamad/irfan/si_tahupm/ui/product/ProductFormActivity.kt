@@ -2,11 +2,11 @@ package muhamad.irfan.si_tahupm.ui.product
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.ArrayAdapter
 import muhamad.irfan.si_tahupm.data.DemoRepository
 import muhamad.irfan.si_tahupm.databinding.ActivityProductFormBinding
 import muhamad.irfan.si_tahupm.ui.base.BaseActivity
 import muhamad.irfan.si_tahupm.util.AppExtras
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 class ProductFormActivity : BaseActivity() {
     private lateinit var binding: ActivityProductFormBinding
@@ -19,8 +19,8 @@ class ProductFormActivity : BaseActivity() {
         setContentView(binding.root)
         bindToolbar(binding.toolbar, "Form Produk", "Tambah atau edit produk")
 
-        binding.spCategory.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, categories)
-        binding.spPhotoTone.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, tones)
+        binding.spCategory.adapter = SpinnerAdapters.stringAdapter(this, categories)
+        binding.spPhotoTone.adapter = SpinnerAdapters.stringAdapter(this, tones)
 
         val editing = DemoRepository.getProduct(intent.getStringExtra(AppExtras.EXTRA_PRODUCT_ID))
         if (editing != null) {

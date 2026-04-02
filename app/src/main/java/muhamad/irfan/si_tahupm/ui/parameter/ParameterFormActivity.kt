@@ -2,11 +2,11 @@ package muhamad.irfan.si_tahupm.ui.parameter
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.ArrayAdapter
 import muhamad.irfan.si_tahupm.data.DemoRepository
 import muhamad.irfan.si_tahupm.databinding.ActivityParameterFormBinding
 import muhamad.irfan.si_tahupm.ui.base.BaseActivity
 import muhamad.irfan.si_tahupm.util.AppExtras
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 class ParameterFormActivity : BaseActivity() {
     private lateinit var binding: ActivityParameterFormBinding
@@ -18,7 +18,7 @@ class ParameterFormActivity : BaseActivity() {
         setContentView(binding.root)
         bindToolbar(binding.toolbar, "Form Parameter", "Tambah atau edit parameter")
 
-        binding.spProduct.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, products.map { it.name })
+        binding.spProduct.adapter = SpinnerAdapters.stringAdapter(this, products.map { it.name })
         val editing = DemoRepository.getParameter(intent.getStringExtra(AppExtras.EXTRA_PARAMETER_ID))
         if (editing != null) {
             val productIndex = products.indexOfFirst { it.id == editing.productId }.coerceAtLeast(0)

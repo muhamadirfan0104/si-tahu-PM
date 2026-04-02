@@ -18,7 +18,7 @@ import muhamad.irfan.si_tahupm.util.RowTone
 class SalesMenuFragment : BaseFragment(R.layout.fragment_sales_menu) {
     private var _binding: FragmentSalesMenuBinding? = null
     private val binding get() = _binding!!
-    private val adapter = GenericRowAdapter(onItemClick = { row -> showDetailModal(row.title, DemoRepository.buildReceiptText(row.id)) })
+    private val adapter = GenericRowAdapter(onItemClick = { row -> showReceiptModal("Struk ${row.id}", DemoRepository.buildReceiptText(row.id)) })
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)

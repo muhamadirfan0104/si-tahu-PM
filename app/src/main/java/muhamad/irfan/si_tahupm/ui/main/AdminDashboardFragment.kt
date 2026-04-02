@@ -21,7 +21,7 @@ class AdminDashboardFragment : BaseFragment(R.layout.fragment_admin_dashboard) {
     private val binding get() = _binding!!
 
     private val lowStockAdapter = GenericRowAdapter(onItemClick = { row -> openStockDetail(row.id) })
-    private val recentAdapter = GenericRowAdapter(onItemClick = { row -> showDetailModal(row.title, DemoRepository.buildTransactionDetailText(row.id, row.badge)) })
+    private val recentAdapter = GenericRowAdapter(onItemClick = ::openRecentDetail)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -80,10 +80,19 @@ class AdminDashboardFragment : BaseFragment(R.layout.fragment_admin_dashboard) {
                     "Produksi" -> RowTone.GREEN
                     "Konversi" -> RowTone.BLUE
                     "Pengeluaran" -> RowTone.ORANGE
+                    "Adjustment" -> RowTone.ORANGE
                     else -> RowTone.GOLD
                 }
             )
         })
+    }
+
+    private fun openRecentDetail(row: RowItem) {
+        if (row.badge == "Penjualan" || row.badge == "Rekap Pasar") {
+            showReceiptModal("Struk ${row.id}", DemoRepository.buildReceiptText(row.id))
+        } else {
+            showDetailModal(row.title, DemoRepository.buildTransactionDetailText(row.id, row.badge))
+        }
     }
 
     private fun openStockDetail(productId: String) {

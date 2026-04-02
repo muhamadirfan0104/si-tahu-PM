@@ -24,7 +24,7 @@ class ExpenseFormActivity : BaseActivity() {
             binding.etAmount.setText(editing.amount.toString())
             binding.etNote.setText(editing.note)
         } else {
-            binding.etDate.setText(DemoRepository.latestDateOnly())
+            binding.etDate.setText(Formatters.currentDateOnly())
         }
 
         binding.btnSave.setOnClickListener {

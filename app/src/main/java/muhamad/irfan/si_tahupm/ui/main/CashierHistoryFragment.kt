@@ -16,7 +16,10 @@ import muhamad.irfan.si_tahupm.util.RowTone
 class CashierHistoryFragment : BaseFragment(R.layout.fragment_cashier_history) {
     private var _binding: FragmentCashierHistoryBinding? = null
     private val binding get() = _binding!!
-    private val adapter = GenericRowAdapter(onItemClick = { row -> showDetailModal(row.title, DemoRepository.buildReceiptText(row.id)) })
+    private val adapter = GenericRowAdapter(
+        onItemClick = { row -> showReceiptModal("Struk ${row.id}", DemoRepository.buildReceiptText(row.id)) },
+        onActionClick = { row -> confirmDelete(row) }
+    )
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -46,10 +49,25 @@ class CashierHistoryFragment : BaseFragment(R.layout.fragment_cashier_history) {
                 subtitle = sale.items.joinToString(", ") { (DemoRepository.getProduct(it.productId)?.name ?: "Produk") + " x" + it.qty },
                 badge = sale.paymentMethod,
                 amount = Formatters.currency(sale.total),
+                actionLabel = "Hapus",
                 tone = RowTone.GOLD
             )
         }
         adapter.submitList(items)
+    }
+
+    private fun confirmDelete(row: RowItem) {
+        showConfirmationModal(
+            title = "Hapus transaksi kasir?",
+            message = "Transaksi ${row.id} akan dihapus dan stok produk akan dikembalikan. Lanjutkan?"
+        ) {
+            runCatching { DemoRepository.deleteSale(row.id) }
+                .onSuccess {
+                    showMessage(requireView(), "Transaksi berhasil dihapus.")
+                    refresh()
+                }
+                .onFailure { showMessage(requireView(), it.message ?: "Gagal menghapus transaksi") }
+        }
     }
 
     override fun onDestroyView() {

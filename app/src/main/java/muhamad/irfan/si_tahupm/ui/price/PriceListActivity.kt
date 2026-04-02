@@ -63,11 +63,16 @@ class PriceListActivity : BaseListScreenActivity() {
     }
 
     override fun onRowAction(item: RowItem) {
-        runCatching { DemoRepository.softDeleteChannel(selectedProductId(), item.id) }
-            .onSuccess {
-                showMessage("Harga kanal berhasil dihapus secara soft delete.")
-                refresh()
-            }
-            .onFailure { showMessage(it.message ?: "Gagal menghapus harga kanal") }
+        showConfirmationModal(
+            title = "Hapus harga kanal?",
+            message = "Harga kanal ${item.title} akan di-soft delete. Transaksi lama tetap tersimpan. Lanjutkan?"
+        ) {
+            runCatching { DemoRepository.softDeleteChannel(selectedProductId(), item.id) }
+                .onSuccess {
+                    showMessage("Harga kanal berhasil dihapus secara soft delete.")
+                    refresh()
+                }
+                .onFailure { showMessage(it.message ?: "Gagal menghapus harga kanal") }
+        }
     }
 }

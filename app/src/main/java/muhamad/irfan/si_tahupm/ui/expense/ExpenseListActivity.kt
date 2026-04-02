@@ -38,12 +38,34 @@ class ExpenseListActivity : BaseListScreenActivity() {
                 subtitle = Formatters.readableDate(it.date) + if (it.note.isNotBlank()) " • ${it.note}" else "",
                 badge = "Pengeluaran",
                 amount = Formatters.currency(it.amount),
+                actionLabel = "Hapus",
                 tone = RowTone.ORANGE
             )
         })
     }
 
     override fun onRowClick(item: RowItem) {
-        startActivity(Intent(this, ExpenseFormActivity::class.java).putExtra(AppExtras.EXTRA_EXPENSE_ID, item.id))
+        showDetailModal(
+            title = item.title,
+            message = DemoRepository.buildExpenseDetailText(item.id),
+            neutralLabel = "Edit",
+            onNeutral = {
+                startActivity(Intent(this, ExpenseFormActivity::class.java).putExtra(AppExtras.EXTRA_EXPENSE_ID, item.id))
+            }
+        )
+    }
+
+    override fun onRowAction(item: RowItem) {
+        showConfirmationModal(
+            title = "Hapus pengeluaran?",
+            message = "Pengeluaran ${item.title} akan dihapus dari riwayat. Lanjutkan?"
+        ) {
+            runCatching { DemoRepository.deleteExpense(item.id) }
+                .onSuccess {
+                    showMessage("Pengeluaran berhasil dihapus.")
+                    refresh()
+                }
+                .onFailure { showMessage(it.message ?: "Gagal menghapus pengeluaran") }
+        }
     }
 }

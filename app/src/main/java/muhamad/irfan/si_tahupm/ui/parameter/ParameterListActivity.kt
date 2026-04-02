@@ -23,13 +23,20 @@ class ParameterListActivity : BaseListScreenActivity() {
         refresh()
     }
 
+    override fun onSearchChanged() = refresh()
+
     private fun refresh() {
-        submitRows(DemoRepository.allParameters().map {
+        val query = searchText()
+        submitRows(DemoRepository.allParameters().filter {
+            val productName = DemoRepository.getProduct(it.productId)?.name ?: it.productId
+            (productName + " " + it.note).lowercase().contains(query)
+        }.map {
             RowItem(
                 id = it.id,
                 title = DemoRepository.getProduct(it.productId)?.name ?: it.productId,
                 subtitle = "${it.resultPerBatch} pcs / masak • ${it.note}",
                 badge = if (it.active) "Aktif" else "Nonaktif",
+                actionLabel = "Hapus",
                 amount = "",
                 tone = if (it.active) RowTone.GREEN else RowTone.GOLD
             )
@@ -38,5 +45,19 @@ class ParameterListActivity : BaseListScreenActivity() {
 
     override fun onRowClick(item: RowItem) {
         startActivity(Intent(this, ParameterFormActivity::class.java).putExtra(AppExtras.EXTRA_PARAMETER_ID, item.id))
+    }
+
+    override fun onRowAction(item: RowItem) {
+        showConfirmationModal(
+            title = "Hapus parameter?",
+            message = "Parameter ${item.title} akan dihapus. Minimal harus tersisa 1 parameter aktif di aplikasi. Lanjutkan?"
+        ) {
+            runCatching { DemoRepository.deleteParameter(item.id) }
+                .onSuccess {
+                    showMessage("Parameter berhasil dihapus.")
+                    refresh()
+                }
+                .onFailure { showMessage(it.message ?: "Gagal menghapus parameter") }
+        }
     }
 }

@@ -17,7 +17,7 @@ class CashierDashboardFragment : BaseFragment(R.layout.fragment_cashier_dashboar
     private val binding get() = _binding!!
 
     private val topAdapter = GenericRowAdapter(onItemClick = {})
-    private val recentAdapter = GenericRowAdapter(onItemClick = { row -> showDetailModal(row.title, DemoRepository.buildReceiptText(row.id)) })
+    private val recentAdapter = GenericRowAdapter(onItemClick = { row -> showReceiptModal("Struk ${row.id}", DemoRepository.buildReceiptText(row.id)) })
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)

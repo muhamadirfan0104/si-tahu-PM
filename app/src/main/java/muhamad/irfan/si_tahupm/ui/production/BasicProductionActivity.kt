@@ -1,7 +1,6 @@
 package muhamad.irfan.si_tahupm.ui.production
 
 import android.os.Bundle
-import android.widget.ArrayAdapter
 import muhamad.irfan.si_tahupm.R
 import muhamad.irfan.si_tahupm.data.DemoRepository
 import muhamad.irfan.si_tahupm.databinding.ActivityBasicProductionBinding
@@ -10,6 +9,7 @@ import muhamad.irfan.si_tahupm.ui.main.AdminMainActivity
 import muhamad.irfan.si_tahupm.ui.main.SimpleItemSelectedListener
 import muhamad.irfan.si_tahupm.util.DateTimePickerHelper
 import muhamad.irfan.si_tahupm.util.Formatters
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 class BasicProductionActivity : BaseActivity() {
     private lateinit var binding: ActivityBasicProductionBinding
@@ -21,8 +21,8 @@ class BasicProductionActivity : BaseActivity() {
         setContentView(binding.root)
         bindToolbar(binding.toolbar, "Produksi Dasar", "Input produksi untuk produk dasar")
 
-        binding.etDate.setText(DemoRepository.latestDateOnly())
-        binding.etTime.setText(DemoRepository.latestTimeOnly())
+        binding.etDate.setText(Formatters.currentDateOnly())
+        binding.etTime.setText(Formatters.currentTimeOnly())
         binding.etDate.setOnClickListener {
             DateTimePickerHelper.showDatePicker(this, binding.etDate.text?.toString()) { selected -> binding.etDate.setText(selected) }
         }
@@ -30,7 +30,7 @@ class BasicProductionActivity : BaseActivity() {
             DateTimePickerHelper.showTimePicker(this, currentDateTime()) { selected -> binding.etTime.setText(selected) }
         }
 
-        binding.spProduct.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, products.map { it.name })
+        binding.spProduct.adapter = SpinnerAdapters.stringAdapter(this, products.map { it.name })
         binding.spProduct.onItemSelectedListener = SimpleItemSelectedListener { refreshParameterInfo() }
         binding.btnSave.setOnClickListener {
             val product = selectedProduct() ?: return@setOnClickListener

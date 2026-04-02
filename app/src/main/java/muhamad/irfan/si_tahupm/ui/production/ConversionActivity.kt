@@ -1,7 +1,6 @@
 package muhamad.irfan.si_tahupm.ui.production
 
 import android.os.Bundle
-import android.widget.ArrayAdapter
 import muhamad.irfan.si_tahupm.R
 import muhamad.irfan.si_tahupm.data.DemoRepository
 import muhamad.irfan.si_tahupm.databinding.ActivityConversionBinding
@@ -9,6 +8,7 @@ import muhamad.irfan.si_tahupm.ui.base.BaseActivity
 import muhamad.irfan.si_tahupm.ui.main.AdminMainActivity
 import muhamad.irfan.si_tahupm.util.DateTimePickerHelper
 import muhamad.irfan.si_tahupm.util.Formatters
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 class ConversionActivity : BaseActivity() {
     private lateinit var binding: ActivityConversionBinding
@@ -20,8 +20,8 @@ class ConversionActivity : BaseActivity() {
         setContentView(binding.root)
         bindToolbar(binding.toolbar, "Produksi Turunan", "Olah stok dasar menjadi produk turunan")
 
-        binding.etDate.setText(DemoRepository.latestDateOnly())
-        binding.etTime.setText(DemoRepository.latestTimeOnly())
+        binding.etDate.setText(Formatters.currentDateOnly())
+        binding.etTime.setText(Formatters.currentTimeOnly())
         binding.etDate.setOnClickListener {
             DateTimePickerHelper.showDatePicker(this, binding.etDate.text?.toString()) { selected -> binding.etDate.setText(selected) }
         }
@@ -29,8 +29,8 @@ class ConversionActivity : BaseActivity() {
             DateTimePickerHelper.showTimePicker(this, currentDateTime()) { selected -> binding.etTime.setText(selected) }
         }
         val names = products.map { it.name }
-        binding.spFromProduct.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
-        binding.spToProduct.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
+        binding.spFromProduct.adapter = SpinnerAdapters.stringAdapter(this, names)
+        binding.spToProduct.adapter = SpinnerAdapters.stringAdapter(this, names)
         binding.spFromProduct.setSelection(products.indexOfFirst { it.id == "prd-putih" }.coerceAtLeast(0))
         binding.spToProduct.setSelection(products.indexOfFirst { it.id == "prd-goreng" }.coerceAtLeast(0))
 

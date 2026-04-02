@@ -2,18 +2,19 @@ package muhamad.irfan.si_tahupm.ui.main
 
 import android.os.Bundle
 import android.view.View
-import android.widget.ArrayAdapter
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import muhamad.irfan.si_tahupm.R
+import muhamad.irfan.si_tahupm.data.CartItem
 import muhamad.irfan.si_tahupm.data.DemoRepository
 import muhamad.irfan.si_tahupm.databinding.FragmentCashierSaleBinding
 import muhamad.irfan.si_tahupm.ui.base.BaseFragment
 import muhamad.irfan.si_tahupm.ui.common.CartAdapter
 import muhamad.irfan.si_tahupm.ui.common.ProductAdapter
 import muhamad.irfan.si_tahupm.util.Formatters
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 class CashierSaleFragment : BaseFragment(R.layout.fragment_cashier_sale) {
     private var _binding: FragmentCashierSaleBinding? = null
@@ -35,10 +36,7 @@ class CashierSaleFragment : BaseFragment(R.layout.fragment_cashier_sale) {
             DemoRepository.changeCart(item.productId, -1)
             refreshCart()
         },
-        onRemove = { item ->
-            DemoRepository.removeFromCart(item.productId)
-            refreshCart()
-        }
+        onRemove = { item -> confirmRemoveCartItem(item) }
     )
 
     private val categories = listOf("Semua", "DASAR", "OLAHAN")
@@ -53,16 +51,20 @@ class CashierSaleFragment : BaseFragment(R.layout.fragment_cashier_sale) {
         binding.rvCart.layoutManager = LinearLayoutManager(requireContext())
         binding.rvCart.adapter = cartAdapter
 
-        binding.spCategory.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, categories)
-        binding.spPayment.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, paymentMethods)
+        binding.spCategory.adapter = SpinnerAdapters.stringAdapter(requireContext(), categories)
+        binding.spPayment.adapter = SpinnerAdapters.stringAdapter(requireContext(), paymentMethods)
         binding.spPayment.setSelection(paymentMethods.indexOf(DemoRepository.checkoutMethod).coerceAtLeast(0))
         binding.etCashPaid.setText(DemoRepository.cashPaid.toString())
         binding.etSearch.addTextChangedListener { refreshProducts() }
         binding.spCategory.setOnItemSelectedListener(SimpleItemSelectedListener { refreshProducts() })
         binding.spPayment.setOnItemSelectedListener(SimpleItemSelectedListener { updatePaymentVisibility() })
         binding.btnClearCart.setOnClickListener {
-            DemoRepository.cart.clear()
-            refreshCart()
+            if (DemoRepository.cart.isNotEmpty()) {
+                showConfirmationModal("Kosongkan keranjang?", "Semua item di keranjang akan dihapus.", "Kosongkan") {
+                    DemoRepository.cart.clear()
+                    refreshCart()
+                }
+            }
         }
         binding.btnCheckout.setOnClickListener {
             val payment = binding.spPayment.selectedItem?.toString().orEmpty()
@@ -71,7 +73,7 @@ class CashierSaleFragment : BaseFragment(R.layout.fragment_cashier_sale) {
                 .onSuccess { sale ->
                     refreshProducts()
                     refreshCart()
-                    showDetailModal("Struk ${sale.id}", DemoRepository.buildReceiptText(sale.id))
+                    showReceiptModal("Struk ${sale.id}", DemoRepository.buildReceiptText(sale.id))
                 }
                 .onFailure { showMessage(view, it.message ?: "Gagal menyimpan transaksi") }
         }
@@ -104,6 +106,14 @@ class CashierSaleFragment : BaseFragment(R.layout.fragment_cashier_sale) {
     private fun updatePaymentVisibility() {
         val payment = binding.spPayment.selectedItem?.toString().orEmpty()
         binding.tilCashPaid.isVisible = payment == "Tunai"
+    }
+
+    private fun confirmRemoveCartItem(item: CartItem) {
+        val productName = DemoRepository.getProduct(item.productId)?.name ?: "produk"
+        showConfirmationModal("Hapus item keranjang?", "$productName akan dihapus dari keranjang.") {
+            DemoRepository.removeFromCart(item.productId)
+            refreshCart()
+        }
     }
 
     override fun onDestroyView() {

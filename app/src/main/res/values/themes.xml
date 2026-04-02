@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.UmkmTahuBerkahXml" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.UmkmTahuBerkahXml" parent="Theme.Material3.Light.NoActionBar">
         <item name="colorPrimary">@color/green_primary</item>
         <item name="colorOnPrimary">@color/white</item>
         <item name="colorSecondary">@color/gold_primary</item>
@@ -10,10 +10,14 @@
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:navigationBarColor">@color/card_surface</item>
         <item name="android:statusBarColor">@color/screen_bg_light</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:forceDarkAllowed">false</item>
         <item name="toolbarStyle">@style/Widget.Umkm.Toolbar</item>
         <item name="materialCardViewStyle">@style/Widget.Umkm.Card</item>
         <item name="materialButtonStyle">@style/Widget.Umkm.Button</item>
         <item name="bottomNavigationStyle">@style/Widget.Umkm.BottomNav</item>
+        <item name="android:spinnerStyle">@style/Widget.Umkm.Spinner</item>
     </style>
 
     <style name="Widget.Umkm.Toolbar" parent="Widget.Material3.Toolbar">
@@ -40,6 +44,11 @@
 
     <style name="Widget.Umkm.BottomNav.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:color">@color/green_soft</item>
+    </style>
+
+    <style name="Widget.Umkm.Spinner" parent="@android:style/Widget.DeviceDefault.Light.Spinner">
+        <item name="android:popupBackground">@color/card_surface</item>
+        <item name="android:backgroundTint">@color/card_surface</item>
     </style>
 
     <style name="ShapeAppearance.Umkm.Small" parent="ShapeAppearance.Material3.Corner.Medium">

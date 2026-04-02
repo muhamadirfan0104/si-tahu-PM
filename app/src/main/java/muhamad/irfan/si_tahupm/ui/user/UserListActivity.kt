@@ -51,11 +51,16 @@ class UserListActivity : BaseListScreenActivity() {
     }
 
     override fun onRowAction(item: RowItem) {
-        runCatching { DemoRepository.softDeleteUser(item.id) }
-            .onSuccess {
-                showMessage("Pengguna berhasil dihapus secara soft delete.")
-                refresh()
-            }
-            .onFailure { showMessage(it.message ?: "Gagal menghapus pengguna") }
+        showConfirmationModal(
+            title = "Hapus pengguna?",
+            message = "Pengguna ${item.title} akan di-soft delete. Transaksi lama tetap tersimpan. Lanjutkan?"
+        ) {
+            runCatching { DemoRepository.softDeleteUser(item.id) }
+                .onSuccess {
+                    showMessage("Pengguna berhasil dihapus secara soft delete.")
+                    refresh()
+                }
+                .onFailure { showMessage(it.message ?: "Gagal menghapus pengguna") }
+        }
     }
 }

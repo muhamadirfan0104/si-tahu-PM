@@ -2,7 +2,6 @@ package muhamad.irfan.si_tahupm.ui.report
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.ArrayAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import muhamad.irfan.si_tahupm.data.DemoRepository
 import muhamad.irfan.si_tahupm.databinding.ActivityReportBinding
@@ -12,6 +11,7 @@ import muhamad.irfan.si_tahupm.ui.history.TransactionHistoryActivity
 import muhamad.irfan.si_tahupm.ui.main.SimpleItemSelectedListener
 import muhamad.irfan.si_tahupm.util.RowItem
 import muhamad.irfan.si_tahupm.util.RowTone
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 class ReportActivity : BaseActivity() {
     private lateinit var binding: ActivityReportBinding
@@ -25,7 +25,7 @@ class ReportActivity : BaseActivity() {
         setContentView(binding.root)
         bindToolbar(binding.toolbar, "Laporan", "Ringkasan usaha per periode")
 
-        binding.spRange.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
+        binding.spRange.adapter = SpinnerAdapters.stringAdapter(this, labels)
         binding.rvMix.layoutManager = LinearLayoutManager(this)
         binding.rvMix.adapter = adapter
         binding.spRange.onItemSelectedListener = SimpleItemSelectedListener { refresh() }

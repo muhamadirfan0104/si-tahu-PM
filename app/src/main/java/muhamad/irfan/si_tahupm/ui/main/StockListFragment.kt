@@ -3,7 +3,6 @@ package muhamad.irfan.si_tahupm.ui.main
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import android.widget.ArrayAdapter
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import muhamad.irfan.si_tahupm.R
@@ -16,6 +15,7 @@ import muhamad.irfan.si_tahupm.ui.stock.StockDetailActivity
 import muhamad.irfan.si_tahupm.util.AppExtras
 import muhamad.irfan.si_tahupm.util.RowItem
 import muhamad.irfan.si_tahupm.util.RowTone
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 class StockListFragment : BaseFragment(R.layout.fragment_stock_list) {
     private var _binding: FragmentStockListBinding? = null
@@ -28,7 +28,7 @@ class StockListFragment : BaseFragment(R.layout.fragment_stock_list) {
         _binding = FragmentStockListBinding.bind(view)
         binding.rvStock.layoutManager = LinearLayoutManager(requireContext())
         binding.rvStock.adapter = adapter
-        binding.spStatus.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, filters)
+        binding.spStatus.adapter = SpinnerAdapters.stringAdapter(requireContext(), filters)
         binding.spStatus.setSelection(0)
         binding.etSearch.addTextChangedListener { refresh() }
         binding.spStatus.setOnItemSelectedListener(SimpleItemSelectedListener { refresh() })

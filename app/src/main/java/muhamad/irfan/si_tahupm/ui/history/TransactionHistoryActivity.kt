@@ -2,13 +2,14 @@ package muhamad.irfan.si_tahupm.ui.history
 
 import android.os.Bundle
 import muhamad.irfan.si_tahupm.data.DemoRepository
+import muhamad.irfan.si_tahupm.data.TransactionRow
 import muhamad.irfan.si_tahupm.ui.base.BaseListScreenActivity
 import muhamad.irfan.si_tahupm.util.RowItem
 import muhamad.irfan.si_tahupm.util.RowTone
 
 class TransactionHistoryActivity : BaseListScreenActivity() {
-    private val typeOptions = listOf("Semua", "Penjualan", "Rekap Pasar", "Produksi", "Konversi", "Pengeluaran")
-    private var currentRows: List<muhamad.irfan.si_tahupm.data.TransactionRow> = emptyList()
+    private val typeOptions = listOf("Semua", "Penjualan", "Rekap Pasar", "Produksi", "Konversi", "Pengeluaran", "Adjustment")
+    private var currentRows: List<TransactionRow> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,10 +39,12 @@ class TransactionHistoryActivity : BaseListScreenActivity() {
                 subtitle = it.type + " • " + it.subtitle,
                 badge = it.type,
                 amount = it.valueText,
+                actionLabel = "Hapus",
                 tone = when (it.type) {
                     "Produksi" -> RowTone.GREEN
                     "Konversi" -> RowTone.BLUE
                     "Pengeluaran" -> RowTone.ORANGE
+                    "Adjustment" -> RowTone.ORANGE
                     else -> RowTone.GOLD
                 }
             )
@@ -50,6 +53,35 @@ class TransactionHistoryActivity : BaseListScreenActivity() {
 
     override fun onRowClick(item: RowItem) {
         val detail = currentRows.firstOrNull { it.id == item.id } ?: return
-        showDetailModal(detail.id, DemoRepository.buildTransactionDetailText(detail.id, detail.type))
+        if (detail.type == "Penjualan" || detail.type == "Rekap Pasar") {
+            showReceiptModal("Struk ${detail.id}", DemoRepository.buildReceiptText(detail.id))
+        } else {
+            showDetailModal(detail.id, DemoRepository.buildTransactionDetailText(detail.id, detail.type))
+        }
+    }
+
+    override fun onRowAction(item: RowItem) {
+        val row = currentRows.firstOrNull { it.id == item.id } ?: return
+        val deleteMessage = when (row.type) {
+            "Penjualan", "Rekap Pasar" -> "Transaksi ${row.id} akan dihapus dan stok produk akan dikembalikan. Lanjutkan?"
+            "Produksi" -> "Produksi ${row.id} akan dihapus dan stok hasil produksi akan dikurangi kembali. Lanjutkan?"
+            "Konversi" -> "Konversi ${row.id} akan dihapus dan stok bahan/hasil akan dibalikkan. Lanjutkan?"
+            "Pengeluaran" -> "Pengeluaran ${row.id} akan dihapus dari riwayat. Lanjutkan?"
+            else -> "Adjustment ${row.id} akan dihapus dan stok akan dibalikkan. Lanjutkan?"
+        }
+        showConfirmationModal("Hapus ${row.type.lowercase()}?", deleteMessage) {
+            runCatching {
+                when (row.type) {
+                    "Penjualan", "Rekap Pasar" -> DemoRepository.deleteSale(row.id)
+                    "Produksi" -> DemoRepository.deleteProduction(row.id)
+                    "Konversi" -> DemoRepository.deleteConversion(row.id)
+                    "Pengeluaran" -> DemoRepository.deleteExpense(row.id)
+                    else -> DemoRepository.deleteAdjustment(row.id)
+                }
+            }.onSuccess {
+                showMessage("Data ${row.type.lowercase()} berhasil dihapus.")
+                refresh()
+            }.onFailure { showMessage(it.message ?: "Gagal menghapus ${row.type.lowercase()}") }
+        }
     }
 }

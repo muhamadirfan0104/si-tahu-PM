@@ -62,6 +62,7 @@ object DemoRepository {
     fun allSales(): List<Sale> = database.sales.sortedByDescending { Formatters.parseDate(it.date) }
     fun allProductionLogs(): List<ProductionLog> = database.productionLogs.sortedByDescending { Formatters.parseDate(it.date) }
     fun allConversions(): List<ConversionLog> = database.conversions.sortedByDescending { Formatters.parseDate(it.date) }
+    fun allAdjustments(): List<StockAdjustment> = database.stockAdjustments.sortedByDescending { Formatters.parseDate(it.date) }
 
     fun getProduct(id: String?): Product? = database.products.firstOrNull { it.id == id }
     fun getUser(id: String?): UserAccount? = database.users.firstOrNull { it.id == id }
@@ -237,6 +238,18 @@ object DemoRepository {
                 subtitle = item.category,
                 valueText = Formatters.currency(item.amount),
                 source = "PENGELUARAN"
+            )
+        }
+        database.stockAdjustments.forEach { item ->
+            val product = getProduct(item.productId)
+            val qtyLabel = if (item.type == "add") "+${item.qty}" else "-${item.qty}"
+            rows += TransactionRow(
+                id = item.id,
+                date = item.date,
+                type = "Adjustment",
+                subtitle = (product?.name ?: "Produk") + " • " + qtyLabel + " " + (product?.unit ?: "pcs"),
+                valueText = if (item.type == "add") "Tambah" else "Kurang",
+                source = "ADJUSTMENT"
             )
         }
         return rows.sortedByDescending { Formatters.parseDate(it.date) }
@@ -569,6 +582,35 @@ object DemoRepository {
         return saved
     }
 
+    fun deleteParameter(parameterId: String): ProductionParameter {
+        if (database.parameters.size <= 1) {
+            throw IllegalStateException("Parameter minimal harus tersisa 1 data")
+        }
+
+        val parameter = getParameter(parameterId)
+            ?: throw IllegalArgumentException("Parameter tidak ditemukan")
+
+        database.parameters.removeAll { it.id == parameterId }
+
+        if (database.parameters.none { it.active }) {
+            database.parameters.firstOrNull()?.active = true
+        } else if (parameter.active && database.parameters.none { it.productId == parameter.productId && it.active }) {
+            val sameProduct = database.parameters.firstOrNull { it.productId == parameter.productId }
+            if (sameProduct != null) {
+                sameProduct.active = true
+            } else {
+                database.parameters.firstOrNull()?.active = true
+            }
+        }
+
+        persist()
+        addActivity(
+            "Parameter produksi untuk ${getProduct(parameter.productId)?.name ?: "produk"} dihapus.",
+            "orange"
+        )
+        return parameter
+    }
+
     fun saveExpense(existingId: String?, dateOnly: String, category: String, amount: Long, note: String, userId: String): Expense {
         val expense = getExpense(existingId)
         val saved = if (expense == null) {
@@ -628,27 +670,100 @@ object DemoRepository {
         return user
     }
 
+    fun deleteSale(saleId: String): Sale {
+        val sale = getSale(saleId) ?: throw IllegalArgumentException("Transaksi penjualan tidak ditemukan")
+        sale.items.forEach { item -> getProduct(item.productId)?.let { it.stock += item.qty } }
+        database.sales.removeAll { it.id == saleId }
+        persist()
+        addActivity("Transaksi ${sale.id} dihapus.", "orange")
+        return sale
+    }
+
+    fun deleteProduction(productionId: String): ProductionLog {
+        val item = getProductionLog(productionId) ?: throw IllegalArgumentException("Data produksi tidak ditemukan")
+        val product = getProduct(item.productId) ?: throw IllegalArgumentException("Produk produksi tidak ditemukan")
+        if (product.stock < item.result) {
+            throw IllegalStateException("Stok hasil produksi sudah terpakai, data tidak bisa dihapus")
+        }
+        product.stock -= item.result
+        database.productionLogs.removeAll { it.id == productionId }
+        persist()
+        addActivity("Produksi ${item.id} dihapus.", "orange")
+        return item
+    }
+
+    fun deleteConversion(conversionId: String): ConversionLog {
+        val item = getConversionLog(conversionId) ?: throw IllegalArgumentException("Data konversi tidak ditemukan")
+        val fromProduct = getProduct(item.fromProductId) ?: throw IllegalArgumentException("Produk bahan tidak ditemukan")
+        val toProduct = getProduct(item.toProductId) ?: throw IllegalArgumentException("Produk hasil tidak ditemukan")
+        if (toProduct.stock < item.outputQty) {
+            throw IllegalStateException("Stok hasil konversi sudah terpakai, data tidak bisa dihapus")
+        }
+        toProduct.stock -= item.outputQty
+        fromProduct.stock += item.inputQty
+        database.conversions.removeAll { it.id == conversionId }
+        persist()
+        addActivity("Konversi ${item.id} dihapus.", "orange")
+        return item
+    }
+
+    fun deleteExpense(expenseId: String): Expense {
+        val expense = getExpense(expenseId) ?: throw IllegalArgumentException("Pengeluaran tidak ditemukan")
+        database.expenses.removeAll { it.id == expenseId }
+        persist()
+        addActivity("Pengeluaran ${expense.category} dihapus.", "orange")
+        return expense
+    }
+
+    fun deleteAdjustment(adjustmentId: String): StockAdjustment {
+        val item = getAdjustment(adjustmentId) ?: throw IllegalArgumentException("Adjustment tidak ditemukan")
+        val product = getProduct(item.productId) ?: throw IllegalArgumentException("Produk adjustment tidak ditemukan")
+        if (item.type == "add") {
+            if (product.stock < item.qty) {
+                throw IllegalStateException("Stok hasil adjustment sudah terpakai, data tidak bisa dihapus")
+            }
+            product.stock -= item.qty
+        } else {
+            product.stock += item.qty
+        }
+        database.stockAdjustments.removeAll { it.id == adjustmentId }
+        persist()
+        addActivity("Adjustment ${item.id} dihapus.", "orange")
+        return item
+    }
+
+    private fun detailLine(label: String, value: String): String = label.padEnd(15, ' ') + ": " + value
+
+    private fun separator(): String = "────────────────────────────"
+
     fun buildReceiptText(saleId: String): String {
         val sale = getSale(saleId) ?: return "Data transaksi tidak ditemukan"
         val cashier = getUser(sale.cashierId)
         return buildString {
+            appendLine("NOTA PENJUALAN")
             appendLine(database.settings.businessName)
             appendLine(database.settings.address)
             appendLine(database.settings.phone)
-            appendLine("${sale.id} • ${Formatters.readableDateTime(sale.date)}")
-            appendLine("Sumber: ${sale.source}")
-            appendLine("Kasir: ${cashier?.name ?: "Demo User"}")
-            appendLine("Pembayaran: ${sale.paymentMethod}")
-            appendLine("------------------------------")
-            sale.items.forEach { item ->
+            appendLine(separator())
+            appendLine(detailLine("No. Transaksi", sale.id))
+            appendLine(detailLine("Tanggal", Formatters.readableDateTime(sale.date)))
+            appendLine(detailLine("Sumber", sale.source))
+            appendLine(detailLine("Kasir", cashier?.name ?: "Demo User"))
+            appendLine(detailLine("Pembayaran", sale.paymentMethod))
+            appendLine(separator())
+            appendLine("RINCIAN ITEM")
+            sale.items.forEachIndexed { index, item ->
                 val product = getProduct(item.productId)
-                appendLine(product?.name ?: "Produk")
-                appendLine("${item.qty} x ${Formatters.currency(item.price)} = ${Formatters.currency(item.qty.toLong() * item.price)}")
+                val subtotal = item.qty.toLong() * item.price
+                appendLine("${index + 1}. ${product?.name ?: "Produk"}")
+                appendLine("   ${item.qty} x ${Formatters.currency(item.price)}")
+                appendLine("   ${detailLine("Subtotal", Formatters.currency(subtotal))}")
             }
-            appendLine("------------------------------")
-            appendLine("Total: ${Formatters.currency(sale.total)}")
-            appendLine("Bayar: ${Formatters.currency(sale.cashPaid)}")
-            appendLine("Kembalian: ${Formatters.currency(maxOf(sale.cashPaid - sale.total, 0))}")
+            appendLine(separator())
+            appendLine(detailLine("Total", Formatters.currency(sale.total)))
+            appendLine(detailLine("Bayar", Formatters.currency(sale.cashPaid)))
+            appendLine(detailLine("Kembalian", Formatters.currency(maxOf(sale.cashPaid - sale.total, 0))))
+            appendLine(separator())
             appendLine(database.settings.receiptFooter)
         }
     }
@@ -658,13 +773,15 @@ object DemoRepository {
         val product = getProduct(item.productId)
         val user = getUser(item.createdBy)
         return buildString {
-            appendLine("ID: ${item.id}")
-            appendLine("Tanggal: ${Formatters.readableDateTime(item.date)}")
-            appendLine("Produk: ${product?.name ?: item.productId}")
-            appendLine("Jumlah masak: ${item.batches}")
-            appendLine("Hasil: ${item.result} ${product?.unit ?: "pcs"}")
-            appendLine("Catatan: ${item.note.ifBlank { "-" }}")
-            appendLine("Dicatat oleh: ${user?.name ?: item.createdBy}")
+            appendLine("DETAIL PRODUKSI")
+            appendLine(separator())
+            appendLine(detailLine("ID Produksi", item.id))
+            appendLine(detailLine("Tanggal", Formatters.readableDateTime(item.date)))
+            appendLine(detailLine("Produk", product?.name ?: item.productId))
+            appendLine(detailLine("Jumlah Masak", item.batches.toString()))
+            appendLine(detailLine("Hasil", item.result.toString() + " " + (product?.unit ?: "pcs")))
+            appendLine(detailLine("Catatan", item.note.ifBlank { "-" }))
+            appendLine(detailLine("Dicatat Oleh", user?.name ?: item.createdBy))
         }
     }
 
@@ -674,14 +791,16 @@ object DemoRepository {
         val to = getProduct(item.toProductId)
         val user = getUser(item.createdBy)
         return buildString {
-            appendLine("ID: ${item.id}")
-            appendLine("Tanggal: ${Formatters.readableDateTime(item.date)}")
-            appendLine("Bahan: ${from?.name ?: item.fromProductId}")
-            appendLine("Jumlah bahan: ${item.inputQty} ${from?.unit ?: "pcs"}")
-            appendLine("Hasil: ${to?.name ?: item.toProductId}")
-            appendLine("Jumlah hasil: ${item.outputQty} ${to?.unit ?: "pcs"}")
-            appendLine("Catatan: ${item.note.ifBlank { "-" }}")
-            appendLine("Dicatat oleh: ${user?.name ?: item.createdBy}")
+            appendLine("DETAIL KONVERSI")
+            appendLine(separator())
+            appendLine(detailLine("ID Konversi", item.id))
+            appendLine(detailLine("Tanggal", Formatters.readableDateTime(item.date)))
+            appendLine(detailLine("Produk Bahan", from?.name ?: item.fromProductId))
+            appendLine(detailLine("Jumlah Bahan", item.inputQty.toString() + " " + (from?.unit ?: "pcs")))
+            appendLine(detailLine("Produk Hasil", to?.name ?: item.toProductId))
+            appendLine(detailLine("Jumlah Hasil", item.outputQty.toString() + " " + (to?.unit ?: "pcs")))
+            appendLine(detailLine("Catatan", item.note.ifBlank { "-" }))
+            appendLine(detailLine("Dicatat Oleh", user?.name ?: item.createdBy))
         }
     }
 
@@ -689,12 +808,32 @@ object DemoRepository {
         val item = getExpense(expenseId) ?: return "Detail pengeluaran tidak ditemukan"
         val user = getUser(item.createdBy)
         return buildString {
-            appendLine("ID: ${item.id}")
-            appendLine("Tanggal: ${Formatters.readableDateTime(item.date)}")
-            appendLine("Kategori: ${item.category}")
-            appendLine("Nominal: ${Formatters.currency(item.amount)}")
-            appendLine("Catatan: ${item.note.ifBlank { "-" }}")
-            appendLine("Dicatat oleh: ${user?.name ?: item.createdBy}")
+            appendLine("DETAIL PENGELUARAN")
+            appendLine(separator())
+            appendLine(detailLine("ID Pengeluaran", item.id))
+            appendLine(detailLine("Tanggal", Formatters.readableDateTime(item.date)))
+            appendLine(detailLine("Kategori", item.category))
+            appendLine(detailLine("Nominal", Formatters.currency(item.amount)))
+            appendLine(detailLine("Catatan", item.note.ifBlank { "-" }))
+            appendLine(detailLine("Dicatat Oleh", user?.name ?: item.createdBy))
+        }
+    }
+
+    fun buildAdjustmentDetailText(adjustmentId: String): String {
+        val item = getAdjustment(adjustmentId) ?: return "Detail adjustment tidak ditemukan"
+        val product = getProduct(item.productId)
+        val user = getUser(item.createdBy)
+        val direction = if (item.type == "add") "Tambah" else "Kurangi"
+        return buildString {
+            appendLine("DETAIL ADJUSTMENT STOK")
+            appendLine(separator())
+            appendLine(detailLine("ID Adjustment", item.id))
+            appendLine(detailLine("Tanggal", Formatters.readableDateTime(item.date)))
+            appendLine(detailLine("Produk", product?.name ?: item.productId))
+            appendLine(detailLine("Jenis", direction))
+            appendLine(detailLine("Jumlah", item.qty.toString() + " " + (product?.unit ?: "pcs")))
+            appendLine(detailLine("Catatan", item.note.ifBlank { "-" }))
+            appendLine(detailLine("Dicatat Oleh", user?.name ?: item.createdBy))
         }
     }
 
@@ -703,6 +842,7 @@ object DemoRepository {
         "Produksi" -> buildProductionDetailText(rowId)
         "Konversi" -> buildConversionDetailText(rowId)
         "Pengeluaran" -> buildExpenseDetailText(rowId)
+        "Adjustment" -> buildAdjustmentDetailText(rowId)
         else -> "Detail belum tersedia"
     }
 

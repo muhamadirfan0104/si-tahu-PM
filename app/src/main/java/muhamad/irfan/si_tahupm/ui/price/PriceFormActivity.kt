@@ -2,11 +2,11 @@ package muhamad.irfan.si_tahupm.ui.price
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.ArrayAdapter
 import muhamad.irfan.si_tahupm.data.DemoRepository
 import muhamad.irfan.si_tahupm.databinding.ActivityPriceFormBinding
 import muhamad.irfan.si_tahupm.ui.base.BaseActivity
 import muhamad.irfan.si_tahupm.util.AppExtras
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 class PriceFormActivity : BaseActivity() {
     private lateinit var binding: ActivityPriceFormBinding
@@ -18,7 +18,7 @@ class PriceFormActivity : BaseActivity() {
         setContentView(binding.root)
         bindToolbar(binding.toolbar, "Form Harga Kanal", "Tambah atau edit harga kanal")
 
-        binding.spProduct.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, products.map { it.name })
+        binding.spProduct.adapter = SpinnerAdapters.stringAdapter(this, products.map { it.name })
         val initialProductId = intent.getStringExtra(AppExtras.EXTRA_PRODUCT_ID)
         val initialProductIndex = products.indexOfFirst { it.id == initialProductId }.takeIf { it >= 0 } ?: 0
         binding.spProduct.setSelection(initialProductIndex)

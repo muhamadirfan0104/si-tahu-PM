@@ -1,7 +1,6 @@
 package muhamad.irfan.si_tahupm.ui.sales
 
 import android.os.Bundle
-import android.widget.ArrayAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import muhamad.irfan.si_tahupm.data.DemoRepository
 import muhamad.irfan.si_tahupm.data.RecapDraftItem
@@ -12,16 +11,14 @@ import muhamad.irfan.si_tahupm.ui.main.SimpleItemSelectedListener
 import muhamad.irfan.si_tahupm.util.Formatters
 import muhamad.irfan.si_tahupm.util.RowItem
 import muhamad.irfan.si_tahupm.util.RowTone
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 class MarketRecapActivity : BaseActivity() {
     private lateinit var binding: ActivityMarketRecapBinding
     private val draftItems = mutableListOf<RecapDraftItem>()
     private val channels = listOf("PASAR", "RESELLER", "GROSIR")
     private val products by lazy { DemoRepository.allProducts() }
-    private val adapter = GenericRowAdapter(onItemClick = {}, onActionClick = { row ->
-        draftItems.removeAll { it.id == row.id }
-        refreshDraftList()
-    })
+    private val adapter = GenericRowAdapter(onItemClick = {}, onActionClick = { row -> confirmRemoveDraft(row.id) })
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,9 +26,9 @@ class MarketRecapActivity : BaseActivity() {
         setContentView(binding.root)
         bindToolbar(binding.toolbar, "Rekap Pasar", "Input penjualan kanal pasar")
 
-        binding.etDate.setText(DemoRepository.latestDateOnly())
-        binding.spChannel.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, channels)
-        binding.spProduct.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, products.map { it.name })
+        binding.etDate.setText(Formatters.currentDateOnly())
+        binding.spChannel.adapter = SpinnerAdapters.stringAdapter(this, channels)
+        binding.spProduct.adapter = SpinnerAdapters.stringAdapter(this, products.map { it.name })
         binding.rvItems.layoutManager = LinearLayoutManager(this)
         binding.rvItems.adapter = adapter
         binding.spChannel.onItemSelectedListener = SimpleItemSelectedListener { refreshPriceInfo() }
@@ -78,6 +75,13 @@ class MarketRecapActivity : BaseActivity() {
         binding.tvTotal.text = "Total rekap: ${Formatters.currency(draftItems.sumOf { it.qty.toLong() * it.price })}"
     }
 
+    private fun confirmRemoveDraft(draftId: String) {
+        showConfirmationModal("Hapus item rekap?", "Item draft ini akan dihapus dari daftar rekap.") {
+            draftItems.removeAll { it.id == draftId }
+            refreshDraftList()
+        }
+    }
+
     private fun saveRecap() {
         runCatching {
             DemoRepository.saveMarketRecap(
@@ -90,7 +94,7 @@ class MarketRecapActivity : BaseActivity() {
             showMessage("Rekap pasar berhasil disimpan.")
             draftItems.clear()
             refreshDraftList()
-            showDetailModal("Struk ${sale.id}", DemoRepository.buildReceiptText(sale.id))
+            showReceiptModal("Struk ${sale.id}", DemoRepository.buildReceiptText(sale.id))
         }.onFailure {
             showMessage(it.message ?: "Gagal menyimpan rekap pasar")
         }

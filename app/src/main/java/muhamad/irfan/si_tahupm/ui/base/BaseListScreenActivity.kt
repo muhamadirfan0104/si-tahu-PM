@@ -2,7 +2,6 @@ package muhamad.irfan.si_tahupm.ui.base
 
 import android.os.Bundle
 import android.view.View
-import android.widget.ArrayAdapter
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -10,6 +9,7 @@ import muhamad.irfan.si_tahupm.databinding.ActivityListScreenBinding
 import muhamad.irfan.si_tahupm.ui.common.GenericRowAdapter
 import muhamad.irfan.si_tahupm.ui.main.SimpleItemSelectedListener
 import muhamad.irfan.si_tahupm.util.RowItem
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 abstract class BaseListScreenActivity : BaseActivity() {
     protected lateinit var binding: ActivityListScreenBinding
@@ -32,14 +32,14 @@ abstract class BaseListScreenActivity : BaseActivity() {
 
     protected fun setPrimaryFilter(options: List<String>, selectedIndex: Int = 0, onChange: () -> Unit) {
         binding.spPrimaryFilter.isVisible = true
-        binding.spPrimaryFilter.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, options)
+        binding.spPrimaryFilter.adapter = SpinnerAdapters.stringAdapter(this, options)
         binding.spPrimaryFilter.setSelection(selectedIndex)
         binding.spPrimaryFilter.onItemSelectedListener = SimpleItemSelectedListener(onChange)
     }
 
     protected fun setSecondaryFilter(options: List<String>, selectedIndex: Int = 0, onChange: () -> Unit) {
         binding.spSecondaryFilter.isVisible = true
-        binding.spSecondaryFilter.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, options)
+        binding.spSecondaryFilter.adapter = SpinnerAdapters.stringAdapter(this, options)
         binding.spSecondaryFilter.setSelection(selectedIndex)
         binding.spSecondaryFilter.onItemSelectedListener = SimpleItemSelectedListener(onChange)
     }

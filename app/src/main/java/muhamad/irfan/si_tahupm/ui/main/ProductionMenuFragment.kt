@@ -20,7 +20,7 @@ import muhamad.irfan.si_tahupm.util.RowTone
 class ProductionMenuFragment : BaseFragment(R.layout.fragment_production_menu) {
     private var _binding: FragmentProductionMenuBinding? = null
     private val binding get() = _binding!!
-    private val adapter = GenericRowAdapter(onItemClick = {})
+    private val adapter = GenericRowAdapter(onItemClick = ::openLatestDetail)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -66,6 +66,13 @@ class ProductionMenuFragment : BaseFragment(R.layout.fragment_production_menu) {
             )
         }
         adapter.submitList(items.sortedByDescending { it.first }.map { it.second }.take(4))
+    }
+
+    private fun openLatestDetail(item: RowItem) {
+        when (item.badge) {
+            "Konversi" -> showDetailModal(item.title, DemoRepository.buildConversionDetailText(item.id))
+            else -> showDetailModal(item.title, DemoRepository.buildProductionDetailText(item.id))
+        }
     }
 
     override fun onDestroyView() {

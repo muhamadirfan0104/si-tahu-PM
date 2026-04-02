@@ -36,6 +36,7 @@ class ProductionHistoryActivity : BaseListScreenActivity() {
                     subtitle = (DemoRepository.getProduct(it.productId)?.name ?: "Produk") + " • " + Formatters.readableDateTime(it.date),
                     badge = "Produksi",
                     amount = it.result.toString() + " pcs",
+                    actionLabel = "Hapus",
                     tone = RowTone.GREEN
                 )
             }
@@ -44,5 +45,19 @@ class ProductionHistoryActivity : BaseListScreenActivity() {
 
     override fun onRowClick(item: RowItem) {
         showDetailModal(item.title, DemoRepository.buildProductionDetailText(item.id))
+    }
+
+    override fun onRowAction(item: RowItem) {
+        showConfirmationModal(
+            title = "Hapus produksi?",
+            message = "Data produksi ${item.id} akan dihapus dan stok hasil produksi akan dikembalikan. Lanjutkan?"
+        ) {
+            runCatching { DemoRepository.deleteProduction(item.id) }
+                .onSuccess {
+                    showMessage("Data produksi berhasil dihapus.")
+                    refresh()
+                }
+                .onFailure { showMessage(it.message ?: "Gagal menghapus produksi") }
+        }
     }
 }

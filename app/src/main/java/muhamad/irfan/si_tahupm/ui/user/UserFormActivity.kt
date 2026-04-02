@@ -2,12 +2,12 @@ package muhamad.irfan.si_tahupm.ui.user
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.ArrayAdapter
 import muhamad.irfan.si_tahupm.data.DemoRepository
 import muhamad.irfan.si_tahupm.data.UserRole
 import muhamad.irfan.si_tahupm.databinding.ActivityUserFormBinding
 import muhamad.irfan.si_tahupm.ui.base.BaseActivity
 import muhamad.irfan.si_tahupm.util.AppExtras
+import muhamad.irfan.si_tahupm.util.SpinnerAdapters
 
 class UserFormActivity : BaseActivity() {
     private lateinit var binding: ActivityUserFormBinding
@@ -19,7 +19,7 @@ class UserFormActivity : BaseActivity() {
         setContentView(binding.root)
         bindToolbar(binding.toolbar, "Form Pengguna", "Tambah atau edit akun")
 
-        binding.spRole.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, roles.map { it.name })
+        binding.spRole.adapter = SpinnerAdapters.stringAdapter(this, roles.map { it.name })
         val editing = DemoRepository.getUser(intent.getStringExtra(AppExtras.EXTRA_USER_ID))
         if (editing != null) {
             binding.etName.setText(editing.name)
