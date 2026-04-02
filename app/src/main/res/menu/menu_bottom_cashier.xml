@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/nav_cashier_dashboard" android:icon="@android:drawable/ic_menu_view" android:title="Beranda" />
+    <item android:id="@+id/nav_cashier_sale" android:icon="@android:drawable/ic_menu_add" android:title="Kasir" />
+    <item android:id="@+id/nav_cashier_history" android:icon="@android:drawable/ic_menu_recent_history" android:title="Riwayat" />
+    <item android:id="@+id/nav_cashier_menu" android:icon="@android:drawable/ic_menu_more" android:title="Menu" />
+</menu>

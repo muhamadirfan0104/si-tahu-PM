@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/nav_admin_dashboard" android:icon="@android:drawable/ic_menu_view" android:title="Beranda" />
+    <item android:id="@+id/nav_admin_production" android:icon="@android:drawable/ic_menu_manage" android:title="Produksi" />
+    <item android:id="@+id/nav_admin_sales" android:icon="@android:drawable/ic_menu_agenda" android:title="Penjualan" />
+    <item android:id="@+id/nav_admin_stock" android:icon="@android:drawable/ic_menu_sort_by_size" android:title="Stok" />
+    <item android:id="@+id/nav_admin_menu" android:icon="@android:drawable/ic_menu_more" android:title="Menu" />
+</menu>
