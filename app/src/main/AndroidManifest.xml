@@ -1,25 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
         android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/backup_rules"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@android:drawable/sym_def_app_icon"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@android:drawable/sym_def_app_icon"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SitahuPM">
+        android:theme="@style/Theme.UmkmTahuBerkahXml">
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <activity android:name=".ui.receipt.ReceiptActivity" />
+        <activity android:name=".ui.user.UserFormActivity" />
+        <activity android:name=".ui.user.UserListActivity" />
+        <activity android:name=".ui.settings.BusinessSettingsActivity" />
+        <activity android:name=".ui.history.TransactionHistoryActivity" />
+        <activity android:name=".ui.report.ReportActivity" />
+        <activity android:name=".ui.expense.ExpenseFormActivity" />
+        <activity android:name=".ui.expense.ExpenseListActivity" />
+        <activity android:name=".ui.parameter.ParameterFormActivity" />
+        <activity android:name=".ui.parameter.ParameterListActivity" />
+        <activity android:name=".ui.price.PriceFormActivity" />
+        <activity android:name=".ui.price.PriceListActivity" />
+        <activity android:name=".ui.product.ProductFormActivity" />
+        <activity android:name=".ui.product.ProductListActivity" />
+        <activity android:name=".ui.stock.StockAdjustmentActivity" />
+        <activity android:name=".ui.stock.StockDetailActivity" />
+        <activity android:name=".ui.sales.SalesHistoryActivity" />
+        <activity android:name=".ui.sales.MarketRecapActivity" />
+        <activity android:name=".ui.production.ProductionHistoryActivity" />
+        <activity android:name=".ui.production.ConversionActivity" />
+        <activity android:name=".ui.production.BasicProductionActivity" />
+        <activity android:name=".ui.main.CashierMainActivity" />
+        <activity android:name=".ui.main.AdminMainActivity" />
+
         <activity
-            android:name=".MainActivity"
+            android:name=".ui.login.LoginActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
     </application>
 
 </manifest>

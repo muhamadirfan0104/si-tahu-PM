@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <color name="green_primary">#5F7D49</color>
+    <color name="green_secondary">#749660</color>
+    <color name="green_soft">#E7EFDC</color>
+    <color name="gold_primary">#D8B856</color>
+    <color name="gold_soft">#F8ECC1</color>
+    <color name="orange_primary">#D68C55</color>
+    <color name="orange_soft">#F7DFCE</color>
+    <color name="blue_soft">#DDEAF7</color>
+    <color name="danger_soft">#EFD5CF</color>
+    <color name="text_primary">#293226</color>
+    <color name="text_secondary">#5D6754</color>
+    <color name="muted">#8A8577</color>
+    <color name="screen_bg">#F7F4ED</color>
+    <color name="screen_bg_light">#FCFBF7</color>
+    <color name="card_surface">#FFFFFF</color>
+    <color name="line_color">#DDD5C7</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
 </resources>

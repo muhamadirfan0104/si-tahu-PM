@@ -1,3 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">si-tahu PM</string>
+    <string name="app_name">UMKM Tahu Berkah XML</string>
+    <string name="admin">Admin</string>
+    <string name="cashier">Kasir</string>
+    <string name="save">Simpan</string>
+    <string name="cancel">Batal</string>
+    <string name="search_hint">Cari data...</string>
+    <string name="share_csv">Bagikan CSV</string>
+    <string name="logout">Logout</string>
 </resources>

@@ -1,9 +1,52 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.SitahuPM" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.UmkmTahuBerkahXml" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/green_primary</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/gold_primary</item>
+        <item name="colorSurface">@color/card_surface</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="android:windowBackground">@color/screen_bg</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:navigationBarColor">@color/card_surface</item>
+        <item name="android:statusBarColor">@color/screen_bg_light</item>
+        <item name="toolbarStyle">@style/Widget.Umkm.Toolbar</item>
+        <item name="materialCardViewStyle">@style/Widget.Umkm.Card</item>
+        <item name="materialButtonStyle">@style/Widget.Umkm.Button</item>
+        <item name="bottomNavigationStyle">@style/Widget.Umkm.BottomNav</item>
     </style>
 
-    <style name="Theme.SitahuPM" parent="Base.Theme.SitahuPM" />
+    <style name="Widget.Umkm.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="backgroundTint">@color/screen_bg_light</item>
+        <item name="titleTextColor">@color/text_primary</item>
+        <item name="subtitleTextColor">@color/text_secondary</item>
+    </style>
+
+    <style name="Widget.Umkm.Card" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardBackgroundColor">@color/card_surface</item>
+        <item name="strokeColor">@color/line_color</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Umkm.Medium</item>
+    </style>
+
+    <style name="Widget.Umkm.Button" parent="Widget.Material3.Button">
+        <item name="shapeAppearance">@style/ShapeAppearance.Umkm.Small</item>
+    </style>
+
+    <style name="Widget.Umkm.BottomNav" parent="Widget.Material3.BottomNavigationView">
+        <item name="android:background">@color/card_surface</item>
+        <item name="itemActiveIndicatorStyle">@style/Widget.Umkm.BottomNav.ActiveIndicator</item>
+    </style>
+
+    <style name="Widget.Umkm.BottomNav.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:color">@color/green_soft</item>
+    </style>
+
+    <style name="ShapeAppearance.Umkm.Small" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">14dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Umkm.Medium" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSize">18dp</item>
+    </style>
 </resources>
