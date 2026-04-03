@@ -73,7 +73,7 @@
                     android:layout_height="wrap_content"
                     android:hint="Jumlah masak"
                     android:inputType="number"
-                    android:text="1" />
+                    />
             </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.textfield.TextInputLayout

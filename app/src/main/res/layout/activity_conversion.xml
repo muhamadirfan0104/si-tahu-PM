@@ -72,7 +72,7 @@
                     android:layout_height="wrap_content"
                     android:hint="Jumlah bahan"
                     android:inputType="number"
-                    android:text="20" />
+                    />
             </com.google.android.material.textfield.TextInputLayout>
 
             <Spinner
@@ -91,7 +91,7 @@
                     android:layout_height="wrap_content"
                     android:hint="Jumlah hasil"
                     android:inputType="number"
-                    android:text="18" />
+                    />
             </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.textfield.TextInputLayout

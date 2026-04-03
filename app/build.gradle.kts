@@ -1,14 +1,15 @@
 plugins {
     id("com.android.application")
     alias(libs.plugins.kotlin.android)
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "muhamad.irfan.si_tahupm"
+    namespace = "muhamad.irfan.si_tahu"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "muhamad.irfan.si_tahupm"
+        applicationId = "muhamad.irfan.si_tahu"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -48,4 +49,11 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("com.google.code.gson:gson:2.11.0")
+
+    implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }

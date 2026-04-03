@@ -20,9 +20,8 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <com.google.android.material.button.MaterialButton android:id="@+id/btnBusinessSettings" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Profil Usaha" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnBusinessSettings" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Profil Usaha" />
         <com.google.android.material.button.MaterialButton android:id="@+id/btnSwitchAdmin" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Pindah ke Admin" />
-        <com.google.android.material.button.MaterialButton android:id="@+id/btnResetDemo" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Reset Data Demo" />
         <com.google.android.material.button.MaterialButton android:id="@+id/btnLogout" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Logout" />
     </LinearLayout>
 </ScrollView>
