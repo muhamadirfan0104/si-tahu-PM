@@ -8,4 +8,5 @@ object EkstraAplikasi {
     const val EXTRA_USER_ID = "extra_user_id"
     const val EXTRA_SALE_ID = "extra_sale_id"
     const val EXTRA_FILTER_SOURCE = "extra_filter_source"
+
 }

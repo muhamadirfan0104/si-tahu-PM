@@ -56,4 +56,9 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    implementation("com.google.android.material:material:1.11.0")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation(platform("com.google.firebase:firebase-bom:latest-version"))
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-storage")
 }

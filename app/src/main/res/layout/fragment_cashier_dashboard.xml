@@ -2,36 +2,144 @@
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#F7F4ED">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="20dp"> <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="2">
 
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:weightSum="2">
-            <com.google.android.material.card.MaterialCardView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" app:strokeColor="@color/line_color" app:strokeWidth="1dp">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Penjualan Hari Ini" android:textAppearance="@style/TextAppearance.Material3.BodyMedium" android:textColor="@color/text_secondary" />
-                    <TextView android:id="@+id/tvTodaySales" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-            <Space android:layout_width="12dp" android:layout_height="1dp" />
-            <com.google.android.material.card.MaterialCardView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" app:strokeColor="@color/line_color" app:strokeWidth="1dp">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Transaksi Hari Ini" android:textAppearance="@style/TextAppearance.Material3.BodyMedium" android:textColor="@color/text_secondary" />
-                    <TextView android:id="@+id/tvTodayCount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-        </LinearLayout>
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#EAE5D9"
+            app:strokeWidth="1.5dp">
 
-        <com.google.android.material.button.MaterialButton android:id="@+id/btnNewSale" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Transaksi Baru" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:text="Produk terlaris" android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
-        <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvTopProducts" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:nestedScrollingEnabled="false" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Penjualan Hari Ini"
+                    android:textColor="#8A8577"
+                    android:textSize="13sp" />
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:text="Riwayat terakhir" android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
-        <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvRecentCashierSales" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:nestedScrollingEnabled="false" />
+                <TextView
+                    android:id="@+id/tvTodaySales"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:fontFamily="sans-serif-bold"
+                    android:textColor="#5F7D49"
+                    android:textSize="22sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <Space
+            android:layout_width="12dp"
+            android:layout_height="1dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#EAE5D9"
+            app:strokeWidth="1.5dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Transaksi Hari Ini"
+                    android:textColor="#8A8577"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvTodayCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:fontFamily="sans-serif-bold"
+                    android:textColor="#293226"
+                    android:textSize="22sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnNewSale"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="24dp"
+            android:fontFamily="sans-serif-bold"
+            android:text="Transaksi Baru"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            app:backgroundTint="#5F7D49"
+            app:cornerRadius="20dp"
+            app:elevation="0dp"
+            app:icon="@android:drawable/ic_input_add"
+            app:iconGravity="textStart"
+            app:iconPadding="8dp"
+            app:iconTint="#FFFFFF" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="32dp"
+            android:fontFamily="sans-serif-bold"
+            android:text="PRODUK TERLARIS"
+            android:textColor="#A09B8E"
+            android:textSize="13sp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvTopProducts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:nestedScrollingEnabled="false" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="28dp"
+            android:fontFamily="sans-serif-bold"
+            android:text="RIWAYAT TERAKHIR"
+            android:textColor="#A09B8E"
+            android:textSize="13sp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvRecentCashierSales"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:nestedScrollingEnabled="false" />
+
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

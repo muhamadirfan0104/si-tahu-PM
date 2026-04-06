@@ -1,4 +1,5 @@
-package muhamad.irfan.si_tahu.ui.base
+// AktivitasDasar.kt
+package muhamad.irfan.si_tahu.ui.dasar
 
 import android.content.Intent
 import android.net.Uri
@@ -16,11 +17,11 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.auth.FirebaseAuth
-import muhamad.irfan.si_tahu.data.RepositoriLokal
 import muhamad.irfan.si_tahu.R
-import muhamad.irfan.si_tahu.ui.login.AktivitasMasuk
-import muhamad.irfan.si_tahu.util.PembantuModal
+import muhamad.irfan.si_tahu.data.RepositoriLokal
+import muhamad.irfan.si_tahu.ui.masuk.AktivitasMasuk
 import muhamad.irfan.si_tahu.util.PembantuCetak
+import muhamad.irfan.si_tahu.util.PembantuModal
 import java.io.File
 
 open class AktivitasDasar : AppCompatActivity() {

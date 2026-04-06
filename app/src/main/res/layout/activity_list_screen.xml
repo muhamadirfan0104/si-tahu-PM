@@ -3,58 +3,117 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/screen_bg"
+    android:background="#F7F4ED"
+    android:fitsSystemWindows="true"
     android:orientation="vertical">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
+    <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="8dp" />
+        app:elevation="0dp"
+        android:background="#FCFBF7">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="?attr/actionBarSize"
+            android:paddingHorizontal="8dp"
+            app:titleTextColor="#293226" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#EAE5D9" />
+    </com.google.android.material.appbar.AppBarLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="20dp"> <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/searchContainer"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:boxBackgroundColor="@android:color/white"
+        app:boxCornerRadiusBottomEnd="20dp"
+        app:boxCornerRadiusBottomStart="20dp"
+        app:boxCornerRadiusTopEnd="20dp"
+        app:boxCornerRadiusTopStart="20dp"
+        app:boxStrokeColor="#5F7D49"
+        app:boxStrokeWidth="1.5dp"
+        app:hintTextColor="#5F7D49"
+        app:startIconDrawable="@android:drawable/ic_menu_search"
+        app:startIconTint="#8A8577">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/searchContainer"
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etSearch"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etSearch"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:hint="Cari data..."
+            android:textColor="#293226" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#EAE5D9"
+            app:strokeWidth="1.5dp">
+
+            <Spinner
+                android:id="@+id/spPrimaryFilter"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="Cari data..." />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:layout_height="52dp"
+                android:backgroundTint="#8A8577"
+                android:paddingHorizontal="16dp" />
+        </com.google.android.material.card.MaterialCardView>
 
-        <Spinner
-            android:id="@+id/spPrimaryFilter"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp" />
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#EAE5D9"
+            app:strokeWidth="1.5dp">
 
-        <Spinner
-            android:id="@+id/spSecondaryFilter"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp" />
+            <Spinner
+                android:id="@+id/spSecondaryFilter"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:backgroundTint="#8A8577"
+                android:paddingHorizontal="16dp" />
+        </com.google.android.material.card.MaterialCardView>
 
         <LinearLayout
             android:id="@+id/buttonRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="20dp"
             android:orientation="horizontal"
             android:weightSum="2">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnPrimary"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="64dp"
                 android:layout_weight="1"
-                android:text="Tambah" />
+                android:fontFamily="sans-serif-bold"
+                android:text="Tambah"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                app:backgroundTint="#5F7D49"
+                app:cornerRadius="20dp"
+                app:elevation="0dp"
+                app:icon="@android:drawable/ic_input_add"
+                app:iconTint="#FFFFFF" />
 
             <Space
                 android:layout_width="12dp"
@@ -62,29 +121,38 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSecondary"
-                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="64dp"
                 android:layout_weight="1"
-                android:text="Aksi 2" />
+                android:fontFamily="sans-serif-bold"
+                android:text="Aksi 2"
+                android:textColor="#5F7D49"
+                android:textSize="15sp"
+                app:backgroundTint="@android:color/white"
+                app:cornerRadius="20dp"
+                app:elevation="0dp"
+                app:strokeColor="#C5D3B8"
+                app:strokeWidth="1.5dp" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/tvEmpty"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="40dp"
+            android:fontFamily="sans-serif-bold"
             android:gravity="center"
             android:text="Belum ada data"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-            android:textColor="@color/text_secondary"
+            android:textColor="#A09B8E"
+            android:textSize="16sp"
             android:visibility="gone" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvList"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="20dp"
             android:layout_weight="1" />
+
     </LinearLayout>
 </LinearLayout>

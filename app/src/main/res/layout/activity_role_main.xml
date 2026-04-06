@@ -3,15 +3,30 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/screen_bg"
+    android:background="#F7F4ED"
+    android:fitsSystemWindows="true"
     android:orientation="vertical">
 
-    <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbar"
+    <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="8dp"
-        app:titleCentered="false" />
+        app:elevation="0dp"
+        android:background="#FCFBF7">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="?attr/actionBarSize"
+            android:paddingHorizontal="8dp"
+            app:titleTextColor="#293226"
+            app:titleCentered="false" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#EAE5D9" />
+    </com.google.android.material.appbar.AppBarLayout>
 
     <FrameLayout
         android:id="@+id/container"
@@ -19,11 +34,20 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#EAE5D9" />
+
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNavigation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:itemIconTint="@color/green_primary"
-        app:itemTextColor="@color/green_primary"
+        android:background="@android:color/white"
+        app:elevation="0dp"
+        app:itemRippleColor="#E7EFDC"
+        app:itemIconTint="@color/nav_item_selector"
+        app:itemTextColor="@color/nav_item_selector"
         app:labelVisibilityMode="labeled" />
+
 </LinearLayout>

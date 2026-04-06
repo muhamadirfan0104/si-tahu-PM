@@ -2,51 +2,250 @@
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#F7F4ED"> <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp"> <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="24dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
 
     <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvBusinessName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Nama Usaha"
+            android:textColor="#293226"
+            android:textSize="24sp"
+            android:fontFamily="sans-serif-black" /> <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Ringkasan performa hari ini"
+        android:textColor="#8A8577"
+        android:textSize="14sp"
+        android:fontFamily="sans-serif-medium" />
+    </LinearLayout>
+
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        app:cardBackgroundColor="#E7EFDC"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="0dp"
+        app:strokeColor="#C5D3B8"
+        app:strokeWidth="1dp">
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:padding="14dp"
+            android:src="@android:drawable/ic_menu_myplaces"
+            app:tint="#5F7D49" />
+    </com.google.android.material.card.MaterialCardView>
+</LinearLayout>
+
+    <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        app:cardBackgroundColor="#5F7D49"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="0dp">
 
-        <com.google.android.material.card.MaterialCardView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardBackgroundColor="@android:color/transparent">
+            android:orientation="vertical"
+            android:padding="24dp"> <TextView
+            android:id="@+id/tvSummaryDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Kamis, 19 Mar 2026"
+            android:textColor="#C5D3B8"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium" />
+
+            <TextView
+                android:id="@+id/tvSummarySales"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Rp 0"
+                android:textColor="#FFFFFF"
+                android:textSize="36sp"
+                android:fontFamily="sans-serif-black" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="20dp"
+                android:background="#749660" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_summary_green"
-                android:orientation="vertical"
-                android:padding="18dp">
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:weightSum="3">
 
-                <TextView android:id="@+id/tvSummaryDate" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/white" android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
-                <TextView android:id="@+id/tvSummarySales" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium" android:textColor="@color/white" />
-                <TextView android:id="@+id/tvSummaryProduction" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textColor="@color/white" />
-                <TextView android:id="@+id/tvSummaryExpenses" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/white" />
-                <TextView android:id="@+id/tvSummaryTransactions" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/white" />
-                <TextView android:id="@+id/tvSummaryProfit" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/white" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Produksi" android:textColor="#C5D3B8" android:textSize="12sp" />
+                    <TextView android:id="@+id/tvSummaryProduction" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="0 Cetak" android:textColor="#FFFFFF" android:textSize="16sp" android:fontFamily="sans-serif-bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Pengeluaran" android:textColor="#C5D3B8" android:textSize="12sp" />
+                    <TextView android:id="@+id/tvSummaryExpenses" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Rp 0" android:textColor="#FFFFFF" android:textSize="16sp" android:fontFamily="sans-serif-bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Keuntungan" android:textColor="#F8ECC1" android:textSize="12sp" />
+                    <TextView android:id="@+id/tvSummaryProfit" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Rp 0" android:textColor="#F8ECC1" android:textSize="16sp" android:fontFamily="sans-serif-bold" />
+                </LinearLayout>
+
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:orientation="horizontal" android:weightSum="2">
-            <com.google.android.material.button.MaterialButton android:id="@+id/btnGoProduction" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Produksi" />
-            <Space android:layout_width="12dp" android:layout_height="1dp" />
-            <com.google.android.material.button.MaterialButton android:id="@+id/btnGoSales" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Penjualan" />
+            <TextView
+                android:id="@+id/tvSummaryTransactions"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:layout_marginTop="12dp"
+                android:visibility="gone" />
+
         </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="horizontal" android:weightSum="2">
-            <com.google.android.material.button.MaterialButton android:id="@+id/btnGoStock" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Stok" />
-            <Space android:layout_width="12dp" android:layout_height="1dp" />
-            <com.google.android.material.button.MaterialButton android:id="@+id/btnNewExpense" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Pengeluaran" />
-        </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:orientation="horizontal"
+        android:weightSum="2">
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:text="Stok kritis" android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
-        <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvLowStock" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:nestedScrollingEnabled="false" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGoProduction"
+            android:layout_width="0dp"
+            android:layout_height="68dp"
+            android:layout_weight="1"
+            android:text="Produksi"
+            android:textColor="#486336"
+            android:fontFamily="sans-serif-bold"
+            android:textSize="15sp"
+            app:backgroundTint="#E7EFDC"
+            app:cornerRadius="20dp"
+            app:elevation="0dp" />
 
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:text="Transaksi terbaru" android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
-        <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvRecentTransactions" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:nestedScrollingEnabled="false" />
+        <Space android:layout_width="12dp" android:layout_height="1dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGoSales"
+            android:layout_width="0dp"
+            android:layout_height="68dp"
+            android:layout_weight="1"
+            android:text="Penjualan"
+            android:textColor="#7A6222"
+            android:fontFamily="sans-serif-bold"
+            android:textSize="15sp"
+            app:backgroundTint="#F8ECC1"
+            app:cornerRadius="20dp"
+            app:elevation="0dp" />
     </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal"
+        android:weightSum="2">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGoStock"
+            android:layout_width="0dp"
+            android:layout_height="68dp"
+            android:layout_weight="1"
+            android:text="Stok"
+            android:textColor="#456882"
+            android:fontFamily="sans-serif-bold"
+            android:textSize="15sp"
+            app:backgroundTint="#DDEAF7"
+            app:cornerRadius="20dp"
+            app:elevation="0dp" />
+
+        <Space android:layout_width="12dp" android:layout_height="1dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnNewExpense"
+            android:layout_width="0dp"
+            android:layout_height="68dp"
+            android:layout_weight="1"
+            android:text="Pengeluaran"
+            android:textColor="#8B562F"
+            android:fontFamily="sans-serif-bold"
+            android:textSize="15sp"
+            app:backgroundTint="#F7DFCE"
+            app:cornerRadius="20dp"
+            app:elevation="0dp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginTop="32dp"
+        android:text="STOK KRITIS"
+        android:textColor="#A09B8E"
+        android:textSize="13sp"
+        android:fontFamily="sans-serif-bold" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvLowStock"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:nestedScrollingEnabled="false" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginTop="28dp"
+        android:text="TRANSAKSI TERBARU"
+        android:textColor="#A09B8E"
+        android:textSize="13sp"
+        android:fontFamily="sans-serif-bold" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvRecentTransactions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:nestedScrollingEnabled="false" />
+
+</LinearLayout>
 </androidx.core.widget.NestedScrollView>

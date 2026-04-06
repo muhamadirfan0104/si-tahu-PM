@@ -1,7 +1,8 @@
-package muhamad.irfan.si_tahu.ui.main
+package muhamad.irfan.si_tahu.ui.utama
 
 import android.view.View
 import android.widget.AdapterView
+
 
 class PendengarPilihItemSederhana(
     private val onSelected: () -> Unit

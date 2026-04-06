@@ -9,5 +9,6 @@ data class ItemBaris(
     val badge: String = "",
     val amount: String = "",
     val actionLabel: String? = null,
+    val deleteLabel: String? = null,
     val tone: WarnaBaris = WarnaBaris.DEFAULT
 )

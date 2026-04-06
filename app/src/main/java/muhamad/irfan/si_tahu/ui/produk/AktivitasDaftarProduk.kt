@@ -1,10 +1,11 @@
-package muhamad.irfan.si_tahu.ui.product
+package muhamad.irfan.si_tahu.ui.produk
 
 import android.content.Intent
 import android.os.Bundle
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
-import muhamad.irfan.si_tahu.ui.base.AktivitasDaftarDasar
-import muhamad.irfan.si_tahu.ui.price.AktivitasDaftarHarga
+import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
+import muhamad.irfan.si_tahu.ui.harga.AktivitasDaftarHarga
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
@@ -52,7 +53,8 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                         stokSaatIni = doc.getLong("stokSaatIni") ?: 0L,
                         stokMinimum = doc.getLong("stokMinimum") ?: 0L,
                         tampilDiKasir = doc.getBoolean("tampilDiKasir") ?: false,
-                        aktifDijual = doc.getBoolean("aktifDijual") ?: false
+                        aktifDijual = doc.getBoolean("aktifDijual") ?: false,
+                        dihapus = doc.getBoolean("dihapus") ?: false
                     )
                 }
                 refresh()
@@ -69,7 +71,8 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
         val category = primarySelection()
 
         val rows = products.filter { item ->
-            item.namaProduk.lowercase().contains(query) &&
+            !item.dihapus &&
+                    item.namaProduk.lowercase().contains(query) &&
                     (category == "Semua" || item.jenisProduk == category)
         }.map { item ->
             ItemBaris(
@@ -79,6 +82,7 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                 badge = if (item.aktifDijual) "Aktif" else "Nonaktif",
                 amount = "Stok ${item.stokSaatIni}",
                 actionLabel = if (item.aktifDijual) "Nonaktifkan" else "Aktifkan",
+                deleteLabel = "Delete",
                 tone = when {
                     item.stokSaatIni <= 0L -> WarnaBaris.ORANGE
                     item.stokSaatIni <= item.stokMinimum -> WarnaBaris.GOLD
@@ -130,12 +134,9 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
             confirmLabel = if (nextActive) "Aktifkan" else "Nonaktifkan"
         ) {
             val updates = hashMapOf<String, Any>(
-                "aktifDijual" to nextActive
+                "aktifDijual" to nextActive,
+                "tampilDiKasir" to nextActive
             )
-
-            if (!nextActive) {
-                updates["tampilDiKasir"] = false
-            }
 
             firestore.collection("produk")
                 .document(product.id)
@@ -152,6 +153,37 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                 }
         }
     }
+
+    override fun onRowDelete(item: ItemBaris) {
+        if (item.id == "info_empty") return
+
+        val product = products.firstOrNull { it.id == item.id } ?: return
+
+        showConfirmationModal(
+            title = "Hapus produk?",
+            message = "Produk ${product.namaProduk} akan dihapus dari daftar aktif.",
+            confirmLabel = "Hapus"
+        ) {
+            val updates = hashMapOf<String, Any>(
+                "dihapus" to true,
+                "aktifDijual" to false,
+                "tampilDiKasir" to false,
+                "dihapusPada" to Timestamp.now(),
+                "diperbaruiPada" to Timestamp.now()
+            )
+
+            firestore.collection("produk")
+                .document(product.id)
+                .update(updates)
+                .addOnSuccessListener {
+                    showMessage("Produk berhasil dihapus.")
+                    loadProducts()
+                }
+                .addOnFailureListener { e ->
+                    showMessage("Gagal menghapus produk: ${e.message}")
+                }
+        }
+    }
 }
 
 private data class DataBarisProduk(
@@ -163,5 +195,6 @@ private data class DataBarisProduk(
     val stokSaatIni: Long,
     val stokMinimum: Long,
     val tampilDiKasir: Boolean,
-    val aktifDijual: Boolean
+    val aktifDijual: Boolean,
+    val dihapus: Boolean
 )

@@ -1,4 +1,4 @@
-package muhamad.irfan.si_tahu.ui.common
+package muhamad.irfan.si_tahu.ui.umum
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
@@ -11,7 +11,8 @@ import muhamad.irfan.si_tahu.util.WarnaBaris
 
 class AdapterBarisUmum(
     private val onItemClick: (ItemBaris) -> Unit,
-    private val onActionClick: ((ItemBaris) -> Unit)? = null
+    private val onActionClick: ((ItemBaris) -> Unit)? = null,
+    private val onDeleteClick: ((ItemBaris) -> Unit)? = null
 ) : RecyclerView.Adapter<AdapterBarisUmum.PenampungBaris>() {
 
     private val items = mutableListOf<ItemBaris>()
@@ -33,19 +34,30 @@ class AdapterBarisUmum(
 
     override fun getItemCount(): Int = items.size
 
-    inner class PenampungBaris(private val binding: ItemGenericRowBinding) : RecyclerView.ViewHolder(binding.root) {
+    inner class PenampungBaris(
+        private val binding: ItemGenericRowBinding
+    ) : RecyclerView.ViewHolder(binding.root) {
+
         fun bind(item: ItemBaris) {
             binding.tvTitle.text = item.title
             binding.tvSubtitle.text = item.subtitle
             binding.tvBadge.text = item.badge
             binding.tvAmount.text = item.amount
             binding.tvLeading.text = item.title.firstOrNull()?.uppercase() ?: "#"
+
             binding.tvBadge.isVisible = item.badge.isNotBlank()
             binding.tvAmount.isVisible = item.amount.isNotBlank()
+
             binding.btnAction.isVisible = !item.actionLabel.isNullOrBlank()
             binding.btnAction.text = item.actionLabel.orEmpty()
+
+            binding.btnDelete.isVisible = !item.deleteLabel.isNullOrBlank()
+            binding.btnDelete.text = item.deleteLabel.orEmpty()
+
             binding.root.setOnClickListener { onItemClick(item) }
             binding.btnAction.setOnClickListener { onActionClick?.invoke(item) }
+            binding.btnDelete.setOnClickListener { onDeleteClick?.invoke(item) }
+
             val bgRes = when (item.tone) {
                 WarnaBaris.GREEN -> R.drawable.bg_tone_green
                 WarnaBaris.GOLD -> R.drawable.bg_tone_gold

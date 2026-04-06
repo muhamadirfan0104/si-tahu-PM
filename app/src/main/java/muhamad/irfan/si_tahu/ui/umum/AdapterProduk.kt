@@ -1,11 +1,12 @@
-package muhamad.irfan.si_tahu.ui.common
+// AdapterProduk.kt
+package muhamad.irfan.si_tahu.ui.umum
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import muhamad.irfan.si_tahu.R
-import muhamad.irfan.si_tahu.data.RepositoriLokal
 import muhamad.irfan.si_tahu.data.Produk
+import muhamad.irfan.si_tahu.data.RepositoriLokal
 import muhamad.irfan.si_tahu.databinding.ItemProductCardBinding
 import muhamad.irfan.si_tahu.util.Formatter
 
@@ -32,7 +33,9 @@ class AdapterProduk(
 
     override fun getItemCount(): Int = items.size
 
-    inner class PenampungProduk(private val binding: ItemProductCardBinding) : RecyclerView.ViewHolder(binding.root) {
+    inner class PenampungProduk(
+        private val binding: ItemProductCardBinding
+    ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: Produk) {
             binding.tvTitle.text = item.name
             binding.tvSubtitle.text = "Stok ${item.stock} ${item.unit} • Minimum ${item.minStock}"
@@ -40,11 +43,13 @@ class AdapterProduk(
             binding.tvCategory.text = item.category
             val status = RepositoriLokal.productStatus(item)
             binding.tvStatus.text = status
+
             val tone = when (status) {
                 "Aman" -> R.drawable.bg_tone_green
                 "Menipis" -> R.drawable.bg_tone_gold
                 else -> R.drawable.bg_tone_orange
             }
+
             binding.tvStatus.setBackgroundResource(tone)
             binding.btnAdd.setOnClickListener { onAdd(item) }
         }

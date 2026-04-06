@@ -1,24 +1,30 @@
-package muhamad.irfan.si_tahu.ui.main
+package muhamad.irfan.si_tahu.ui.utama
 
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.fragment.app.commit
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.databinding.ActivityRoleMainBinding
-import muhamad.irfan.si_tahu.ui.base.AktivitasDasar
-import muhamad.irfan.si_tahu.ui.login.AktivitasMasuk
+import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
+import muhamad.irfan.si_tahu.ui.masuk.AktivitasMasuk
 
 class AktivitasUtamaKasir : AktivitasDasar() {
+
     private lateinit var binding: ActivityRoleMainBinding
+
+    private val auth by lazy { FirebaseAuth.getInstance() }
+    private val firestore by lazy { FirebaseFirestore.getInstance() }
+
+    private var namaLogin: String = "Kasir"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (FirebaseAuth.getInstance().currentUser == null) {
-            startActivity(Intent(this, AktivitasMasuk::class.java))
+        if (auth.currentUser == null) {
+            startActivity(AktivitasUtamaKasir.intent(this, R.id.nav_cashier_menu, clearTop = true))
             finish()
             return
         }
@@ -28,39 +34,85 @@ class AktivitasUtamaKasir : AktivitasDasar() {
 
         binding.bottomNavigation.menu.clear()
         binding.bottomNavigation.inflateMenu(R.menu.menu_bottom_cashier)
+
         binding.bottomNavigation.setOnItemSelectedListener {
             when (it.itemId) {
+                R.id.nav_cashier_dashboard,
                 R.id.nav_cashier_menu -> {
                     showTab(it.itemId)
                     true
                 }
-                else -> {
-                    Toast.makeText(this, "nunggu update", Toast.LENGTH_SHORT).show()
-                    false
-                }
+                else -> false
             }
         }
 
-        val requestedTab = intent.getIntExtra(EXTRA_TAB_ID, R.id.nav_cashier_menu)
-        val startTab = R.id.nav_cashier_menu
-        if (savedInstanceState == null) {
-            binding.bottomNavigation.selectedItemId = startTab
-        }
+        handleIntentTab(intent, savedInstanceState == null)
+        loadNamaLogin()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntentTab(intent, false)
     }
 
     fun openTab(tabId: Int) {
         binding.bottomNavigation.selectedItemId = tabId
     }
 
-    private fun showTab(itemId: Int) {
-        val (fragment, title, subtitle) = when (itemId) {
-            R.id.nav_cashier_sale -> Triple(FragmenPenjualanKasir(), "Tambah Penjualan", "Kasir")
-            R.id.nav_cashier_history -> Triple(FragmenRiwayatKasir(), "Riwayat Penjualan", "Kasir")
-            R.id.nav_cashier_menu -> Triple(FragmenMenuKasir(), "Menu Kasir", "Kasir")
-            else -> Triple(FragmenDasborKasir(), "Beranda Kasir", "Kasir")
+    private fun handleIntentTab(intent: Intent?, firstCreate: Boolean) {
+        val startTab = intent?.getIntExtra(EXTRA_TAB_ID, R.id.nav_cashier_dashboard)
+            ?: R.id.nav_cashier_dashboard
+
+        if (firstCreate) {
+            binding.bottomNavigation.selectedItemId = startTab
+        } else {
+            if (binding.bottomNavigation.selectedItemId != startTab) {
+                binding.bottomNavigation.selectedItemId = startTab
+            } else {
+                showTab(startTab)
+            }
         }
+    }
+
+    private fun loadNamaLogin() {
+        val uid = auth.currentUser?.uid
+        if (uid.isNullOrBlank()) {
+            namaLogin = "Kasir"
+            updateToolbarSubtitle()
+            return
+        }
+
+        firestore.collection("pengguna")
+            .whereEqualTo("authUid", uid)
+            .limit(1)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val doc = snapshot.documents.firstOrNull()
+                val namaPengguna = doc?.getString("namaPengguna").orEmpty()
+
+                namaLogin = if (namaPengguna.isBlank()) "Kasir" else namaPengguna
+                updateToolbarSubtitle()
+            }
+            .addOnFailureListener {
+                namaLogin = "Kasir"
+                updateToolbarSubtitle()
+            }
+    }
+
+    private fun updateToolbarSubtitle() {
+        binding.toolbar.subtitle = namaLogin
+    }
+
+    private fun showTab(itemId: Int) {
+        val (fragment, title) = when (itemId) {
+            R.id.nav_cashier_menu -> Pair(FragmenMenuKasir(), "Menu")
+            else -> Pair(FragmenDasborKasir(), "Beranda")
+        }
+
         binding.toolbar.title = title
-        binding.toolbar.subtitle = subtitle
+        binding.toolbar.subtitle = namaLogin
+
         supportFragmentManager.commit {
             replace(binding.container.id, fragment, title)
         }
@@ -69,8 +121,18 @@ class AktivitasUtamaKasir : AktivitasDasar() {
     companion object {
         private const val EXTRA_TAB_ID = "extra_tab_id"
 
-        fun intent(context: Context, tabId: Int = R.id.nav_cashier_menu): Intent {
-            return Intent(context, AktivitasUtamaKasir::class.java).putExtra(EXTRA_TAB_ID, tabId)
+        fun intent(
+            context: Context,
+            tabId: Int = R.id.nav_cashier_dashboard,
+            clearTop: Boolean = false
+        ): Intent {
+            return Intent(context, AktivitasUtamaKasir::class.java)
+                .putExtra(EXTRA_TAB_ID, tabId)
+                .apply {
+                    if (clearTop) {
+                        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    }
+                }
         }
     }
 }

@@ -1,4 +1,5 @@
-package muhamad.irfan.si_tahu.ui.common
+// AdapterKeranjang.kt
+package muhamad.irfan.si_tahu.ui.umum
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
@@ -33,7 +34,9 @@ class AdapterKeranjang(
 
     override fun getItemCount(): Int = items.size
 
-    inner class PenampungKeranjang(private val binding: ItemCartRowBinding) : RecyclerView.ViewHolder(binding.root) {
+    inner class PenampungKeranjang(
+        private val binding: ItemCartRowBinding
+    ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: ItemKeranjang) {
             val product = RepositoriLokal.getProduct(item.productId)
             binding.tvTitle.text = product?.name ?: "Produk"

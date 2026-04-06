@@ -1,12 +1,13 @@
-package muhamad.irfan.si_tahu.ui.main
+// FragmenDasborKasir.kt
+package muhamad.irfan.si_tahu.ui.utama
 
 import android.os.Bundle
 import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.databinding.FragmentCashierDashboardBinding
-import muhamad.irfan.si_tahu.ui.base.FragmenDasar
-import muhamad.irfan.si_tahu.ui.common.AdapterBarisUmum
+import muhamad.irfan.si_tahu.ui.dasar.FragmenDasar
+import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
 
 class FragmenDasborKasir : FragmenDasar(R.layout.fragment_cashier_dashboard) {
     private var _binding: FragmentCashierDashboardBinding? = null
@@ -26,8 +27,9 @@ class FragmenDasborKasir : FragmenDasar(R.layout.fragment_cashier_dashboard) {
         binding.rvRecentCashierSales.layoutManager = LinearLayoutManager(requireContext())
         binding.rvRecentCashierSales.adapter = recentAdapter
 
+        binding.btnNewSale.text = "Buka Menu"
         binding.btnNewSale.setOnClickListener {
-            (requireActivity() as? AktivitasUtamaKasir)?.openTab(R.id.nav_cashier_sale)
+            (requireActivity() as? AktivitasUtamaKasir)?.openTab(R.id.nav_cashier_menu)
         }
     }
 

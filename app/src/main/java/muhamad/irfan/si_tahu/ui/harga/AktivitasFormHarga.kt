@@ -1,13 +1,14 @@
-package muhamad.irfan.si_tahu.ui.price
+package muhamad.irfan.si_tahu.ui.harga
 
 import android.content.Intent
 import android.os.Bundle
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import muhamad.irfan.si_tahu.databinding.ActivityPriceFormBinding
-import muhamad.irfan.si_tahu.ui.base.AktivitasDasar
-import muhamad.irfan.si_tahu.util.EkstraAplikasi
+import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.util.AdapterSpinner
+import muhamad.irfan.si_tahu.util.EkstraAplikasi
 
 class AktivitasFormHarga : AktivitasDasar() {
 
@@ -29,6 +30,10 @@ class AktivitasFormHarga : AktivitasDasar() {
 
         binding.cbActive.isChecked = true
 
+        if (!editingPriceId.isNullOrBlank()) {
+            lockProductFieldForEdit()
+        }
+
         binding.btnSave.setOnClickListener {
             savePrice()
         }
@@ -36,8 +41,14 @@ class AktivitasFormHarga : AktivitasDasar() {
         loadProducts()
     }
 
+    private fun lockProductFieldForEdit() {
+        binding.spProduct.isEnabled = false
+        binding.spProduct.isClickable = false
+    }
+
     private fun loadProducts() {
         firestore.collection("produk")
+            .whereEqualTo("dihapus", false)
             .get()
             .addOnSuccessListener { snapshot ->
                 products = snapshot.documents.map { doc ->
@@ -80,7 +91,7 @@ class AktivitasFormHarga : AktivitasDasar() {
             .addOnSuccessListener { doc ->
                 if (!doc.exists()) return@addOnSuccessListener
 
-                binding.etLabel.setText(doc.getString("namaHarga").orEmpty())
+                binding.etLabel.setText(doc.getString("kanalHarga").orEmpty())
                 binding.etPrice.setText((doc.getLong("hargaSatuan") ?: 0L).toString())
                 binding.cbActive.isChecked = doc.getBoolean("aktif") ?: true
                 binding.cbDefault.isChecked = doc.getBoolean("hargaUtama") ?: false
@@ -97,13 +108,14 @@ class AktivitasFormHarga : AktivitasDasar() {
             return
         }
 
-        val labelInput = binding.etLabel.text?.toString()?.trim().orEmpty()
+        val kanalInput = binding.etLabel.text?.toString()?.trim().orEmpty()
+        val kanalKey = normalizeChannelKey(kanalInput)
         val hargaSatuan = binding.etPrice.text?.toString()?.trim()?.toLongOrNull() ?: 0L
         val aktif = binding.cbActive.isChecked
         val hargaUtama = binding.cbDefault.isChecked
 
-        if (labelInput.isBlank()) {
-            binding.etLabel.error = "Label harga wajib diisi"
+        if (kanalInput.isBlank()) {
+            binding.etLabel.error = "Nama kanal wajib diisi"
             binding.etLabel.requestFocus()
             return
         }
@@ -114,59 +126,203 @@ class AktivitasFormHarga : AktivitasDasar() {
             return
         }
 
-        val kanalHarga = normalizeChannel(labelInput)
-        if (kanalHarga == null) {
-            binding.etLabel.error = "Isi label dengan KASIR, PASAR, atau RESELLER"
-            binding.etLabel.requestFocus()
-            return
-        }
-
-        val now = Timestamp.now()
-        val docId = editingPriceId ?: firestore.collection("produk")
+        val hargaRef = firestore.collection("produk")
             .document(selectedProduct.id)
             .collection("hargaJual")
-            .document()
-            .id
 
-        val data = hashMapOf<String, Any>(
-            "kanalHarga" to kanalHarga,
-            "namaHarga" to labelInput,
+        hargaRef.whereEqualTo("kanalKey", kanalKey)
+            .whereEqualTo("dihapus", false)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val duplicateExists = snapshot.documents.any { it.id != editingPriceId }
+
+                if (duplicateExists) {
+                    binding.etLabel.error = "Nama kanal sudah dipakai untuk produk ini"
+                    binding.etLabel.requestFocus()
+                    return@addOnSuccessListener
+                }
+
+                if (editingPriceId == null) {
+                    generateNextPriceId(
+                        productId = selectedProduct.id,
+                        onResult = { newPriceId ->
+                            persistPrice(
+                                productId = selectedProduct.id,
+                                priceId = newPriceId,
+                                kanalInput = kanalInput,
+                                kanalKey = kanalKey,
+                                hargaSatuan = hargaSatuan,
+                                aktif = aktif,
+                                hargaUtama = hargaUtama,
+                                isNew = true
+                            )
+                        },
+                        onError = { e ->
+                            showMessage("Gagal membuat ID harga: ${e.message}")
+                        }
+                    )
+                } else {
+                    persistPrice(
+                        productId = selectedProduct.id,
+                        priceId = editingPriceId!!,
+                        kanalInput = kanalInput,
+                        kanalKey = kanalKey,
+                        hargaSatuan = hargaSatuan,
+                        aktif = aktif,
+                        hargaUtama = hargaUtama,
+                        isNew = false
+                    )
+                }
+            }
+            .addOnFailureListener { e ->
+                showMessage("Gagal memeriksa nama kanal: ${e.message}")
+            }
+    }
+
+    private fun persistPrice(
+        productId: String,
+        priceId: String,
+        kanalInput: String,
+        kanalKey: String,
+        hargaSatuan: Long,
+        aktif: Boolean,
+        hargaUtama: Boolean,
+        isNew: Boolean
+    ) {
+        val now = Timestamp.now()
+
+        val data = hashMapOf<String, Any?>(
+            "kanalHarga" to kanalInput,
+            "kanalKey" to kanalKey,
             "hargaSatuan" to hargaSatuan,
             "hargaUtama" to hargaUtama,
             "aktif" to aktif,
+            "dihapus" to false,
+            "dihapusPada" to null,
             "diperbaruiPada" to now
         )
 
-        if (editingPriceId == null) {
+        if (isNew) {
             data["dibuatPada"] = now
         }
 
-        val priceRef = firestore.collection("produk")
-            .document(selectedProduct.id)
+        firestore.collection("produk")
+            .document(productId)
             .collection("hargaJual")
-            .document(docId)
-
-        val task = if (editingPriceId == null) {
-            priceRef.set(data)
-        } else {
-            priceRef.update(data)
-        }
-
-        task.addOnSuccessListener {
-            if (hargaUtama) {
-                clearOtherPrimaryPrices(selectedProduct.id, docId)
-            } else {
-                goBackToList(selectedProduct.id)
+            .document(priceId)
+            .set(data, SetOptions.merge())
+            .addOnSuccessListener {
+                finalizePrimaryAfterSave(
+                    productId = productId,
+                    currentDocId = priceId,
+                    requestedPrimary = hargaUtama
+                )
             }
+            .addOnFailureListener { e ->
+                showMessage("Gagal menyimpan harga kanal: ${e.message}")
+            }
+    }
+
+    private fun generateNextPriceId(
+        productId: String,
+        onResult: (String) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        val counterRef = firestore.collection("produk")
+            .document(productId)
+            .collection("meta")
+            .document("counterHarga")
+
+        firestore.runTransaction { transaction ->
+            val snapshot = transaction.get(counterRef)
+            val lastNumber = snapshot.getLong("hargaTerakhir") ?: 0L
+            val nextNumber = lastNumber + 1L
+
+            transaction.set(
+                counterRef,
+                mapOf("hargaTerakhir" to nextNumber),
+                SetOptions.merge()
+            )
+
+            "hrg_%03d".format(nextNumber)
+        }.addOnSuccessListener { newId ->
+            onResult(newId)
         }.addOnFailureListener { e ->
-            showMessage("Gagal menyimpan harga kanal: ${e.message}")
+            onError(e)
         }
+    }
+
+    private fun finalizePrimaryAfterSave(
+        productId: String,
+        currentDocId: String,
+        requestedPrimary: Boolean
+    ) {
+        val hargaRef = firestore.collection("produk")
+            .document(productId)
+            .collection("hargaJual")
+
+        hargaRef.whereEqualTo("dihapus", false)
+            .whereEqualTo("aktif", true)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val activeDocs = snapshot.documents
+
+                if (activeDocs.isEmpty()) {
+                    hargaRef.document(currentDocId)
+                        .update(
+                            mapOf(
+                                "aktif" to true,
+                                "hargaUtama" to true
+                            )
+                        )
+                        .addOnSuccessListener {
+                            showMessage("Minimal harus ada satu harga aktif dan default.")
+                            goBackToList(productId)
+                        }
+                        .addOnFailureListener { e ->
+                            showMessage("Harga tersimpan, tapi validasi default gagal: ${e.message}")
+                            goBackToList(productId)
+                        }
+                    return@addOnSuccessListener
+                }
+
+                if (requestedPrimary) {
+                    clearOtherPrimaryPrices(productId, currentDocId)
+                    return@addOnSuccessListener
+                }
+
+                val hasOtherPrimary = activeDocs.any { doc ->
+                    doc.id != currentDocId && (doc.getBoolean("hargaUtama") == true)
+                }
+
+                if (hasOtherPrimary) {
+                    goBackToList(productId)
+                } else {
+                    val fallbackDoc = activeDocs.firstOrNull { it.id == currentDocId } ?: activeDocs.first()
+
+                    hargaRef.document(fallbackDoc.id)
+                        .update("hargaUtama", true)
+                        .addOnSuccessListener {
+                            showMessage("Karena belum ada default, salah satu harga dijadikan default.")
+                            goBackToList(productId)
+                        }
+                        .addOnFailureListener { e ->
+                            showMessage("Harga tersimpan, tapi gagal menetapkan default: ${e.message}")
+                            goBackToList(productId)
+                        }
+                }
+            }
+            .addOnFailureListener { e ->
+                showMessage("Harga tersimpan, tapi validasi default gagal: ${e.message}")
+                goBackToList(productId)
+            }
     }
 
     private fun clearOtherPrimaryPrices(productId: String, currentDocId: String) {
         firestore.collection("produk")
             .document(productId)
             .collection("hargaJual")
+            .whereEqualTo("dihapus", false)
             .get()
             .addOnSuccessListener { snapshot ->
                 val batch = firestore.batch()
@@ -199,17 +355,10 @@ class AktivitasFormHarga : AktivitasDasar() {
         finish()
     }
 
-    private fun normalizeChannel(input: String): String? {
-        val cleaned = input.trim().uppercase()
-            .removePrefix("HARGA ")
-            .trim()
-
-        return when (cleaned) {
-            "KASIR" -> "KASIR"
-            "PASAR" -> "PASAR"
-            "RESELLER" -> "RESELLER"
-            else -> null
-        }
+    private fun normalizeChannelKey(input: String): String {
+        return input.trim()
+            .uppercase()
+            .replace("\\s+".toRegex(), " ")
     }
 }
 

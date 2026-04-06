@@ -4,10 +4,11 @@ import android.content.Intent
 import android.os.Bundle
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import muhamad.irfan.si_tahu.databinding.ActivityParameterFormBinding
-import muhamad.irfan.si_tahu.ui.base.AktivitasDasar
-import muhamad.irfan.si_tahu.util.EkstraAplikasi
+import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.util.AdapterSpinner
+import muhamad.irfan.si_tahu.util.EkstraAplikasi
 
 class AktivitasFormParameter : AktivitasDasar() {
 
@@ -16,21 +17,33 @@ class AktivitasFormParameter : AktivitasDasar() {
 
     private var products: List<OpsiProdukDasar> = emptyList()
     private var editingParameterId: String? = null
+    private var requestedProductId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityParameterFormBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        bindToolbar(binding.toolbar, "Form Parameter", "Tambah atau edit parameter")
+        bindToolbar(binding.toolbar, "Form Parameter", "Tambah atau edit parameter produksi")
 
         editingParameterId = intent.getStringExtra(EkstraAplikasi.EXTRA_PARAMETER_ID)
+        requestedProductId = intent.getStringExtra(EkstraAplikasi.EXTRA_PRODUCT_ID)
+
         binding.cbActive.isChecked = true
+
+        if (!editingParameterId.isNullOrBlank()) {
+            lockProductFieldForEdit()
+        }
 
         binding.btnSave.setOnClickListener {
             saveParameter()
         }
 
         loadBasicProducts()
+    }
+
+    private fun lockProductFieldForEdit() {
+        binding.spProduct.isEnabled = false
+        binding.spProduct.isClickable = false
     }
 
     private fun loadBasicProducts() {
@@ -41,11 +54,10 @@ class AktivitasFormParameter : AktivitasDasar() {
                 products = snapshot.documents.map { doc ->
                     OpsiProdukDasar(
                         id = doc.id,
-                        kodeProduk = doc.getString("kodeProduk").orEmpty(),
                         namaProduk = doc.getString("namaProduk").orEmpty(),
                         satuan = doc.getString("satuan").orEmpty()
                     )
-                }.sortedBy { it.namaProduk }
+                }.sortedBy { it.namaProduk.lowercase() }
 
                 if (products.isEmpty()) {
                     binding.spProduct.adapter =
@@ -56,6 +68,11 @@ class AktivitasFormParameter : AktivitasDasar() {
 
                 binding.spProduct.adapter =
                     AdapterSpinner.stringAdapter(this, products.map { it.namaProduk })
+
+                val initialIndex = requestedProductId?.let { targetId ->
+                    products.indexOfFirst { it.id == targetId }.takeIf { it >= 0 } ?: 0
+                } ?: 0
+                binding.spProduct.setSelection(initialIndex)
 
                 if (!editingParameterId.isNullOrBlank()) {
                     loadEditingParameter(editingParameterId!!)
@@ -71,13 +88,25 @@ class AktivitasFormParameter : AktivitasDasar() {
             .document(parameterId)
             .get()
             .addOnSuccessListener { doc ->
-                if (!doc.exists()) return@addOnSuccessListener
+                if (!doc.exists()) {
+                    showMessage("Data parameter tidak ditemukan.")
+                    return@addOnSuccessListener
+                }
+
+                if (doc.getBoolean("dihapus") == true) {
+                    showMessage("Parameter ini sudah dihapus.")
+                    finish()
+                    return@addOnSuccessListener
+                }
 
                 val idProduk = doc.getString("idProduk").orEmpty()
-                val productIndex = products.indexOfFirst { it.id == idProduk }.takeIf { it >= 0 } ?: 0
+                val productIndex = products.indexOfFirst { it.id == idProduk }
+                    .takeIf { it >= 0 } ?: 0
                 binding.spProduct.setSelection(productIndex)
 
-                binding.etResultPerBatch.setText((doc.getLong("hasilPerProduksi") ?: 0L).toString())
+                binding.etResultPerBatch.setText(
+                    (doc.getLong("hasilPerProduksi") ?: 0L).toString()
+                )
                 binding.etNote.setText(doc.getString("catatan").orEmpty())
                 binding.cbActive.isChecked = doc.getBoolean("aktif") ?: true
             }
@@ -93,7 +122,10 @@ class AktivitasFormParameter : AktivitasDasar() {
             return
         }
 
-        val hasilPerProduksi = binding.etResultPerBatch.text?.toString()?.trim()?.toLongOrNull() ?: 0L
+        val hasilPerProduksi = binding.etResultPerBatch.text
+            ?.toString()
+            ?.trim()
+            ?.toLongOrNull() ?: 0L
         val catatan = binding.etNote.text?.toString()?.trim().orEmpty()
         val aktif = binding.cbActive.isChecked
 
@@ -103,40 +135,153 @@ class AktivitasFormParameter : AktivitasDasar() {
             return
         }
 
-        val now = Timestamp.now()
-        val docId = editingParameterId ?: firestore.collection("parameterProduksi").document().id
+        if (editingParameterId.isNullOrBlank()) {
+            generateNextParameterId(
+                onResult = { newId ->
+                    persistParameter(
+                        parameterId = newId,
+                        product = product,
+                        hasilPerProduksi = hasilPerProduksi,
+                        catatan = catatan,
+                        aktif = aktif,
+                        isNew = true
+                    )
+                },
+                onError = { e ->
+                    showMessage("Gagal membuat ID parameter: ${e.message}")
+                }
+            )
+        } else {
+            persistParameter(
+                parameterId = editingParameterId!!,
+                product = product,
+                hasilPerProduksi = hasilPerProduksi,
+                catatan = catatan,
+                aktif = aktif,
+                isNew = false
+            )
+        }
+    }
 
-        val data = hashMapOf<String, Any>(
+    private fun persistParameter(
+        parameterId: String,
+        product: OpsiProdukDasar,
+        hasilPerProduksi: Long,
+        catatan: String,
+        aktif: Boolean,
+        isNew: Boolean
+    ) {
+        val now = Timestamp.now()
+
+        val data = hashMapOf<String, Any?>(
             "idProduk" to product.id,
-            "kodeProduk" to product.kodeProduk,
             "namaProduk" to product.namaProduk,
             "hasilPerProduksi" to hasilPerProduksi,
             "satuanHasil" to product.satuan,
             "aktif" to aktif,
             "catatan" to catatan,
+            "dihapus" to false,
+            "dihapusPada" to null,
             "diperbaruiPada" to now
         )
 
-        if (editingParameterId == null) {
+        if (isNew) {
             data["dibuatPada"] = now
         }
 
-        val ref = firestore.collection("parameterProduksi").document(docId)
-        val task = if (editingParameterId == null) ref.set(data) else ref.update(data)
+        firestore.collection("parameterProduksi")
+            .document(parameterId)
+            .set(data, SetOptions.merge())
+            .addOnSuccessListener {
+                if (aktif) {
+                    deactivateOtherParameters(
+                        productId = product.id,
+                        currentParameterId = parameterId
+                    )
+                } else {
+                    goBackToList(product.id)
+                }
+            }
+            .addOnFailureListener { e ->
+                showMessage("Gagal menyimpan parameter: ${e.message}")
+            }
+    }
 
-        task.addOnSuccessListener {
-            showMessage("Parameter berhasil disimpan.")
-            startActivity(Intent(this, AktivitasDaftarParameter::class.java))
-            finish()
-        }.addOnFailureListener { e ->
-            showMessage("Gagal menyimpan parameter: ${e.message}")
-        }
+    private fun deactivateOtherParameters(
+        productId: String,
+        currentParameterId: String
+    ) {
+        firestore.collection("parameterProduksi")
+            .whereEqualTo("idProduk", productId)
+            .whereEqualTo("dihapus", false)
+            .whereEqualTo("aktif", true)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val batch = firestore.batch()
+                val now = Timestamp.now()
+
+                snapshot.documents.forEach { doc ->
+                    if (doc.id != currentParameterId) {
+                        batch.update(
+                            doc.reference,
+                            mapOf(
+                                "aktif" to false,
+                                "diperbaruiPada" to now
+                            )
+                        )
+                    }
+                }
+
+                batch.commit()
+                    .addOnSuccessListener {
+                        goBackToList(productId)
+                    }
+                    .addOnFailureListener { e ->
+                        showMessage("Parameter tersimpan, tapi sinkron aktif gagal: ${e.message}")
+                        goBackToList(productId)
+                    }
+            }
+            .addOnFailureListener { e ->
+                showMessage("Parameter tersimpan, tapi validasi aktif gagal: ${e.message}")
+                goBackToList(productId)
+            }
+    }
+
+    private fun generateNextParameterId(
+        onResult: (String) -> Unit,
+        onError: (Exception) -> Unit
+    ) {
+        firestore.collection("parameterProduksi")
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val lastNumber = snapshot.documents.mapNotNull { doc ->
+                    if (doc.id.startsWith("ppm_")) {
+                        doc.id.removePrefix("ppm_").toIntOrNull()
+                    } else {
+                        null
+                    }
+                }.maxOrNull() ?: 0
+
+                val nextNumber = lastNumber + 1
+                onResult("ppm_%03d".format(nextNumber))
+            }
+            .addOnFailureListener { e ->
+                onError(e)
+            }
+    }
+
+    private fun goBackToList(productId: String) {
+        showMessage("Parameter produksi berhasil disimpan.")
+        startActivity(
+            Intent(this, AktivitasDaftarParameter::class.java)
+                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, productId)
+        )
+        finish()
     }
 }
 
 private data class OpsiProdukDasar(
     val id: String,
-    val kodeProduk: String,
     val namaProduk: String,
     val satuan: String
 )

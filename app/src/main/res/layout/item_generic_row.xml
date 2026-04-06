@@ -3,30 +3,39 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="10dp"
-    app:cardBackgroundColor="@color/card_surface"
-    app:strokeColor="@color/line_color"
-    app:strokeWidth="1dp">
+    android:layout_marginBottom="12dp"
+    app:cardBackgroundColor="@android:color/white"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="0dp"
+    app:strokeColor="#EAE5D9"
+    app:strokeWidth="1.5dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="14dp">
+        android:padding="20dp"> <com.google.android.material.card.MaterialCardView
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        app:cardBackgroundColor="#E7EFDC"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="0dp">
 
         <TextView
             android:id="@+id/tvLeading"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
             android:gravity="center"
-            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-            android:textColor="@color/text_primary" />
+            android:fontFamily="sans-serif-bold"
+            android:textColor="#5F7D49"
+            android:textSize="18sp" />
+    </com.google.android.material.card.MaterialCardView>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="16dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -34,26 +43,37 @@
                 android:id="@+id/tvTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                android:textColor="@color/text_primary" />
+                android:fontFamily="sans-serif-bold"
+                android:textColor="#293226"
+                android:textSize="16sp" />
 
             <TextView
                 android:id="@+id/tvSubtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-                android:textColor="@color/text_secondary" />
+                android:layout_marginTop="2dp"
+                android:fontFamily="sans-serif-medium"
+                android:textColor="#8A8577"
+                android:textSize="13sp" />
 
-            <TextView
-                android:id="@+id/tvBadge"
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:background="@drawable/bg_tone_neutral"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="6dp"
-                android:textAppearance="@style/TextAppearance.Material3.LabelMedium" />
+                app:cardBackgroundColor="#F8ECC1"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="0dp">
+
+                <TextView
+                    android:id="@+id/tvBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textColor="#7A6222"
+                    android:textSize="11sp" />
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
 
         <LinearLayout
@@ -66,17 +86,49 @@
                 android:id="@+id/tvAmount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
-                android:textColor="@color/text_primary" />
+                android:fontFamily="sans-serif-bold"
+                android:textColor="#5F7D49"
+                android:textSize="16sp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnAction"
-                style="@style/Widget.Material3.Button.TextButton"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:minWidth="0dp"
-                android:text="Aksi" />
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAction"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="12dp"
+                    android:fontFamily="sans-serif-bold"
+                    android:text="Aksi"
+                    android:textColor="#5F7D49"
+                    android:textSize="13sp"
+                    app:rippleColor="#E7EFDC" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDelete"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="12dp"
+                    android:fontFamily="sans-serif-bold"
+                    android:text="Delete"
+                    android:textAllCaps="false"
+                    android:textColor="#D32F2F"
+                    android:textSize="13sp"
+                    app:backgroundTint="@android:color/white"
+                    app:cornerRadius="12dp"
+                    app:elevation="0dp"
+                    app:strokeColor="#EFD5CF"
+                    app:strokeWidth="1dp" />
+            </LinearLayout>
         </LinearLayout>
+
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
