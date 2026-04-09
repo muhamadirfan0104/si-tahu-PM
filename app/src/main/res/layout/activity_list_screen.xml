@@ -1,158 +1,188 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F7F4ED"
-    android:fitsSystemWindows="true"
-    android:orientation="vertical">
-
-    <com.google.android.material.appbar.AppBarLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:elevation="0dp"
-        android:background="#FCFBF7">
-
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="?attr/actionBarSize"
-            android:paddingHorizontal="8dp"
-            app:titleTextColor="#293226" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="#EAE5D9" />
-    </com.google.android.material.appbar.AppBarLayout>
+    android:background="#F7F4ED">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:padding="20dp"> <com.google.android.material.textfield.TextInputLayout
-        android:id="@+id/searchContainer"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:boxBackgroundColor="@android:color/white"
-        app:boxCornerRadiusBottomEnd="20dp"
-        app:boxCornerRadiusBottomStart="20dp"
-        app:boxCornerRadiusTopEnd="20dp"
-        app:boxCornerRadiusTopStart="20dp"
-        app:boxStrokeColor="#5F7D49"
-        app:boxStrokeWidth="1.5dp"
-        app:hintTextColor="#5F7D49"
-        app:startIconDrawable="@android:drawable/ic_menu_search"
-        app:startIconTint="#8A8577">
+        android:fitsSystemWindows="true"
+        android:orientation="vertical">
 
-        <com.google.android.material.textfield.TextInputEditText
-            android:id="@+id/etSearch"
+        <com.google.android.material.appbar.AppBarLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:hint="Cari data..."
-            android:textColor="#293226" />
-    </com.google.android.material.textfield.TextInputLayout>
+            android:background="#FCFBF7"
+            app:elevation="0dp">
 
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardBackgroundColor="@android:color/white"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="0dp"
-            app:strokeColor="#EAE5D9"
-            app:strokeWidth="1.5dp">
-
-            <Spinner
-                android:id="@+id/spPrimaryFilter"
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/toolbar"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:backgroundTint="#8A8577"
-                android:paddingHorizontal="16dp" />
-        </com.google.android.material.card.MaterialCardView>
+                android:layout_height="wrap_content"
+                android:minHeight="?attr/actionBarSize"
+                android:paddingHorizontal="8dp"
+                app:titleTextColor="#293226" />
 
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            app:cardBackgroundColor="@android:color/white"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="0dp"
-            app:strokeColor="#EAE5D9"
-            app:strokeWidth="1.5dp">
-
-            <Spinner
-                android:id="@+id/spSecondaryFilter"
+            <View
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:backgroundTint="#8A8577"
-                android:paddingHorizontal="16dp" />
-        </com.google.android.material.card.MaterialCardView>
+                android:layout_height="1dp"
+                android:background="#EAE5D9" />
+        </com.google.android.material.appbar.AppBarLayout>
 
         <LinearLayout
-            android:id="@+id/buttonRow"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:orientation="horizontal"
-            android:weightSum="2">
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="20dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnPrimary"
-                android:layout_width="0dp"
-                android:layout_height="64dp"
-                android:layout_weight="1"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/searchContainer"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:boxBackgroundColor="@android:color/white"
+                app:boxCornerRadiusBottomEnd="20dp"
+                app:boxCornerRadiusBottomStart="20dp"
+                app:boxCornerRadiusTopEnd="20dp"
+                app:boxCornerRadiusTopStart="20dp"
+                app:boxStrokeColor="#A8A095"
+                app:boxStrokeWidth="1.5dp"
+                app:hintTextColor="#8A8577"
+                app:startIconDrawable="@android:drawable/ic_menu_search"
+                app:startIconTint="#B8B1A5">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etSearch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:hint="Cari data..."
+                    android:textColor="#293226"
+                    android:textColorHint="#8A8577" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                app:cardBackgroundColor="@android:color/white"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#EAE5D9"
+                app:strokeWidth="1.5dp">
+
+                <Spinner
+                    android:id="@+id/spPrimaryFilter"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:backgroundTint="#8A8577"
+                    android:paddingHorizontal="16dp" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardSecondaryFilter"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="@android:color/white"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#EAE5D9"
+                app:strokeWidth="1.5dp">
+
+                <Spinner
+                    android:id="@+id/spSecondaryFilter"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:backgroundTint="#8A8577"
+                    android:paddingHorizontal="16dp" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <LinearLayout
+                android:id="@+id/buttonRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:orientation="horizontal"
+                android:visibility="gone"
+                android:weightSum="2">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPrimary"
+                    android:layout_width="0dp"
+                    android:layout_height="64dp"
+                    android:layout_weight="1"
+                    android:fontFamily="sans-serif-bold"
+                    android:text="Tambah"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    app:backgroundTint="#5F7D49"
+                    app:cornerRadius="20dp"
+                    app:elevation="0dp"
+                    app:icon="@android:drawable/ic_input_add"
+                    app:iconTint="#FFFFFF" />
+
+                <Space
+                    android:layout_width="12dp"
+                    android:layout_height="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSecondary"
+                    android:layout_width="0dp"
+                    android:layout_height="64dp"
+                    android:layout_weight="1"
+                    android:fontFamily="sans-serif-bold"
+                    android:text="Aksi 2"
+                    android:textColor="#5F7D49"
+                    android:textSize="15sp"
+                    app:backgroundTint="@android:color/white"
+                    app:cornerRadius="20dp"
+                    app:elevation="0dp"
+                    app:strokeColor="#C5D3B8"
+                    app:strokeWidth="1.5dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="40dp"
                 android:fontFamily="sans-serif-bold"
-                android:text="Tambah"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
-                app:backgroundTint="#5F7D49"
-                app:cornerRadius="20dp"
-                app:elevation="0dp"
-                app:icon="@android:drawable/ic_input_add"
-                app:iconTint="#FFFFFF" />
+                android:gravity="center"
+                android:text="Belum ada data"
+                android:textColor="#A09B8E"
+                android:textSize="16sp"
+                android:visibility="gone" />
 
-            <Space
-                android:layout_width="12dp"
-                android:layout_height="1dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnSecondary"
-                android:layout_width="0dp"
-                android:layout_height="64dp"
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvList"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="20dp"
                 android:layout_weight="1"
-                android:fontFamily="sans-serif-bold"
-                android:text="Aksi 2"
-                android:textColor="#5F7D49"
-                android:textSize="15sp"
-                app:backgroundTint="@android:color/white"
-                app:cornerRadius="20dp"
-                app:elevation="0dp"
-                app:strokeColor="#C5D3B8"
-                app:strokeWidth="1.5dp" />
+                android:clipToPadding="false"
+                android:paddingBottom="96dp" />
+
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/tvEmpty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="40dp"
-            android:fontFamily="sans-serif-bold"
-            android:gravity="center"
-            android:text="Belum ada data"
-            android:textColor="#A09B8E"
-            android:textSize="16sp"
-            android:visibility="gone" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvList"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_marginTop="20dp"
-            android:layout_weight="1" />
-
     </LinearLayout>
-</LinearLayout>
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabAdd"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="20dp"
+        android:layout_marginBottom="24dp"
+        android:contentDescription="Tambah Produk"
+        app:backgroundTint="#5F7D49"
+        app:borderWidth="0dp"
+        app:elevation="6dp"
+        app:maxImageSize="28dp"
+        app:rippleColor="#88FFFFFF"
+        app:srcCompat="@android:drawable/ic_input_add"
+        app:tint="#FFFFFF" />
+
+</FrameLayout>

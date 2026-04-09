@@ -23,12 +23,16 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         rowAdapter = AdapterBarisUmum(
             onItemClick = ::onRowClick,
             onActionClick = ::onRowAction,
+            onEditClick = ::onRowEdit,
             onDeleteClick = ::onRowDelete
         )
 
         binding.rvList.layoutManager = LinearLayoutManager(this)
         binding.rvList.adapter = rowAdapter
         binding.etSearch.addTextChangedListener { onSearchChanged() }
+
+        binding.buttonRow.isVisible = false
+        binding.fabAdd.isVisible = false
     }
 
     protected fun configureScreen(
@@ -119,6 +123,17 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         binding.tvEmpty.isVisible = rows.isEmpty()
         binding.rvList.isVisible = rows.isNotEmpty()
     }
+
+
+    protected fun setFabAdd(listener: View.OnClickListener) {
+        binding.fabAdd.isVisible = true
+        binding.fabAdd.setOnClickListener(listener)
+    }
+
+    protected fun hideFabAdd() {
+        binding.fabAdd.isVisible = false
+    }
+    protected open fun onRowEdit(item: ItemBaris) = Unit
 
     protected open fun onSearchChanged() = Unit
     protected open fun onRowAction(item: ItemBaris) = Unit

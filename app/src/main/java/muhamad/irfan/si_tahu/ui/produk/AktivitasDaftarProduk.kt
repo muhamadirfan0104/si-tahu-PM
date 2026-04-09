@@ -2,6 +2,7 @@ package muhamad.irfan.si_tahu.ui.produk
 
 import android.content.Intent
 import android.os.Bundle
+import com.google.android.gms.tasks.Tasks
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
@@ -14,7 +15,9 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
 
     private val firestore by lazy { FirebaseFirestore.getInstance() }
     private val categories = listOf("Semua", "DASAR", "OLAHAN")
+
     private var products: List<DataBarisProduk> = emptyList()
+    private var priceStatusMap: Map<String, StatusHargaProduk> = emptyMap()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,13 +25,10 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
         configureScreen("Daftar Produk", "Kelola produk dasar dan olahan")
         setPrimaryFilter(categories) { refresh() }
         hideSecondaryFilter()
+        hideButtons()
 
-        setPrimaryButton("Tambah Produk") {
+        setFabAdd {
             startActivity(Intent(this, AktivitasFormProduk::class.java))
-        }
-
-        setSecondaryButton("Harga Kanal") {
-            startActivity(Intent(this, AktivitasDaftarHarga::class.java))
         }
     }
 
@@ -43,7 +43,7 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
         firestore.collection("produk")
             .get()
             .addOnSuccessListener { snapshot ->
-                products = snapshot.documents.map { doc ->
+                val loadedProducts = snapshot.documents.map { doc ->
                     DataBarisProduk(
                         id = doc.id,
                         kodeProduk = doc.getString("kodeProduk").orEmpty(),
@@ -57,39 +57,85 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                         dihapus = doc.getBoolean("dihapus") ?: false
                     )
                 }
-                refresh()
+
+                if (loadedProducts.isEmpty()) {
+                    products = emptyList()
+                    priceStatusMap = emptyMap()
+                    refresh()
+                    return@addOnSuccessListener
+                }
+
+                val tasks = loadedProducts.map { product ->
+                    firestore.collection("produk")
+                        .document(product.id)
+                        .collection("hargaJual")
+                        .whereEqualTo("dihapus", false)
+                        .get()
+                        .continueWith { task ->
+                            val docs = task.result?.documents.orEmpty()
+                            product.id to StatusHargaProduk(
+                                total = docs.size,
+                                aktif = docs.count { it.getBoolean("aktif") ?: true }
+                            )
+                        }
+                }
+
+                Tasks.whenAllSuccess<Pair<String, StatusHargaProduk>>(tasks)
+                    .addOnSuccessListener { result ->
+                        products = loadedProducts
+                        priceStatusMap = result.toMap()
+                        refresh()
+                    }
+                    .addOnFailureListener {
+                        products = loadedProducts
+                        priceStatusMap = emptyMap()
+                        refresh()
+                    }
             }
             .addOnFailureListener { e ->
                 showMessage("Gagal memuat produk: ${e.message}")
                 products = emptyList()
+                priceStatusMap = emptyMap()
                 refresh()
             }
     }
 
     private fun refresh() {
-        val query = searchText()
+        val query = searchText().trim().lowercase()
         val category = primarySelection()
 
-        val rows = products.filter { item ->
-            !item.dihapus &&
-                    item.namaProduk.lowercase().contains(query) &&
-                    (category == "Semua" || item.jenisProduk == category)
-        }.map { item ->
-            ItemBaris(
-                id = item.id,
-                title = item.namaProduk,
-                subtitle = "${item.kodeProduk} • ${item.jenisProduk} • ${item.satuan}",
-                badge = if (item.aktifDijual) "Aktif" else "Nonaktif",
-                amount = "Stok ${item.stokSaatIni}",
-                actionLabel = if (item.aktifDijual) "Nonaktifkan" else "Aktifkan",
-                deleteLabel = "Delete",
-                tone = when {
-                    item.stokSaatIni <= 0L -> WarnaBaris.ORANGE
-                    item.stokSaatIni <= item.stokMinimum -> WarnaBaris.GOLD
-                    else -> WarnaBaris.GREEN
-                }
-            )
-        }
+        val rows = products
+            .filter { item ->
+                !item.dihapus &&
+                        item.namaProduk.lowercase().contains(query) &&
+                        (category == "Semua" || item.jenisProduk == category)
+            }
+            .map { item ->
+                val hargaInfo = priceStatusMap[item.id] ?: StatusHargaProduk()
+                val sudahAdaHarga = hargaInfo.total > 0
+
+                ItemBaris(
+                    id = item.id,
+                    title = item.namaProduk,
+                    subtitle = "${item.kodeProduk} • ${item.jenisProduk} • ${item.satuan}",
+                    badge = if (item.aktifDijual) "Aktif" else "Nonaktif",
+                    amount = "Stok ${item.stokSaatIni}",
+                    priceStatus = if (sudahAdaHarga) {
+                        "Sudah ada harga"
+                    } else {
+                        "Belum ada harga"
+                    },
+                    actionLabel = "Insert",
+                    editLabel = "Edit",
+                    deleteLabel = "Delete",
+                    tone = when {
+                        item.stokSaatIni <= 0L -> WarnaBaris.ORANGE
+                        item.stokSaatIni <= item.stokMinimum -> WarnaBaris.GOLD
+                        else -> WarnaBaris.GREEN
+                    },
+                    priceTone = if (sudahAdaHarga) WarnaBaris.GREEN else WarnaBaris.GOLD
+                )
+            }
 
         submitRows(
             if (rows.isNotEmpty()) {
@@ -102,7 +148,12 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                         subtitle = "Data produk akan tampil dari Firebase.",
                         badge = "Info",
                         amount = "",
-                        tone = WarnaBaris.GOLD
+                        priceStatus = "",
+                        actionLabel = null,
+                        editLabel = null,
+                        deleteLabel = null,
+                        tone = WarnaBaris.GOLD,
+                        priceTone = WarnaBaris.DEFAULT
                     )
                 )
             }
@@ -121,37 +172,19 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
     override fun onRowAction(item: ItemBaris) {
         if (item.id == "info_empty") return
 
-        val product = products.firstOrNull { it.id == item.id } ?: return
-        val nextActive = !product.aktifDijual
+        startActivity(
+            Intent(this, AktivitasDaftarHarga::class.java)
+                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, item.id)
+        )
+    }
 
-        showConfirmationModal(
-            title = if (nextActive) "Aktifkan produk?" else "Nonaktifkan produk?",
-            message = if (nextActive) {
-                "Produk ${product.namaProduk} akan diaktifkan kembali."
-            } else {
-                "Produk ${product.namaProduk} akan dinonaktifkan dari penjualan."
-            },
-            confirmLabel = if (nextActive) "Aktifkan" else "Nonaktifkan"
-        ) {
-            val updates = hashMapOf<String, Any>(
-                "aktifDijual" to nextActive,
-                "tampilDiKasir" to nextActive
-            )
+    override fun onRowEdit(item: ItemBaris) {
+        if (item.id == "info_empty") return
 
-            firestore.collection("produk")
-                .document(product.id)
-                .update(updates)
-                .addOnSuccessListener {
-                    showMessage(
-                        if (nextActive) "Produk berhasil diaktifkan."
-                        else "Produk berhasil dinonaktifkan."
-                    )
-                    loadProducts()
-                }
-                .addOnFailureListener { e ->
-                    showMessage("Gagal mengubah status produk: ${e.message}")
-                }
-        }
+        startActivity(
+            Intent(this, AktivitasDaftarHarga::class.java)
+                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, item.id)
+        )
     }
 
     override fun onRowDelete(item: ItemBaris) {
@@ -197,4 +230,9 @@ private data class DataBarisProduk(
     val tampilDiKasir: Boolean,
     val aktifDijual: Boolean,
     val dihapus: Boolean
+)
+
+private data class StatusHargaProduk(
+    val total: Int = 0,
+    val aktif: Int = 0
 )
