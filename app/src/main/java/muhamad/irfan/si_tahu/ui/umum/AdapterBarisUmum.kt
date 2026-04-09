@@ -1,6 +1,7 @@
 package muhamad.irfan.si_tahu.ui.umum
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
@@ -11,7 +12,8 @@ import muhamad.irfan.si_tahu.util.WarnaBaris
 
 class AdapterBarisUmum(
     private val onItemClick: (ItemBaris) -> Unit,
-    private val onActionClick: ((ItemBaris) -> Unit)? = null,
+    private val onActionClick: ((ItemBaris, View) -> Unit)? = null,
+    private val onEditClick: ((ItemBaris, View) -> Unit)? = null,
     private val onDeleteClick: ((ItemBaris) -> Unit)? = null
 ) : RecyclerView.Adapter<AdapterBarisUmum.PenampungBaris>() {
 
@@ -24,7 +26,11 @@ class AdapterBarisUmum(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PenampungBaris {
-        val binding = ItemGenericRowBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+        val binding = ItemGenericRowBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
         return PenampungBaris(binding)
     }
 
@@ -43,29 +49,36 @@ class AdapterBarisUmum(
             binding.tvSubtitle.text = item.subtitle
             binding.tvBadge.text = item.badge
             binding.tvAmount.text = item.amount
-            binding.tvLeading.text = item.title.firstOrNull()?.uppercase() ?: "#"
+            binding.tvPriceStatus.text = item.priceStatus
+            binding.tvParameterStatus.text = item.parameterStatus
+            binding.btnAction.text = if (item.actionLabel.isNullOrBlank()) "⋮" else item.actionLabel
 
-            binding.tvBadge.isVisible = item.badge.isNotBlank()
+            binding.tvLeading.text =
+                item.title.firstOrNull()?.uppercaseChar()?.toString() ?: "#"
+
+            binding.cardBadge.isVisible = item.badge.isNotBlank()
             binding.tvAmount.isVisible = item.amount.isNotBlank()
-
+            binding.cardPriceStatus.isVisible = item.priceStatus.isNotBlank()
+            binding.cardParameterStatus.isVisible = item.parameterStatus.isNotBlank()
             binding.btnAction.isVisible = !item.actionLabel.isNullOrBlank()
-            binding.btnAction.text = item.actionLabel.orEmpty()
-
-            binding.btnDelete.isVisible = !item.deleteLabel.isNullOrBlank()
-            binding.btnDelete.text = item.deleteLabel.orEmpty()
 
             binding.root.setOnClickListener { onItemClick(item) }
-            binding.btnAction.setOnClickListener { onActionClick?.invoke(item) }
-            binding.btnDelete.setOnClickListener { onDeleteClick?.invoke(item) }
+            binding.btnAction.setOnClickListener { view -> onActionClick?.invoke(item, view) }
 
-            val bgRes = when (item.tone) {
+            binding.tvLeading.setBackgroundResource(backgroundForTone(item.tone))
+            binding.tvPriceStatus.setBackgroundResource(backgroundForTone(item.priceTone))
+            binding.tvParameterStatus.setBackgroundResource(backgroundForTone(item.parameterTone))
+        }
+
+        private fun backgroundForTone(tone: WarnaBaris): Int {
+            return when (tone) {
                 WarnaBaris.GREEN -> R.drawable.bg_tone_green
                 WarnaBaris.GOLD -> R.drawable.bg_tone_gold
                 WarnaBaris.ORANGE -> R.drawable.bg_tone_orange
                 WarnaBaris.BLUE -> R.drawable.bg_tone_blue
+                WarnaBaris.RED -> R.drawable.bg_tone_red
                 WarnaBaris.DEFAULT -> R.drawable.bg_tone_neutral
             }
-            binding.tvLeading.setBackgroundResource(bgRes)
         }
     }
 }

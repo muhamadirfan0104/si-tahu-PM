@@ -59,28 +59,13 @@ class AktivitasFormProduk : AktivitasDasar() {
     }
 
     private fun setupCreateMode() {
-        binding.etCode.setText("")
-        binding.etCode.hint = "Kode produk dibuat otomatis"
-        lockCodeField()
-
         bindSellingState(
             aktifDijual = true,
             tampilDiKasir = true
         )
     }
 
-    private fun setupEditMode() {
-        lockCodeField()
-    }
-
-    private fun lockCodeField() {
-        binding.etCode.isFocusable = false
-        binding.etCode.isFocusableInTouchMode = false
-        binding.etCode.isClickable = false
-        binding.etCode.isLongClickable = false
-        binding.etCode.isCursorVisible = false
-        binding.etCode.keyListener = null
-    }
+    private fun setupEditMode() = Unit
 
     private fun setupActiveToggleRule() {
         binding.cbActive.setOnCheckedChangeListener { _, isChecked ->
@@ -144,7 +129,6 @@ class AktivitasFormProduk : AktivitasDasar() {
                     return@addOnSuccessListener
                 }
 
-                binding.etCode.setText(doc.getString("kodeProduk").orEmpty())
                 binding.etName.setText(doc.getString("namaProduk").orEmpty())
 
                 val jenisProduk = doc.getString("jenisProduk").orEmpty()
@@ -231,7 +215,6 @@ class AktivitasFormProduk : AktivitasDasar() {
         if (editingProductId == null) {
             generateNextProductIdentity(
                 onResult = { newProductId, autoKodeProduk ->
-                    binding.etCode.setText(autoKodeProduk)
                     persistProduct(newProductId, autoKodeProduk)
                 },
                 onError = { e ->
@@ -240,12 +223,7 @@ class AktivitasFormProduk : AktivitasDasar() {
                 }
             )
         } else {
-            val existingCode = binding.etCode.text?.toString()?.trim().orEmpty()
-            val finalCode = if (existingCode.isBlank()) {
-                editingProductId!!.replace("prd_", "PRD").uppercase()
-            } else {
-                existingCode
-            }
+            val finalCode = editingProductId!!.replace("prd_", "PRD").uppercase()
             persistProduct(editingProductId!!, finalCode)
         }
     }
@@ -297,7 +275,7 @@ class AktivitasFormProduk : AktivitasDasar() {
             .addOnSuccessListener {
                 setSavingState(false)
                 showMessage("Produk berhasil dinonaktifkan.")
-                startActivity(Intent(this, AktivitasDaftarProduk::class.java))
+                setResult(RESULT_OK)
                 finish()
             }
             .addOnFailureListener { e ->
@@ -309,7 +287,7 @@ class AktivitasFormProduk : AktivitasDasar() {
     private fun onSaveCompleted() {
         setSavingState(false)
         showMessage("Produk berhasil disimpan.")
-        startActivity(Intent(this, AktivitasDaftarProduk::class.java))
+        setResult(RESULT_OK)
         finish()
     }
 }

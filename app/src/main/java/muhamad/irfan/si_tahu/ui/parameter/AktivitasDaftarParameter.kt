@@ -2,10 +2,11 @@ package muhamad.irfan.si_tahu.ui.parameter
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.widget.PopupMenu
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
-import muhamad.irfan.si_tahu.ui.produk.AktivitasDaftarProduk
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
@@ -24,9 +25,15 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
         configureScreen("Parameter Produksi", "Standar hasil per masak")
         hideSearch()
         hideSecondaryFilter()
+        hideButtons()
 
-        setSecondaryButton("Data Produk") {
-            startActivity(Intent(this, AktivitasDaftarProduk::class.java))
+        setFabAdd {
+            selectedProductId()?.let { productId ->
+                startActivity(
+                    Intent(this, AktivitasFormParameter::class.java)
+                        .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, productId)
+                )
+            }
         }
     }
 
@@ -48,11 +55,8 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
                 }.sortedBy { it.namaProduk.lowercase() }
 
                 if (products.isEmpty()) {
+                    hideFabAdd()
                     hidePrimaryFilter()
-                    setPrimaryButton("Data Produk") {
-                        startActivity(Intent(this, AktivitasDaftarProduk::class.java))
-                    }
-                    hideSecondaryButton()
                     submitRows(listOf(infoBelumAdaProdukDasar()))
                     return@addOnSuccessListener
                 }
@@ -64,8 +68,7 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
                 setPrimaryFilter(products.map { it.namaProduk }, initialSelectionIndex) {
                     loadParameters()
                 }
-
-                setPrimaryButton("Tambah Parameter") {
+                setFabAdd {
                     selectedProductId()?.let { productId ->
                         startActivity(
                             Intent(this, AktivitasFormParameter::class.java)
@@ -78,6 +81,7 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
             }
             .addOnFailureListener { e ->
                 showMessage("Gagal memuat produk dasar: ${e.message}")
+                hideFabAdd()
                 submitRows(listOf(infoBelumAdaProdukDasar()))
             }
     }
@@ -108,12 +112,10 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
                         hasilPerProduksi = doc.getLong("hasilPerProduksi") ?: 0L,
                         satuanHasil = doc.getString("satuanHasil").orEmpty(),
                         aktif = doc.getBoolean("aktif") ?: false,
-                        catatan = doc.getString("catatan").orEmpty()
+                        catatan = doc.getString("catatan").orEmpty(),
+                        dibuatPadaMillis = doc.getTimestamp("dibuatPada")?.toDate()?.time ?: 0L
                     )
-                }.sortedWith(
-                    compareByDescending<DataBarisParameter> { it.aktif }
-                        .thenBy { it.id.lowercase() }
-                )
+                }.sortedByDescending { it.dibuatPadaMillis }
 
                 refresh()
             }
@@ -152,19 +154,15 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
             ItemBaris(
                 id = item.id,
                 title = item.namaProduk.ifBlank { item.idProduk },
-                subtitle = buildString {
-                    append(item.id.uppercase())
-                    append(" • ")
-                    append("${item.hasilPerProduksi} ${item.satuanHasil} / produksi")
-                    if (item.catatan.isNotBlank()) {
-                        append(" • ${item.catatan}")
-                    }
-                },
+                subtitle = item.catatan.ifBlank { "${item.id.uppercase()} • Standar hasil produksi" },
                 badge = if (item.aktif) "Aktif" else "Nonaktif",
-                actionLabel = if (item.aktif) "Nonaktifkan" else "Aktifkan",
-                deleteLabel = "Hapus",
-                amount = "",
-                tone = if (item.aktif) WarnaBaris.GREEN else WarnaBaris.GOLD
+                amount = "${item.hasilPerProduksi} ${item.satuanHasil}",
+                priceStatus = "Hasil per produksi",
+                parameterStatus = if (item.catatan.isNotBlank()) "Ada catatan" else "Tanpa catatan",
+                actionLabel = "⋮",
+                tone = if (item.aktif) WarnaBaris.GREEN else WarnaBaris.GOLD,
+                priceTone = WarnaBaris.BLUE,
+                parameterTone = if (item.catatan.isNotBlank()) WarnaBaris.GOLD else WarnaBaris.DEFAULT
             )
         }
 
@@ -192,10 +190,42 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
         )
     }
 
-    override fun onRowAction(item: ItemBaris) {
+    override fun onRowAction(item: ItemBaris, anchor: View) {
         if (item.id.startsWith("info_")) return
 
         val parameter = parameters.firstOrNull { it.id == item.id } ?: return
+        showMenuPopup(parameter, anchor)
+    }
+
+    override fun onRowDelete(item: ItemBaris) {
+        if (item.id.startsWith("info_")) return
+        val parameter = parameters.firstOrNull { it.id == item.id } ?: return
+        softDeleteParameter(parameter)
+    }
+
+    private fun showMenuPopup(parameter: DataBarisParameter, anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, 1, 0, if (parameter.aktif) "Nonaktifkan Parameter" else "Aktifkan Parameter")
+        popup.menu.add(0, 2, 1, "Hapus Parameter")
+
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                1 -> {
+                    confirmToggleParameter(parameter)
+                    true
+                }
+                2 -> {
+                    confirmDeleteParameter(parameter)
+                    true
+                }
+                else -> false
+            }
+        }
+
+        popup.show()
+    }
+
+    private fun confirmToggleParameter(parameter: DataBarisParameter) {
         val nextActive = !parameter.aktif
 
         showConfirmationModal(
@@ -215,11 +245,7 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
         }
     }
 
-    override fun onRowDelete(item: ItemBaris) {
-        if (item.id.startsWith("info_")) return
-
-        val parameter = parameters.firstOrNull { it.id == item.id } ?: return
-
+    private fun confirmDeleteParameter(parameter: DataBarisParameter) {
         showConfirmationModal(
             title = "Hapus parameter?",
             message = "Parameter ${parameter.namaProduk} (${parameter.id}) akan di-soft delete. Lanjutkan?",
@@ -354,5 +380,6 @@ private data class DataBarisParameter(
     val hasilPerProduksi: Long,
     val satuanHasil: String,
     val aktif: Boolean,
-    val catatan: String
+    val catatan: String,
+    val dibuatPadaMillis: Long
 )

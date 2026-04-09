@@ -35,31 +35,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp"> <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/tilCode"
-            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:boxBackgroundColor="@android:color/white"
-            app:boxCornerRadiusBottomEnd="20dp"
-            app:boxCornerRadiusBottomStart="20dp"
-            app:boxCornerRadiusTopEnd="20dp"
-            app:boxCornerRadiusTopStart="20dp"
-            app:boxStrokeColor="#5F7D49"
-            app:hintTextColor="#5F7D49">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etCode"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
-                android:hint="Kode produk"
-                android:importantForAutofill="no"
-                android:inputType="text"
-                android:textColor="#293226"
-                android:textColorHint="#8A8577" />
-        </com.google.android.material.textfield.TextInputLayout>
+            android:padding="20dp">
 
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"

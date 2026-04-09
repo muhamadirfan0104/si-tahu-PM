@@ -2,10 +2,11 @@ package muhamad.irfan.si_tahu.ui.harga
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.widget.PopupMenu
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
-import muhamad.irfan.si_tahu.ui.produk.AktivitasDaftarProduk
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
@@ -24,9 +25,15 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
         configureScreen("Harga Kanal", "Atur harga per kanal")
         hideSearch()
         hideSecondaryFilter()
+        hideButtons()
 
-        setSecondaryButton("Data Produk") {
-            startActivity(Intent(this, AktivitasDaftarProduk::class.java))
+        setFabAdd {
+            selectedProductId()?.let { productId ->
+                startActivity(
+                    Intent(this, AktivitasFormHarga::class.java)
+                        .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, productId)
+                )
+            }
         }
     }
 
@@ -48,11 +55,8 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
                 }.sortedBy { it.name }
 
                 if (products.isEmpty()) {
+                    hideFabAdd()
                     hidePrimaryFilter()
-                    setPrimaryButton("Data Produk") {
-                        startActivity(Intent(this, AktivitasDaftarProduk::class.java))
-                    }
-                    hideSecondaryButton()
                     submitRows(listOf(infoBelumAdaProduk()))
                     return@addOnSuccessListener
                 }
@@ -64,8 +68,7 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
                 setPrimaryFilter(products.map { it.name }, initialSelectionIndex) {
                     loadChannels()
                 }
-
-                setPrimaryButton("Tambah Harga") {
+                setFabAdd {
                     selectedProductId()?.let { productId ->
                         startActivity(
                             Intent(this, AktivitasFormHarga::class.java)
@@ -78,6 +81,7 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
             }
             .addOnFailureListener { e ->
                 showMessage("Gagal memuat produk: ${e.message}")
+                hideFabAdd()
                 submitRows(listOf(infoBelumAdaProduk()))
             }
     }
@@ -106,9 +110,10 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
                         kanalHarga = doc.getString("kanalHarga").orEmpty(),
                         hargaSatuan = doc.getLong("hargaSatuan") ?: 0L,
                         aktif = doc.getBoolean("aktif") ?: true,
-                        hargaUtama = doc.getBoolean("hargaUtama") ?: false
+                        hargaUtama = doc.getBoolean("hargaUtama") ?: false,
+                        dibuatPadaMillis = doc.getTimestamp("dibuatPada")?.toDate()?.time ?: 0L
                     )
-                }.sortedBy { it.kanalHarga.lowercase() }
+                }.sortedByDescending { it.dibuatPadaMillis }
 
                 refresh()
             }
@@ -136,6 +141,7 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
                         subtitle = "Tambahkan harga kanal untuk produk ${product?.name.orEmpty()}.",
                         badge = "Info",
                         amount = "",
+                        actionLabel = null,
                         tone = WarnaBaris.BLUE
                     )
                 )
@@ -143,16 +149,23 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
             return
         }
 
-        val rows = channels.map {
+        val rows = channels.map { item ->
             ItemBaris(
-                id = it.id,
-                title = it.kanalHarga,
-                subtitle = if (it.aktif) "Kanal aktif" else "Kanal nonaktif",
-                badge = if (it.hargaUtama) "Default" else "Harga",
-                amount = Formatter.currency(it.hargaSatuan),
-                actionLabel = if (it.aktif) "Nonaktifkan" else "Aktifkan",
-                deleteLabel = "Hapus",
-                tone = if (it.hargaUtama) WarnaBaris.GREEN else WarnaBaris.GOLD
+                id = item.id,
+                title = item.kanalHarga,
+                subtitle = if (item.aktif) "Harga kanal aktif" else "Harga kanal nonaktif",
+                badge = if (item.aktif) "Aktif" else "Nonaktif",
+                amount = Formatter.currency(item.hargaSatuan),
+                priceStatus = if (item.hargaUtama) "Default Kasir" else "Harga Lainnya",
+                parameterStatus = "",
+                actionLabel = "⋮",
+                tone = when {
+                    item.hargaUtama -> WarnaBaris.GREEN
+                    item.aktif -> WarnaBaris.GOLD
+                    else -> WarnaBaris.ORANGE
+                },
+                priceTone = if (item.hargaUtama) WarnaBaris.GREEN else WarnaBaris.BLUE,
+                parameterTone = WarnaBaris.DEFAULT
             )
         }
 
@@ -181,11 +194,95 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
         )
     }
 
-    override fun onRowAction(item: ItemBaris) {
+    override fun onRowAction(item: ItemBaris, anchor: View) {
         if (item.id.startsWith("info_")) return
 
         val productId = selectedProductId() ?: return
         val channel = channels.firstOrNull { it.id == item.id } ?: return
+        showMenuPopup(productId, channel, anchor)
+    }
+
+    override fun onRowDelete(item: ItemBaris) {
+        if (item.id.startsWith("info_")) return
+        val productId = selectedProductId() ?: return
+        softDeletePriceWithDefaultGuard(productId = productId, priceId = item.id, title = item.title)
+    }
+
+    private fun showMenuPopup(productId: String, channel: DataBarisHarga, anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        var order = 0
+
+        if (!channel.hargaUtama) {
+            popup.menu.add(0, 1, order++, "Jadikan Default Kasir")
+        }
+
+        popup.menu.add(
+            0,
+            2,
+            order++,
+            if (channel.aktif) "Nonaktifkan Harga" else "Aktifkan Harga"
+        )
+        popup.menu.add(0, 3, order, "Hapus Harga")
+
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                1 -> {
+                    setDefaultKasir(productId, channel)
+                    true
+                }
+                2 -> {
+                    confirmToggleHarga(productId, channel)
+                    true
+                }
+                3 -> {
+                    confirmDeleteHarga(productId, channel)
+                    true
+                }
+                else -> false
+            }
+        }
+
+        popup.show()
+    }
+
+    private fun setDefaultKasir(productId: String, channel: DataBarisHarga) {
+        val hargaRef = firestore.collection("produk")
+            .document(productId)
+            .collection("hargaJual")
+
+        hargaRef.whereEqualTo("dihapus", false)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val batch = firestore.batch()
+                val now = Timestamp.now()
+
+                snapshot.documents.forEach { doc ->
+                    val isTarget = doc.id == channel.id
+                    batch.update(
+                        doc.reference,
+                        mapOf(
+                            "hargaUtama" to isTarget,
+                            "aktif" to if (isTarget) true else (doc.getBoolean("aktif") ?: true),
+                            "diperbaruiPada" to now
+                        )
+                    )
+                }
+
+                batch.commit()
+                    .addOnSuccessListener {
+                        showMessage("Harga default kasir berhasil diperbarui.")
+                        loadChannels()
+                    }
+                    .addOnFailureListener { e ->
+                        showMessage("Gagal mengubah default kasir: ${e.message}")
+                    }
+            }
+            .addOnFailureListener { e ->
+                showMessage("Gagal memuat harga kanal: ${e.message}")
+            }
+    }
+
+    private fun confirmToggleHarga(productId: String, channel: DataBarisHarga) {
         val nextActive = !channel.aktif
 
         showConfirmationModal(
@@ -198,10 +295,7 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
             confirmLabel = if (nextActive) "Aktifkan" else "Nonaktifkan"
         ) {
             if (nextActive) {
-                activatePriceWithDefaultSync(
-                    productId = productId,
-                    priceId = channel.id
-                )
+                activatePriceWithDefaultSync(productId = productId, priceId = channel.id)
             } else {
                 deactivatePriceWithDefaultGuard(
                     productId = productId,
@@ -212,27 +306,23 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
         }
     }
 
-    override fun onRowDelete(item: ItemBaris) {
-        if (item.id.startsWith("info_")) return
-
-        val productId = selectedProductId() ?: return
-
+    private fun confirmDeleteHarga(productId: String, channel: DataBarisHarga) {
         showConfirmationModal(
             title = "Hapus harga kanal?",
-            message = "Harga kanal ${item.title} akan di-soft delete. Transaksi lama tetap tersimpan. Lanjutkan?",
+            message = "Harga kanal ${channel.kanalHarga} akan di-soft delete. Transaksi lama tetap tersimpan. Lanjutkan?",
             confirmLabel = "Hapus"
         ) {
             softDeletePriceWithDefaultGuard(
                 productId = productId,
-                priceId = item.id,
-                title = item.title
+                priceId = channel.id,
+                title = channel.kanalHarga
             )
         }
     }
 
     private fun activatePriceWithDefaultSync(
         productId: String,
-        priceId: String
+        priceId: String,
     ) {
         val hargaRef = firestore.collection("produk")
             .document(productId)
@@ -246,15 +336,12 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
                     return@addOnSuccessListener
                 }
 
-                val targetWasPrimary = targetDoc.getBoolean("hargaUtama") == true
-
                 hargaRef.whereEqualTo("dihapus", false)
                     .whereEqualTo("aktif", true)
                     .get()
                     .addOnSuccessListener { snapshot ->
-                        val otherActiveDocs = snapshot.documents.filter { it.id != priceId }
-                        val hasOtherPrimary = otherActiveDocs.any { it.getBoolean("hargaUtama") == true }
-                        val shouldBePrimary = targetWasPrimary || !hasOtherPrimary
+                        val activeDocs = snapshot.documents.filter { it.id != priceId }
+                        val shouldBePrimary = activeDocs.isEmpty()
                         val now = Timestamp.now()
                         val batch = firestore.batch()
 
@@ -268,7 +355,7 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
                         )
 
                         if (shouldBePrimary) {
-                            otherActiveDocs.forEach { doc ->
+                            activeDocs.forEach { doc ->
                                 if (doc.getBoolean("hargaUtama") == true) {
                                     batch.update(
                                         doc.reference,
@@ -461,5 +548,6 @@ private data class DataBarisHarga(
     val kanalHarga: String,
     val hargaSatuan: Long,
     val aktif: Boolean,
-    val hargaUtama: Boolean
+    val hargaUtama: Boolean,
+    val dibuatPadaMillis: Long
 )

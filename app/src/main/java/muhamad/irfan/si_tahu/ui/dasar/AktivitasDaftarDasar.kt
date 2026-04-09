@@ -23,12 +23,17 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         rowAdapter = AdapterBarisUmum(
             onItemClick = ::onRowClick,
             onActionClick = ::onRowAction,
+            onEditClick = ::onRowEdit,
             onDeleteClick = ::onRowDelete
         )
 
         binding.rvList.layoutManager = LinearLayoutManager(this)
         binding.rvList.adapter = rowAdapter
         binding.etSearch.addTextChangedListener { onSearchChanged() }
+
+        binding.buttonRow.isVisible = false
+        binding.fabAdd.isVisible = false
+        binding.paginationContainer.isVisible = false
     }
 
     protected fun configureScreen(
@@ -102,6 +107,32 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         binding.buttonRow.isVisible = false
     }
 
+    protected fun showPagination(
+        currentPage: Int,
+        totalPages: Int,
+        onPrev: (() -> Unit)?,
+        onNext: (() -> Unit)?
+    ) {
+        binding.paginationContainer.isVisible = totalPages > 1
+        binding.tvPageInfo.text = "Hal $currentPage/$totalPages"
+
+        binding.btnPagePrev.isEnabled = onPrev != null
+        binding.btnPagePrev.alpha = if (onPrev != null) 1f else 0.45f
+        binding.btnPagePrev.setOnClickListener {
+            onPrev?.invoke()
+        }
+
+        binding.btnPageNext.isEnabled = onNext != null
+        binding.btnPageNext.alpha = if (onNext != null) 1f else 0.45f
+        binding.btnPageNext.setOnClickListener {
+            onNext?.invoke()
+        }
+    }
+
+    protected fun hidePagination() {
+        binding.paginationContainer.isVisible = false
+    }
+
     protected fun searchText(): String {
         return binding.etSearch.text?.toString().orEmpty().trim().lowercase()
     }
@@ -120,8 +151,18 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         binding.rvList.isVisible = rows.isNotEmpty()
     }
 
+    protected fun setFabAdd(listener: View.OnClickListener) {
+        binding.fabAdd.isVisible = true
+        binding.fabAdd.setOnClickListener(listener)
+    }
+
+    protected fun hideFabAdd() {
+        binding.fabAdd.isVisible = false
+    }
+
+    protected open fun onRowEdit(item: ItemBaris, anchor: View) = Unit
     protected open fun onSearchChanged() = Unit
-    protected open fun onRowAction(item: ItemBaris) = Unit
+    protected open fun onRowAction(item: ItemBaris, anchor: View) = Unit
     protected open fun onRowDelete(item: ItemBaris) = Unit
     protected abstract fun onRowClick(item: ItemBaris)
 }

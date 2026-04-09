@@ -282,7 +282,7 @@ class AktivitasFormPengguna : AktivitasDasar() {
                 onSuccess?.invoke()
                 setFormLoading(false)
                 showMessage("Pengguna berhasil disimpan.")
-                startActivity(Intent(this, AktivitasDaftarPengguna::class.java))
+                setResult(RESULT_OK)
                 finish()
             }
             .addOnFailureListener { e ->

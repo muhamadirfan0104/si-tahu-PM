@@ -348,10 +348,7 @@ class AktivitasFormHarga : AktivitasDasar() {
 
     private fun goBackToList(productId: String) {
         showMessage("Harga kanal berhasil disimpan.")
-        startActivity(
-            Intent(this, AktivitasDaftarHarga::class.java)
-                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, productId)
-        )
+        setResult(RESULT_OK, Intent().putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, productId))
         finish()
     }
 

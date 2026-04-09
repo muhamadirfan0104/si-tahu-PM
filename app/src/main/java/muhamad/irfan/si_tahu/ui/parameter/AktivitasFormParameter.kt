@@ -272,10 +272,7 @@ class AktivitasFormParameter : AktivitasDasar() {
 
     private fun goBackToList(productId: String) {
         showMessage("Parameter produksi berhasil disimpan.")
-        startActivity(
-            Intent(this, AktivitasDaftarParameter::class.java)
-                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, productId)
-        )
+        setResult(RESULT_OK, Intent().putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, productId))
         finish()
     }
 }

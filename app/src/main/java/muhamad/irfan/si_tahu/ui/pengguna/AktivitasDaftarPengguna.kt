@@ -2,6 +2,8 @@ package muhamad.irfan.si_tahu.ui.pengguna
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.widget.PopupMenu
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
@@ -31,11 +33,10 @@ class AktivitasDaftarPengguna : AktivitasDaftarDasar() {
             refresh()
         }
 
-        setPrimaryButton("Tambah Pengguna") {
+        hideButtons()
+        setFabAdd {
             startActivity(Intent(this, AktivitasFormPengguna::class.java))
         }
-
-        hideSecondaryButton()
     }
 
     override fun onResume() {
@@ -56,12 +57,10 @@ class AktivitasDaftarPengguna : AktivitasDaftarDasar() {
                         email = doc.getString("email").orEmpty(),
                         nomorTelepon = doc.getString("nomorTelepon").orEmpty(),
                         peranAsli = doc.getString("peranAsli").orEmpty(),
-                        aktif = doc.getBoolean("aktif") ?: true
+                        aktif = doc.getBoolean("aktif") ?: true,
+                        dibuatPadaMillis = doc.getTimestamp("dibuatPada")?.toDate()?.time ?: 0L
                     )
-                }.sortedWith(
-                    compareByDescending<DataBarisPengguna> { it.aktif }
-                        .thenBy { it.namaPengguna.lowercase() }
-                )
+                }.sortedByDescending { it.dibuatPadaMillis }
 
                 refresh()
             }
@@ -110,13 +109,16 @@ class AktivitasDaftarPengguna : AktivitasDaftarDasar() {
                 },
                 badge = item.peranAsli.ifBlank { "Pengguna" },
                 amount = if (item.aktif) "Aktif" else "Nonaktif",
-                actionLabel = if (item.aktif) "Nonaktifkan" else "Aktifkan",
-                deleteLabel = "Hapus",
+                priceStatus = if (item.aktif) "Akun aktif" else "Akun nonaktif",
+                parameterStatus = "",
+                actionLabel = "⋮",
                 tone = when {
                     item.aktif && item.peranAsli == "ADMIN" -> WarnaBaris.GREEN
                     item.aktif -> WarnaBaris.GOLD
                     else -> WarnaBaris.ORANGE
-                }
+                },
+                priceTone = if (item.aktif) WarnaBaris.GREEN else WarnaBaris.ORANGE,
+                parameterTone = WarnaBaris.DEFAULT
             )
         }
 
@@ -147,10 +149,42 @@ class AktivitasDaftarPengguna : AktivitasDaftarDasar() {
         )
     }
 
-    override fun onRowAction(item: ItemBaris) {
+    override fun onRowAction(item: ItemBaris, anchor: View) {
         if (item.id.startsWith("info_")) return
 
         val user = users.firstOrNull { it.id == item.id } ?: return
+        showMenuPopup(user, anchor)
+    }
+
+    override fun onRowDelete(item: ItemBaris) {
+        if (item.id.startsWith("info_")) return
+        val user = users.firstOrNull { it.id == item.id } ?: return
+        deleteUser(user)
+    }
+
+    private fun showMenuPopup(user: DataBarisPengguna, anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, 1, 0, if (user.aktif) "Nonaktifkan Pengguna" else "Aktifkan Pengguna")
+        popup.menu.add(0, 2, 1, "Hapus Pengguna")
+
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                1 -> {
+                    confirmToggleUser(user)
+                    true
+                }
+                2 -> {
+                    deleteUser(user)
+                    true
+                }
+                else -> false
+            }
+        }
+
+        popup.show()
+    }
+
+    private fun confirmToggleUser(user: DataBarisPengguna) {
         val nextActive = !user.aktif
 
         showConfirmationModal(
@@ -184,11 +218,7 @@ class AktivitasDaftarPengguna : AktivitasDaftarDasar() {
         }
     }
 
-    override fun onRowDelete(item: ItemBaris) {
-        if (item.id.startsWith("info_")) return
-
-        val user = users.firstOrNull { it.id == item.id } ?: return
-
+    private fun deleteUser(user: DataBarisPengguna) {
         showConfirmationModal(
             title = "Hapus pengguna?",
             message = "Pengguna ${user.namaPengguna} akan dihapus permanen. Lanjutkan?",
@@ -214,5 +244,6 @@ private data class DataBarisPengguna(
     val email: String,
     val nomorTelepon: String,
     val peranAsli: String,
-    val aktif: Boolean
+    val aktif: Boolean,
+    val dibuatPadaMillis: Long
 )
