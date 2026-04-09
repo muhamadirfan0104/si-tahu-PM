@@ -2,6 +2,7 @@ package muhamad.irfan.si_tahu.ui.parameter
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
@@ -192,7 +193,7 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
         )
     }
 
-    override fun onRowAction(item: ItemBaris) {
+    override fun onRowAction(item: ItemBaris, anchor: View) {
         if (item.id.startsWith("info_")) return
 
         val parameter = parameters.firstOrNull { it.id == item.id } ?: return

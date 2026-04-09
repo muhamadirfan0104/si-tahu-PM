@@ -1,6 +1,7 @@
 package muhamad.irfan.si_tahu.ui.umum
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
@@ -11,8 +12,8 @@ import muhamad.irfan.si_tahu.util.WarnaBaris
 
 class AdapterBarisUmum(
     private val onItemClick: (ItemBaris) -> Unit,
-    private val onActionClick: ((ItemBaris) -> Unit)? = null,
-    private val onEditClick: ((ItemBaris) -> Unit)? = null,
+    private val onActionClick: ((ItemBaris, View) -> Unit)? = null,
+    private val onEditClick: ((ItemBaris, View) -> Unit)? = null,
     private val onDeleteClick: ((ItemBaris) -> Unit)? = null
 ) : RecyclerView.Adapter<AdapterBarisUmum.PenampungBaris>() {
 
@@ -67,8 +68,8 @@ class AdapterBarisUmum(
             binding.btnDelete.text = item.deleteLabel.orEmpty()
 
             binding.root.setOnClickListener { onItemClick(item) }
-            binding.btnAction.setOnClickListener { onActionClick?.invoke(item) }
-            binding.btnEdit.setOnClickListener { onEditClick?.invoke(item) }
+            binding.btnAction.setOnClickListener { view -> onActionClick?.invoke(item, view) }
+            binding.btnEdit.setOnClickListener { view -> onEditClick?.invoke(item, view) }
             binding.btnDelete.setOnClickListener { onDeleteClick?.invoke(item) }
 
             val bgRes = when (item.tone) {

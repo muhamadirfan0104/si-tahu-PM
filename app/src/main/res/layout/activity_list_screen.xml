@@ -164,7 +164,49 @@
                 android:layout_marginTop="20dp"
                 android:layout_weight="1"
                 android:clipToPadding="false"
-                android:paddingBottom="96dp" />
+                android:paddingBottom="12dp" />
+
+            <LinearLayout
+                android:id="@+id/paginationContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="end|center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPagePrev"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:minWidth="0dp"
+                    android:text="Prev"
+                    android:textAllCaps="false"
+                    android:textColor="#5F7D49"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/tvPageInfo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="8dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="Hal 1/1"
+                    android:textColor="#6F695D"
+                    android:textSize="12sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPageNext"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:minWidth="0dp"
+                    android:text="Next"
+                    android:textAllCaps="false"
+                    android:textColor="#5F7D49"
+                    android:textSize="12sp" />
+            </LinearLayout>
 
         </LinearLayout>
     </LinearLayout>

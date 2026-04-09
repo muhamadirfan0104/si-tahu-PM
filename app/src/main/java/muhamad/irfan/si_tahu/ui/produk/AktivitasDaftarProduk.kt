@@ -2,11 +2,15 @@ package muhamad.irfan.si_tahu.ui.produk
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.widget.PopupMenu
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
 import muhamad.irfan.si_tahu.ui.harga.AktivitasDaftarHarga
+import muhamad.irfan.si_tahu.ui.parameter.AktivitasDaftarParameter
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
@@ -15,15 +19,22 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
 
     private val firestore by lazy { FirebaseFirestore.getInstance() }
     private val categories = listOf("Semua", "DASAR", "OLAHAN")
+    private val pageSize = 10
 
     private var products: List<DataBarisProduk> = emptyList()
     private var priceStatusMap: Map<String, StatusHargaProduk> = emptyMap()
+
+    private var currentPage = 1
+    private var totalPages = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         configureScreen("Daftar Produk", "Kelola produk dasar dan olahan")
-        setPrimaryFilter(categories) { refresh() }
+        setPrimaryFilter(categories) {
+            currentPage = 1
+            refresh()
+        }
         hideSecondaryFilter()
         hideButtons()
 
@@ -37,10 +48,14 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
         loadProducts()
     }
 
-    override fun onSearchChanged() = refresh()
+    override fun onSearchChanged() {
+        currentPage = 1
+        refresh()
+    }
 
     private fun loadProducts() {
         firestore.collection("produk")
+            .orderBy("dibuatPada", Query.Direction.DESCENDING)
             .get()
             .addOnSuccessListener { snapshot ->
                 val loadedProducts = snapshot.documents.map { doc ->
@@ -61,6 +76,8 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                 if (loadedProducts.isEmpty()) {
                     products = emptyList()
                     priceStatusMap = emptyMap()
+                    currentPage = 1
+                    totalPages = 1
                     refresh()
                     return@addOnSuccessListener
                 }
@@ -84,11 +101,13 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                     .addOnSuccessListener { result ->
                         products = loadedProducts
                         priceStatusMap = result.toMap()
+                        currentPage = 1
                         refresh()
                     }
                     .addOnFailureListener {
                         products = loadedProducts
                         priceStatusMap = emptyMap()
+                        currentPage = 1
                         refresh()
                     }
             }
@@ -96,6 +115,8 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                 showMessage("Gagal memuat produk: ${e.message}")
                 products = emptyList()
                 priceStatusMap = emptyMap()
+                currentPage = 1
+                totalPages = 1
                 refresh()
             }
     }
@@ -104,38 +125,81 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
         val query = searchText().trim().lowercase()
         val category = primarySelection()
 
-        val rows = products
-            .filter { item ->
-                !item.dihapus &&
-                        item.namaProduk.lowercase().contains(query) &&
-                        (category == "Semua" || item.jenisProduk == category)
-            }
-            .map { item ->
-                val hargaInfo = priceStatusMap[item.id] ?: StatusHargaProduk()
-                val sudahAdaHarga = hargaInfo.total > 0
+        val filteredProducts = products.filter { item ->
+            !item.dihapus &&
+                    item.namaProduk.lowercase().contains(query) &&
+                    (category == "Semua" || item.jenisProduk == category)
+        }
 
-                ItemBaris(
-                    id = item.id,
-                    title = item.namaProduk,
-                    subtitle = "${item.kodeProduk} • ${item.jenisProduk} • ${item.satuan}",
-                    badge = if (item.aktifDijual) "Aktif" else "Nonaktif",
-                    amount = "Stok ${item.stokSaatIni}",
-                    priceStatus = if (sudahAdaHarga) {
-                        "Sudah ada harga"
-                    } else {
-                        "Belum ada harga"
-                    },
-                    actionLabel = "Insert",
-                    editLabel = "Edit",
-                    deleteLabel = "Delete",
-                    tone = when {
-                        item.stokSaatIni <= 0L -> WarnaBaris.ORANGE
-                        item.stokSaatIni <= item.stokMinimum -> WarnaBaris.GOLD
-                        else -> WarnaBaris.GREEN
-                    },
-                    priceTone = if (sudahAdaHarga) WarnaBaris.GREEN else WarnaBaris.GOLD
-                )
-            }
+        totalPages = if (filteredProducts.isEmpty()) {
+            1
+        } else {
+            ((filteredProducts.size - 1) / pageSize) + 1
+        }
+
+        if (currentPage > totalPages) currentPage = totalPages
+        if (currentPage < 1) currentPage = 1
+
+        val fromIndex = (currentPage - 1) * pageSize
+        val toIndex = minOf(fromIndex + pageSize, filteredProducts.size)
+
+        val pagedProducts = if (filteredProducts.isEmpty()) {
+            emptyList()
+        } else {
+            filteredProducts.subList(fromIndex, toIndex)
+        }
+
+        val rows = pagedProducts.map { item ->
+            val hargaInfo = priceStatusMap[item.id] ?: StatusHargaProduk()
+            val sudahAdaHarga = hargaInfo.total > 0
+
+            ItemBaris(
+                id = item.id,
+                title = item.namaProduk,
+                subtitle = "${item.kodeProduk} • ${item.jenisProduk} • ${item.satuan}",
+                badge = if (item.aktifDijual) "Aktif" else "Nonaktif",
+                amount = "Stok ${item.stokSaatIni}",
+                priceStatus = if (sudahAdaHarga) {
+                    "Sudah ada harga"
+                } else {
+                    "Belum ada harga"
+                },
+                actionLabel = "Insert",
+                editLabel = "Edit",
+                deleteLabel = "Delete",
+                tone = when {
+                    item.stokSaatIni <= 0L -> WarnaBaris.ORANGE
+                    item.stokSaatIni <= item.stokMinimum -> WarnaBaris.GOLD
+                    else -> WarnaBaris.GREEN
+                },
+                priceTone = if (sudahAdaHarga) WarnaBaris.GREEN else WarnaBaris.GOLD
+            )
+        }
+
+        if (filteredProducts.isNotEmpty()) {
+            showPagination(
+                currentPage = currentPage,
+                totalPages = totalPages,
+                onPrev = if (currentPage > 1) {
+                    {
+                        currentPage--
+                        refresh()
+                    }
+                } else {
+                    null
+                },
+                onNext = if (currentPage < totalPages) {
+                    {
+                        currentPage++
+                        refresh()
+                    }
+                } else {
+                    null
+                }
+            )
+        } else {
+            hidePagination()
+        }
 
         submitRows(
             if (rows.isNotEmpty()) {
@@ -169,22 +233,18 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
         )
     }
 
-    override fun onRowAction(item: ItemBaris) {
+    override fun onRowAction(item: ItemBaris, anchor: View) {
         if (item.id == "info_empty") return
 
-        startActivity(
-            Intent(this, AktivitasDaftarHarga::class.java)
-                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, item.id)
-        )
+        val product = products.firstOrNull { it.id == item.id } ?: return
+        showInsertPopup(product, anchor)
     }
 
-    override fun onRowEdit(item: ItemBaris) {
+    override fun onRowEdit(item: ItemBaris, anchor: View) {
         if (item.id == "info_empty") return
 
-        startActivity(
-            Intent(this, AktivitasDaftarHarga::class.java)
-                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, item.id)
-        )
+        val product = products.firstOrNull { it.id == item.id } ?: return
+        showEditPopup(product, anchor)
     }
 
     override fun onRowDelete(item: ItemBaris) {
@@ -216,6 +276,88 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                     showMessage("Gagal menghapus produk: ${e.message}")
                 }
         }
+    }
+
+    private fun showInsertPopup(product: DataBarisProduk, anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, 1, 0, "Harga Kanal")
+        popup.menu.add(0, 2, 1, "Atur Produksi")
+
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                1 -> {
+                    openHargaKanal(product.id)
+                    true
+                }
+                2 -> {
+                    openAturProduksi(product)
+                    true
+                }
+                else -> false
+            }
+        }
+
+        popup.show()
+    }
+
+    private fun showEditPopup(product: DataBarisProduk, anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, 1, 0, "Edit Harga Kanal")
+        popup.menu.add(0, 2, 1, "Edit Atur Produksi")
+
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                1 -> {
+                    openEditHargaKanal(product.id)
+                    true
+                }
+                2 -> {
+                    openEditAturProduksi(product)
+                    true
+                }
+                else -> false
+            }
+        }
+
+        popup.show()
+    }
+
+    private fun openHargaKanal(productId: String) {
+        startActivity(
+            Intent(this, AktivitasDaftarHarga::class.java)
+                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, productId)
+        )
+    }
+
+    private fun openAturProduksi(product: DataBarisProduk) {
+        if (product.jenisProduk != "DASAR") {
+            showMessage("Atur produksi hanya tersedia untuk produk DASAR.")
+            return
+        }
+
+        startActivity(
+            Intent(this, AktivitasDaftarParameter::class.java)
+                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, product.id)
+        )
+    }
+
+    private fun openEditHargaKanal(productId: String) {
+        startActivity(
+            Intent(this, AktivitasDaftarHarga::class.java)
+                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, productId)
+        )
+    }
+
+    private fun openEditAturProduksi(product: DataBarisProduk) {
+        if (product.jenisProduk != "DASAR") {
+            showMessage("Edit atur produksi hanya tersedia untuk produk DASAR.")
+            return
+        }
+
+        startActivity(
+            Intent(this, AktivitasDaftarParameter::class.java)
+                .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, product.id)
+        )
     }
 }
 
