@@ -49,6 +49,7 @@ class AktivitasFormParameter : AktivitasDasar() {
     private fun loadBasicProducts() {
         firestore.collection("produk")
             .whereEqualTo("jenisProduk", "DASAR")
+            .whereEqualTo("dihapus", false)
             .get()
             .addOnSuccessListener { snapshot ->
                 products = snapshot.documents.map { doc ->
