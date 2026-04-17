@@ -120,6 +120,22 @@ object RepositoriFirebaseUtama {
         else -> "Aman"
     }
 
+    private fun DocumentSnapshot.numberAsDouble(field: String): Double {
+        val raw = get(field)
+        return when (raw) {
+            is Number -> raw.toDouble()
+            else -> 0.0
+        }
+    }
+
+    private fun formatBatch(value: Double): String {
+        return if (value % 1.0 == 0.0) {
+            value.toInt().toString()
+        } else {
+            value.toString().replace(".", ",")
+        }
+    }
+
     private suspend fun cariPengguna(authUid: String): UserRingkas? {
         if (authUid.isBlank()) return null
 
@@ -145,7 +161,8 @@ object RepositoriFirebaseUtama {
         return UserRingkas(
             idDokumen = id,
             authUid = authUid,
-            nama = getString("namaPengguna").orEmpty().ifBlank { getString("email").orEmpty().ifBlank { "Pengguna" } },
+            nama = getString("namaPengguna").orEmpty()
+                .ifBlank { getString("email").orEmpty().ifBlank { "Pengguna" } },
             email = getString("email").orEmpty()
         )
     }
@@ -234,17 +251,20 @@ object RepositoriFirebaseUtama {
     suspend fun simpanProduksiDasar(
         dateTime: String,
         productId: String,
-        batches: Int,
+        batches: Double,
         note: String,
         userAuthId: String
     ): String {
-        require(batches > 0) { "Jumlah batch harus lebih dari 0" }
+        require(batches > 0.0) { "Jumlah batch harus lebih dari 0" }
 
         val productRef = firestore.collection("produk").document(productId)
         val parameter = muatParameterAktif(productId)
-        require(parameter != null && parameter.resultPerBatch > 0) { "Produk dasar harus punya parameter aktif sebelum produksi" }
+        require(parameter != null && parameter.resultPerBatch > 0) {
+            "Produk dasar harus punya parameter aktif sebelum produksi"
+        }
+
         val hasilPerProduksi = parameter.resultPerBatch
-        val totalHasil = batches * hasilPerProduksi
+        val totalHasil = kotlin.math.round(hasilPerProduksi * batches).toInt()
         val user = cariPengguna(userAuthId)
         val catatanRef = firestore.collection("catatanProduksi").document(newId("prod"))
         val tanggalProduksi = parseTimestamp(dateTime)
@@ -254,9 +274,14 @@ object RepositoriFirebaseUtama {
         firestore.runTransaction { trx ->
             val produkSnap = trx.get(productRef)
             check(produkSnap.exists()) { "Produk tidak ditemukan" }
+
             val jenisProduk = produkSnap.getString("jenisProduk").orEmpty()
-            check(jenisProduk.equals("DASAR", ignoreCase = true)) { "Produksi dasar hanya untuk produk kategori DASAR" }
+            check(jenisProduk.equals("DASAR", ignoreCase = true)) {
+                "Produksi dasar hanya untuk produk kategori DASAR"
+            }
+
             val stokSaatIni = produkSnap.getLong("stokSaatIni") ?: 0L
+
             trx.update(
                 productRef,
                 mapOf(
@@ -264,6 +289,7 @@ object RepositoriFirebaseUtama {
                     "diperbaruiPada" to dibuatPada
                 )
             )
+
             trx.set(
                 catatanRef,
                 mapOf(
@@ -360,14 +386,32 @@ object RepositoriFirebaseUtama {
     suspend fun muatRingkasanProduksi(): RingkasanProduksi {
         val today = Formatter.currentDateOnly()
         val parameters = muatSemuaParameter()
+
+        val snapshot = firestore.collection("catatanProduksi")
+            .whereEqualTo("kunciTanggal", today)
+            .get()
+            .await()
+
+        var totalProduksiDasarHariIni = 0
+        var totalBatchHariIni = 0.0
+        var totalKonversiHariIni = 0
+
+        snapshot.documents.forEach { doc ->
+            val jenis = doc.getString("jenisProduksi").orEmpty()
+            if (jenis == "OLAHAN") {
+                totalKonversiHariIni += 1
+            } else {
+                totalProduksiDasarHariIni += (doc.getLong("jumlahHasil") ?: 0L).toInt()
+                totalBatchHariIni += doc.numberAsDouble("jumlahBahan")
+            }
+        }
+
         val riwayat = muatRiwayatProduksi()
-        val dasarHariIni = riwayat.filter { it.badge == "Produksi Dasar" && dayKeyFromString(it.tanggalIso) == today }
-        val konversiHariIni = riwayat.filter { it.badge == "Konversi" && dayKeyFromString(it.tanggalIso) == today }
 
         return RingkasanProduksi(
-            totalProduksiDasarHariIni = dasarHariIni.sumOf { it.amount.substringAfter('+').substringBefore(' ').trim().toIntOrNull() ?: 0 },
-            totalBatchHariIni = dasarHariIni.sumOf { it.subtitle.substringAfterLast('•').substringBefore("batch").trim().toIntOrNull() ?: 0 },
-            totalKonversiHariIni = konversiHariIni.size,
+            totalProduksiDasarHariIni = totalProduksiDasarHariIni,
+            totalBatchHariIni = totalBatchHariIni.toInt(),
+            totalKonversiHariIni = totalKonversiHariIni,
             totalParameterAktif = parameters.count { it.active },
             totalRiwayat = riwayat.size,
             recentRows = riwayat.take(8)
@@ -383,11 +427,13 @@ object RepositoriFirebaseUtama {
         return snapshot.documents.map { doc ->
             val jenis = doc.getString("jenisProduksi").orEmpty()
             val tanggalIso = isoFromTimestamp(doc.getTimestamp("tanggalProduksi") ?: doc.getTimestamp("dibuatPada"))
+
             if (jenis == "OLAHAN") {
                 val namaAsal = doc.getString("namaProdukAsal").orEmpty().ifBlank { "Bahan" }
                 val namaHasil = doc.getString("namaProdukHasil").orEmpty().ifBlank { "Hasil" }
-                val bahan = doc.getLong("jumlahBahan")?.toInt() ?: 0
-                val hasil = doc.getLong("jumlahHasil")?.toInt() ?: 0
+                val bahan = (doc.getLong("jumlahBahan") ?: 0L).toInt()
+                val hasil = (doc.getLong("jumlahHasil") ?: 0L).toInt()
+
                 BarisRiwayatProduksi(
                     id = doc.id,
                     badge = "Konversi",
@@ -398,14 +444,15 @@ object RepositoriFirebaseUtama {
                 )
             } else {
                 val namaHasil = doc.getString("namaProdukHasil").orEmpty().ifBlank { "Produk Dasar" }
-                val jumlahBahan = doc.getLong("jumlahBahan")?.toInt() ?: 0
-                val jumlahHasil = doc.getLong("jumlahHasil")?.toInt() ?: 0
+                val jumlahBatch = doc.numberAsDouble("jumlahBahan")
+                val jumlahHasil = (doc.getLong("jumlahHasil") ?: 0L).toInt()
                 val satuan = doc.getString("satuanHasil").orEmpty().ifBlank { "pcs" }
+
                 BarisRiwayatProduksi(
                     id = doc.id,
                     badge = "Produksi Dasar",
                     title = namaHasil,
-                    subtitle = "${Formatter.readableDateTime(tanggalIso)} • $jumlahBahan batch",
+                    subtitle = "${Formatter.readableDateTime(tanggalIso)} • ${formatBatch(jumlahBatch)} batch",
                     amount = "+$jumlahHasil $satuan",
                     tanggalIso = tanggalIso
                 )
@@ -419,30 +466,31 @@ object RepositoriFirebaseUtama {
 
         val jenis = doc.getString("jenisProduksi").orEmpty()
         val tanggal = isoFromTimestamp(doc.getTimestamp("tanggalProduksi") ?: doc.getTimestamp("dibuatPada"))
+
         return if (jenis == "OLAHAN") {
             """
-            ID: ${doc.id}
-            Jenis: Produksi Olahan / Konversi
-            Tanggal: ${Formatter.readableDateTime(tanggal)}
-            Produk Asal: ${doc.getString("namaProdukAsal").orEmpty()}
-            Jumlah Bahan: ${doc.getLong("jumlahBahan") ?: 0} ${doc.getString("satuanBahan").orEmpty()}
-            Produk Hasil: ${doc.getString("namaProdukHasil").orEmpty()}
-            Jumlah Hasil: ${doc.getLong("jumlahHasil") ?: 0} ${doc.getString("satuanHasil").orEmpty()}
-            Catatan: ${doc.getString("catatan").orEmpty().ifBlank { "-" }}
-            Dibuat Oleh: ${doc.getString("dibuatOlehNama").orEmpty().ifBlank { "-" }}
-            """.trimIndent()
+        ID: ${doc.id}
+        Jenis: Produksi Olahan / Konversi
+        Tanggal: ${Formatter.readableDateTime(tanggal)}
+        Produk Asal: ${doc.getString("namaProdukAsal").orEmpty()}
+        Jumlah Bahan: ${doc.getLong("jumlahBahan") ?: 0} ${doc.getString("satuanBahan").orEmpty()}
+        Produk Hasil: ${doc.getString("namaProdukHasil").orEmpty()}
+        Jumlah Hasil: ${doc.getLong("jumlahHasil") ?: 0} ${doc.getString("satuanHasil").orEmpty()}
+        Catatan: ${doc.getString("catatan").orEmpty().ifBlank { "-" }}
+        Dibuat Oleh: ${doc.getString("dibuatOlehNama").orEmpty().ifBlank { "-" }}
+        """.trimIndent()
         } else {
             """
-            ID: ${doc.id}
-            Jenis: Produksi Tahu Dasar
-            Tanggal: ${Formatter.readableDateTime(tanggal)}
-            Produk Hasil: ${doc.getString("namaProdukHasil").orEmpty()}
-            Batch: ${doc.getLong("jumlahBahan") ?: 0}
-            Hasil Produksi: ${doc.getLong("jumlahHasil") ?: 0} ${doc.getString("satuanHasil").orEmpty()}
-            Parameter: ${doc.getString("idParameterProduksi").orEmpty().ifBlank { "Default" }}
-            Catatan: ${doc.getString("catatan").orEmpty().ifBlank { "-" }}
-            Dibuat Oleh: ${doc.getString("dibuatOlehNama").orEmpty().ifBlank { "-" }}
-            """.trimIndent()
+        ID: ${doc.id}
+        Jenis: Produksi Tahu Dasar
+        Tanggal: ${Formatter.readableDateTime(tanggal)}
+        Produk Hasil: ${doc.getString("namaProdukHasil").orEmpty()}
+        Batch: ${formatBatch(doc.numberAsDouble("jumlahBahan"))}
+        Hasil Produksi: ${doc.getLong("jumlahHasil") ?: 0} ${doc.getString("satuanHasil").orEmpty()}
+        Parameter: ${doc.getString("idParameterProduksi").orEmpty().ifBlank { "Default" }}
+        Catatan: ${doc.getString("catatan").orEmpty().ifBlank { "-" }}
+        Dibuat Oleh: ${doc.getString("dibuatOlehNama").orEmpty().ifBlank { "-" }}
+        """.trimIndent()
         }
     }
 
@@ -450,10 +498,12 @@ object RepositoriFirebaseUtama {
         val ref = firestore.collection("catatanProduksi").document(id)
         val doc = ref.get().await()
         if (!doc.exists()) throw IllegalStateException("Data produksi tidak ditemukan")
+
         val jenis = doc.getString("jenisProduksi").orEmpty()
-        val tanggalKey = doc.getString("kunciTanggal").orEmpty().ifBlank { dayKeyFromTimestamp(doc.getTimestamp("tanggalProduksi")) }
+        val tanggalKey = doc.getString("kunciTanggal").orEmpty()
+            .ifBlank { dayKeyFromTimestamp(doc.getTimestamp("tanggalProduksi")) }
         val hasilQty = doc.getLong("jumlahHasil") ?: 0L
-        val bahanQty = doc.getLong("jumlahBahan") ?: 0L
+        val bahanQtyLong = kotlin.math.round(doc.numberAsDouble("jumlahBahan")).toLong()
         val hasilRef = firestore.collection("produk").document(doc.getString("idProdukHasil").orEmpty())
 
         firestore.runTransaction { trx ->
@@ -464,7 +514,7 @@ object RepositoriFirebaseUtama {
                 val stokAsal = asalSnap.getLong("stokSaatIni") ?: 0L
                 val stokHasil = hasilSnap.getLong("stokSaatIni") ?: 0L
                 check(stokHasil >= hasilQty) { "Stok hasil tidak cukup untuk menghapus catatan ini" }
-                trx.update(asalRef, mapOf("stokSaatIni" to stokAsal + bahanQty, "diperbaruiPada" to nowTimestamp()))
+                trx.update(asalRef, mapOf("stokSaatIni" to stokAsal + bahanQtyLong, "diperbaruiPada" to nowTimestamp()))
                 trx.update(hasilRef, mapOf("stokSaatIni" to stokHasil - hasilQty, "diperbaruiPada" to nowTimestamp()))
             } else {
                 val hasilSnap = trx.get(hasilRef)
@@ -608,7 +658,8 @@ object RepositoriFirebaseUtama {
             rows += RiwayatStokItem(
                 id = doc.id,
                 title = "Adjustment stok",
-                subtitle = doc.getString("catatan").orEmpty().ifBlank { doc.getString("alasanPenyesuaian").orEmpty().ifBlank { "Penyesuaian stok" } },
+                subtitle = doc.getString("catatan").orEmpty()
+                    .ifBlank { doc.getString("alasanPenyesuaian").orEmpty().ifBlank { "Penyesuaian stok" } },
                 qtyText = if (tambah) "+${doc.getLong("jumlah") ?: 0}" else "-${doc.getLong("jumlah") ?: 0}",
                 tone = if (tambah) "blue" else "orange",
                 tanggalIso = tanggal
@@ -814,14 +865,19 @@ object RepositoriFirebaseUtama {
         val rows = muatRiwayatPenjualan()
         val detailQty = snapshot.documents.map { sale ->
             async {
-                sale.reference.collection("rincian").get().await().documents.sumOf { (it.getLong("jumlah") ?: 0L).toInt() }
+                sale.reference.collection("rincian").get().await().documents
+                    .sumOf { (it.getLong("jumlah") ?: 0L).toInt() }
             }
         }.awaitAll()
 
         RingkasanPenjualan(
             totalHariIni = snapshot.documents.sumOf { it.getLong("totalBelanja") ?: 0L },
-            totalKasirHariIni = snapshot.documents.filter { it.getString("sumberTransaksi") == "KASIR" }.sumOf { it.getLong("totalBelanja") ?: 0L },
-            totalRekapHariIni = snapshot.documents.filter { it.getString("sumberTransaksi") != "KASIR" }.sumOf { it.getLong("totalBelanja") ?: 0L },
+            totalKasirHariIni = snapshot.documents
+                .filter { it.getString("sumberTransaksi") == "KASIR" }
+                .sumOf { it.getLong("totalBelanja") ?: 0L },
+            totalRekapHariIni = snapshot.documents
+                .filter { it.getString("sumberTransaksi") != "KASIR" }
+                .sumOf { it.getLong("totalBelanja") ?: 0L },
             jumlahTransaksiHariIni = snapshot.size(),
             totalItemHariIni = detailQty.sum(),
             recentRows = rows.take(8)
@@ -891,7 +947,8 @@ object RepositoriFirebaseUtama {
         val saleDoc = saleRef.get().await()
         if (!saleDoc.exists()) throw IllegalStateException("Data penjualan tidak ditemukan")
         val detailSnapshot = saleRef.collection("rincian").get().await()
-        val kunciTanggal = saleDoc.getString("kunciTanggal").orEmpty().ifBlank { dayKeyFromTimestamp(saleDoc.getTimestamp("tanggalPenjualan")) }
+        val kunciTanggal = saleDoc.getString("kunciTanggal").orEmpty()
+            .ifBlank { dayKeyFromTimestamp(saleDoc.getTimestamp("tanggalPenjualan")) }
 
         firestore.runTransaction { trx ->
             val selesai = (saleDoc.getString("statusPenjualan") ?: "SELESAI") == "SELESAI"
@@ -913,8 +970,12 @@ object RepositoriFirebaseUtama {
 
     suspend fun muatRingkasanDashboard(): RingkasanDashboard {
         val todayKey = Formatter.currentDateOnly()
-        val settingDoc = runCatching { firestore.collection("pengaturan").document("umum").get().await() }.getOrNull()
-        val ringkasanDoc = runCatching { firestore.collection("ringkasanHarian").document(todayKey).get().await() }.getOrNull()
+        val settingDoc = runCatching {
+            firestore.collection("pengaturan").document("umum").get().await()
+        }.getOrNull()
+        val ringkasanDoc = runCatching {
+            firestore.collection("ringkasanHarian").document(todayKey).get().await()
+        }.getOrNull()
         val produk = muatSemuaProduk()
         val lowStock = produk.filter { statusProduk(it) != "Aman" }.sortedBy { it.stock }.take(6)
 
@@ -946,7 +1007,10 @@ object RepositoriFirebaseUtama {
         val totalPenjualan = ringkasanDoc?.getLong("totalPenjualan") ?: 0L
         val totalPengeluaran = ringkasanDoc?.getLong("totalPengeluaran") ?: 0L
         val totalTransaksi = (ringkasanDoc?.getLong("totalTransaksi") ?: 0L).toInt()
-        val totalProduksi = ((ringkasanDoc?.getLong("totalProduksiDasar") ?: 0L) + (ringkasanDoc?.getLong("totalProduksiOlahan") ?: 0L)).toInt()
+        val totalProduksi = (
+                (ringkasanDoc?.getLong("totalProduksiDasar") ?: 0L) +
+                        (ringkasanDoc?.getLong("totalProduksiOlahan") ?: 0L)
+                ).toInt()
 
         return RingkasanDashboard(
             namaUsaha = settingDoc?.getString("namaTampilanToko").orEmpty().ifBlank { "SI Tahu" },
@@ -990,13 +1054,18 @@ object RepositoriFirebaseUtama {
         val totalItemTerjual = coroutineScope {
             sales.map { sale ->
                 async {
-                    sale.reference.collection("rincian").get().await().documents.sumOf { (it.getLong("jumlah") ?: 0L).toInt() }
+                    sale.reference.collection("rincian").get().await().documents
+                        .sumOf { (it.getLong("jumlah") ?: 0L).toInt() }
                 }
             }.awaitAll().sum()
         }
         val totalPengeluaran = expenses.sumOf { it.getLong("nominal") ?: 0L }
-        val totalProduksiDasar = produksi.filter { it.getString("jenisProduksi") == "DASAR" }.sumOf { (it.getLong("jumlahHasil") ?: 0L).toInt() }
-        val totalProduksiOlahan = produksi.filter { it.getString("jenisProduksi") == "OLAHAN" }.sumOf { (it.getLong("jumlahHasil") ?: 0L).toInt() }
+        val totalProduksiDasar = produksi
+            .filter { it.getString("jenisProduksi") == "DASAR" }
+            .sumOf { (it.getLong("jumlahHasil") ?: 0L).toInt() }
+        val totalProduksiOlahan = produksi
+            .filter { it.getString("jenisProduksi") == "OLAHAN" }
+            .sumOf { (it.getLong("jumlahHasil") ?: 0L).toInt() }
 
         firestore.collection("ringkasanHarian")
             .document(kunciTanggal)

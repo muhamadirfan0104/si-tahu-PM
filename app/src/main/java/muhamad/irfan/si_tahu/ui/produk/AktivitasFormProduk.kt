@@ -1,6 +1,5 @@
 package muhamad.irfan.si_tahu.ui.produk
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import com.google.android.material.button.MaterialButton
@@ -31,10 +30,7 @@ class AktivitasFormProduk : AktivitasDasar() {
 
         bindToolbar(binding.toolbar, "Form Produk", "Tambah atau edit produk")
         binding.spCategory.adapter = AdapterSpinner.stringAdapter(this, categories)
-
         binding.spPhotoTone.visibility = View.GONE
-
-        // Harga tidak lagi diatur dari form produk
 
         editingProductId = intent.getStringExtra(EkstraAplikasi.EXTRA_PRODUCT_ID)
 
@@ -43,29 +39,17 @@ class AktivitasFormProduk : AktivitasDasar() {
         setupOptionalDeleteButton()
 
         binding.btnSave.setOnClickListener {
-            if (!isSaving) {
-                saveProduct()
-            }
+            if (!isSaving) saveProduct()
         }
     }
 
     private fun setupInitialState() {
         if (editingProductId.isNullOrBlank()) {
-            setupCreateMode()
+            bindSellingState(aktifDijual = true, tampilDiKasir = true)
         } else {
-            setupEditMode()
             loadProduct(editingProductId!!)
         }
     }
-
-    private fun setupCreateMode() {
-        bindSellingState(
-            aktifDijual = true,
-            tampilDiKasir = true
-        )
-    }
-
-    private fun setupEditMode() = Unit
 
     private fun setupActiveToggleRule() {
         binding.cbActive.setOnCheckedChangeListener { _, isChecked ->
@@ -79,20 +63,16 @@ class AktivitasFormProduk : AktivitasDasar() {
                 binding.cbShowCashier.isEnabled = false
             } else {
                 binding.cbShowCashier.isEnabled = true
-                if (reactivated) {
-                    binding.cbShowCashier.isChecked = true
-                }
+                if (reactivated) binding.cbShowCashier.isChecked = true
             }
         }
     }
 
     private fun bindSellingState(aktifDijual: Boolean, tampilDiKasir: Boolean) {
         suppressActiveListener = true
-
         binding.cbActive.isChecked = aktifDijual
         binding.cbShowCashier.isChecked = if (aktifDijual) tampilDiKasir else false
         binding.cbShowCashier.isEnabled = aktifDijual
-
         suppressActiveListener = false
         lastActiveState = aktifDijual
     }
@@ -106,9 +86,7 @@ class AktivitasFormProduk : AktivitasDasar() {
 
         deleteButton.setOnClickListener {
             val productId = editingProductId ?: return@setOnClickListener
-            if (!isSaving) {
-                softDeleteProduct(productId)
-            }
+            if (!isSaving) softDeleteProduct(productId)
         }
     }
 
@@ -151,6 +129,9 @@ class AktivitasFormProduk : AktivitasDasar() {
     }
 
     private fun saveProduct() {
+        binding.etName.error = null
+        binding.etUnit.error = null
+
         val namaProduk = binding.etName.text?.toString()?.trim().orEmpty()
         val jenisProduk = categories[binding.spCategory.selectedItemPosition]
         val satuan = binding.etUnit.text?.toString()?.trim().orEmpty()
@@ -172,12 +153,9 @@ class AktivitasFormProduk : AktivitasDasar() {
         }
 
         setSavingState(true)
-
         val now = Timestamp.now()
 
         fun persistProduct(productId: String, kodeProduk: String) {
-            val finalTampilDiKasir = if (aktifDijual) tampilDiKasir else false
-
             val data = mutableMapOf<String, Any?>(
                 "kodeProduk" to kodeProduk,
                 "namaProduk" to namaProduk,
@@ -185,7 +163,7 @@ class AktivitasFormProduk : AktivitasDasar() {
                 "satuan" to satuan,
                 "stokSaatIni" to stokSaatIni,
                 "stokMinimum" to stokMinimum,
-                "tampilDiKasir" to finalTampilDiKasir,
+                "tampilDiKasir" to if (aktifDijual) tampilDiKasir else false,
                 "aktifDijual" to aktifDijual,
                 "urlFoto" to "",
                 "dihapus" to false,
@@ -205,7 +183,10 @@ class AktivitasFormProduk : AktivitasDasar() {
             }
 
             task.addOnSuccessListener {
-                onSaveCompleted()
+                setSavingState(false)
+                showMessage("Produk berhasil disimpan.")
+                setResult(RESULT_OK)
+                finish()
             }.addOnFailureListener { e ->
                 setSavingState(false)
                 showMessage("Gagal menyimpan produk: ${e.message}")
@@ -247,7 +228,6 @@ class AktivitasFormProduk : AktivitasDasar() {
 
             val productId = "prd_%03d".format(nextNumber)
             val kodeProduk = "PRD%03d".format(nextNumber)
-
             Pair(productId, kodeProduk)
         }.addOnSuccessListener { pair ->
             onResult(pair.first, pair.second)
@@ -258,7 +238,6 @@ class AktivitasFormProduk : AktivitasDasar() {
 
     private fun softDeleteProduct(productId: String) {
         val now = Timestamp.now()
-
         val data = mapOf(
             "dihapus" to true,
             "aktifDijual" to false,
@@ -282,12 +261,5 @@ class AktivitasFormProduk : AktivitasDasar() {
                 setSavingState(false)
                 showMessage("Gagal menonaktifkan produk: ${e.message}")
             }
-    }
-
-    private fun onSaveCompleted() {
-        setSavingState(false)
-        showMessage("Produk berhasil disimpan.")
-        setResult(RESULT_OK)
-        finish()
     }
 }

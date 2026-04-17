@@ -10,7 +10,6 @@ import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.databinding.ActivityModuleSalesBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
-import muhamad.irfan.si_tahu.ui.produksi.AktivitasMenuProduksi
 import muhamad.irfan.si_tahu.ui.stok.AktivitasMonitoringStok
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
 import muhamad.irfan.si_tahu.ui.utama.AktivitasUtamaAdmin
@@ -65,10 +64,6 @@ class AktivitasMenuPenjualan : AktivitasDasar() {
                 }
                 R.id.nav_admin_menu -> {
                     startActivity(AktivitasUtamaAdmin.intent(this, R.id.nav_admin_menu, clearTop = true))
-                    true
-                }
-                R.id.nav_admin_production -> {
-                    startActivity(Intent(this, AktivitasMenuProduksi::class.java))
                     true
                 }
                 R.id.nav_admin_sales -> true

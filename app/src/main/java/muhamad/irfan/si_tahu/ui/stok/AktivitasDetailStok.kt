@@ -2,114 +2,186 @@ package muhamad.irfan.si_tahu.ui.stok
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import kotlinx.coroutines.launch
-import muhamad.irfan.si_tahu.R
-import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.databinding.ActivityStockDetailBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
+import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
 
 class AktivitasDetailStok : AktivitasDasar() {
 
     private lateinit var binding: ActivityStockDetailBinding
-    private val movementAdapter = AdapterBarisUmum(onItemClick = ::openMovementDetail)
+    private val firestore by lazy { FirebaseFirestore.getInstance() }
+
+    private val movementAdapter by lazy {
+        AdapterBarisUmum(onItemClick = {})
+    }
+
+    private var productId: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (!requireLoginOrRedirect()) return
-
         binding = ActivityStockDetailBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        bindToolbar(binding.toolbar, "Detail Stok", "Pergerakan produk")
 
-        binding.rvMovement.layoutManager = LinearLayoutManager(this)
-        binding.rvMovement.adapter = movementAdapter
-        binding.btnAdjustStock.setOnClickListener {
-            startActivity(Intent(this, AktivitasStockAdjustment::class.java).putExtra(EXTRA_PRODUCT_ID, intent.getStringExtra(EXTRA_PRODUCT_ID)))
-        }
-    }
+        bindToolbar(
+            binding.toolbar,
+            "Detail Stok",
+            "Lihat posisi stok dan riwayat pergerakan"
+        )
 
-    override fun onResume() {
-        super.onResume()
-        render()
-    }
-
-    private fun productStatus(stock: Int, minStock: Int): String = when {
-        stock <= 0 -> "Habis"
-        stock <= minStock -> "Menipis"
-        else -> "Aman"
-    }
-
-    private fun render() {
-        val productId = intent.getStringExtra(EXTRA_PRODUCT_ID).orEmpty()
+        productId = intent.getStringExtra(AktivitasMonitoringStok.EXTRA_PRODUCT_ID).orEmpty()
         if (productId.isBlank()) {
-            showMessage("Produk tidak ditemukan")
+            showMessage("Produk tidak valid.")
             finish()
             return
         }
 
-        lifecycleScope.launch {
-            runCatching {
-                val product = RepositoriFirebaseUtama.muatProdukById(productId)
-                    ?: throw IllegalStateException("Produk tidak ditemukan")
-                val movements = RepositoriFirebaseUtama.muatPergerakanStok(productId)
-                product to movements
-            }.onSuccess { (product, movements) ->
-                binding.tvProductName.text = product.name
-                binding.tvProductMeta.text = "${product.code} • ${product.category} • ${product.unit}"
-                binding.tvStockNow.text = "Stok saat ini: ${product.stock} ${product.unit}"
-                binding.tvMinStock.text = "Stok minimum: ${product.minStock} ${product.unit}"
-                val status = productStatus(product.stock, product.minStock)
+        binding.rvMovement.layoutManager = LinearLayoutManager(this)
+        binding.rvMovement.adapter = movementAdapter
+
+        binding.btnAdjustStock.setOnClickListener {
+            val intent = Intent(this, AktivitasAdjustmentStok::class.java)
+            intent.putExtra(AktivitasMonitoringStok.EXTRA_PRODUCT_ID, productId)
+            startActivity(intent)
+        }
+
+        loadDetail()
+        loadMovement()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (productId.isNotBlank()) {
+            loadDetail()
+            loadMovement()
+        }
+    }
+
+    private fun loadDetail() {
+        firestore.collection("produk")
+            .document(productId)
+            .get()
+            .addOnSuccessListener { doc ->
+                if (!doc.exists()) {
+                    showMessage("Produk tidak ditemukan.")
+                    finish()
+                    return@addOnSuccessListener
+                }
+
+                val namaProduk = doc.getString("namaProduk").orEmpty()
+                val jenisProduk = doc.getString("jenisProduk").orEmpty()
+                val satuan = doc.getString("satuan").orEmpty()
+                val stokSaatIni = doc.getLong("stokSaatIni") ?: 0L
+                val stokMinimum = doc.getLong("stokMinimum") ?: 0L
+                val aktifDijual = doc.getBoolean("aktifDijual") ?: true
+
+                val status = when {
+                    stokSaatIni <= 0L -> "Habis"
+                    stokSaatIni <= stokMinimum -> "Menipis"
+                    else -> "Aman"
+                }
+
+                binding.tvProductName.text = namaProduk
+                binding.tvProductMeta.text = "$jenisProduk • ${if (aktifDijual) "Aktif" else "Nonaktif"}"
+                binding.tvStockNow.text = "Stok saat ini: $stokSaatIni $satuan"
+                binding.tvMinStock.text = "Stok minimum: $stokMinimum $satuan"
                 binding.tvStatus.text = status
                 binding.tvStatus.setBackgroundResource(
                     when (status) {
-                        "Aman" -> R.drawable.bg_tone_green
-                        "Menipis" -> R.drawable.bg_tone_gold
-                        else -> R.drawable.bg_tone_orange
+                        "Aman" -> muhamad.irfan.si_tahu.R.drawable.bg_tone_green
+                        "Menipis" -> muhamad.irfan.si_tahu.R.drawable.bg_tone_gold
+                        else -> muhamad.irfan.si_tahu.R.drawable.bg_tone_red
                     }
                 )
+            }
+            .addOnFailureListener { e ->
+                showMessage("Gagal memuat detail stok: ${e.message}")
+            }
+    }
 
-                movementAdapter.submitList(movements.map {
+    private fun loadMovement() {
+        firestore.collection("aktivitasStok")
+            .whereEqualTo("idProduk", productId)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val items = snapshot.documents.map { doc ->
+                    val jenisAktivitas = doc.getString("jenisAktivitas").orEmpty()
+                    val qty = doc.getLong("qty") ?: 0L
+                    val satuan = doc.getString("satuan").orEmpty()
+                    val catatan = doc.getString("catatan").orEmpty()
+                    val dibuatPada = doc.getTimestamp("dibuatPada") ?: Timestamp.now()
+
+                    val (title, tone, amountText) = when {
+                        jenisAktivitas.contains("PRODUKSI_DASAR_MASUK") -> Triple(
+                            "Produksi Dasar",
+                            WarnaBaris.GREEN,
+                            "+$qty $satuan"
+                        )
+                        jenisAktivitas.contains("KONVERSI_MASUK") -> Triple(
+                            "Konversi Masuk",
+                            WarnaBaris.GREEN,
+                            "+$qty $satuan"
+                        )
+                        jenisAktivitas.contains("KONVERSI_KELUAR") -> Triple(
+                            "Konversi Keluar",
+                            WarnaBaris.ORANGE,
+                            "-$qty $satuan"
+                        )
+                        jenisAktivitas.contains("ADJUSTMENT_TAMBAH") -> Triple(
+                            "Adjustment Tambah",
+                            WarnaBaris.BLUE,
+                            "+$qty $satuan"
+                        )
+                        jenisAktivitas.contains("ADJUSTMENT_KURANG") -> Triple(
+                            "Adjustment Kurang",
+                            WarnaBaris.RED,
+                            "-$qty $satuan"
+                        )
+                        jenisAktivitas.contains("PENJUALAN") -> Triple(
+                            "Penjualan",
+                            WarnaBaris.RED,
+                            "-$qty $satuan"
+                        )
+                        else -> Triple(
+                            jenisAktivitas.ifBlank { "Aktivitas Stok" },
+                            WarnaBaris.DEFAULT,
+                            "$qty $satuan"
+                        )
+                    }
+
                     ItemBaris(
-                        id = it.id,
-                        title = it.title,
-                        subtitle = it.subtitle,
-                        amount = it.qtyText,
-                        badge = it.tanggalIso.substringBefore('T'),
-                        tone = when (it.tone) {
-                            "green" -> WarnaBaris.GREEN
-                            "orange" -> WarnaBaris.ORANGE
-                            "blue" -> WarnaBaris.BLUE
-                            else -> WarnaBaris.GOLD
-                        }
+                        id = doc.id,
+                        title = title,
+                        subtitle = if (catatan.isBlank()) {
+                            Formatter.readableDateTime(dibuatPada.toDate().let {
+                                java.text.SimpleDateFormat(
+                                    "yyyy-MM-dd'T'HH:mm:ss",
+                                    java.util.Locale.US
+                                ).format(it)
+                            })
+                        } else {
+                            catatan
+                        },
+                        badge = Formatter.readableDate(dibuatPada.toDate().let {
+                            java.text.SimpleDateFormat(
+                                "yyyy-MM-dd",
+                                java.util.Locale.US
+                            ).format(it)
+                        }),
+                        amount = amountText,
+                        tone = tone
                     )
-                })
-            }.onFailure {
-                showMessage(it.message ?: "Gagal memuat detail stok")
-                finish()
-            }
-        }
-    }
+                }.sortedByDescending { it.badge + it.title }
 
-    private fun openMovementDetail(item: ItemBaris) {
-        lifecycleScope.launch {
-            val productId = intent.getStringExtra(EXTRA_PRODUCT_ID).orEmpty()
-            val cleanId = item.id.removeSuffix("-out").removeSuffix("-in").removeSuffix(productId)
-            val detail = when {
-                item.title.contains("Produksi", true) || item.title.contains("Konversi", true) -> RepositoriFirebaseUtama.buildProductionDetailText(cleanId)
-                item.title.contains("Adjustment", true) -> RepositoriFirebaseUtama.buildAdjustmentDetailText(cleanId)
-                item.title.contains("Penjualan", true) -> RepositoriFirebaseUtama.buildReceiptText(cleanId)
-                else -> "Detail pergerakan belum tersedia"
+                movementAdapter.submitList(items)
             }
-            showDetailModal("Pergerakan Stok", detail)
-        }
-    }
-
-    companion object {
-        const val EXTRA_PRODUCT_ID = "extra_product_id"
+            .addOnFailureListener { e ->
+                showMessage("Gagal memuat riwayat stok: ${e.message}")
+            }
     }
 }

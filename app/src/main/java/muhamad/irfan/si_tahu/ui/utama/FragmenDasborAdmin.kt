@@ -1,6 +1,5 @@
 package muhamad.irfan.si_tahu.ui.utama
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.lifecycle.lifecycleScope
@@ -10,9 +9,6 @@ import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.databinding.FragmentAdminDashboardBinding
 import muhamad.irfan.si_tahu.ui.dasar.FragmenDasar
-import muhamad.irfan.si_tahu.ui.penjualan.AktivitasMenuPenjualan
-import muhamad.irfan.si_tahu.ui.produksi.AktivitasMenuProduksi
-import muhamad.irfan.si_tahu.ui.stok.AktivitasMonitoringStok
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
@@ -57,13 +53,15 @@ class FragmenDasborAdmin : FragmenDasar(R.layout.fragment_admin_dashboard) {
         binding.btnNewExpense.visibility = View.GONE
 
         binding.btnGoProduction.setOnClickListener {
-            startActivity(Intent(requireContext(), AktivitasMenuProduksi::class.java))
+            (activity as? AktivitasUtamaAdmin)?.openTab(R.id.nav_admin_production)
         }
+
         binding.btnGoSales.setOnClickListener {
-            startActivity(Intent(requireContext(), AktivitasMenuPenjualan::class.java))
+            (activity as? AktivitasUtamaAdmin)?.openTab(R.id.nav_admin_sales)
         }
+
         binding.btnGoStock.setOnClickListener {
-            startActivity(Intent(requireContext(), AktivitasMonitoringStok::class.java))
+            (activity as? AktivitasUtamaAdmin)?.openTab(R.id.nav_admin_stock)
         }
     }
 
@@ -100,6 +98,7 @@ class FragmenDasborAdmin : FragmenDasar(R.layout.fragment_admin_dashboard) {
                             }
                         )
                     })
+
                     recentAdapter.submitList(dashboard.recentItems.map {
                         ItemBaris(
                             id = it.id,

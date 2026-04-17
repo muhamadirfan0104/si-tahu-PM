@@ -57,7 +57,7 @@ data class CatatanProduksi(
     var id: String,
     var date: String,
     var productId: String,
-    var batches: Int,
+    var batches: Double,
     var result: Int,
     var note: String,
     var createdBy: String

@@ -1,5 +1,6 @@
 package muhamad.irfan.si_tahu.data
 
+import kotlin.math.roundToInt
 import android.content.Context
 import android.content.SharedPreferences
 import muhamad.irfan.si_tahu.util.Formatter
@@ -274,6 +275,14 @@ object RepositoriLokal {
         return format.format(Date())
     }
 
+    fun formatBatch(value: Double): String {
+        return if (value % 1.0 == 0.0) {
+            value.toInt().toString()
+        } else {
+            value.toString().replace(".", ",")
+        }
+    }
+
     fun addToCart(productId: String) {
         val product = getProduct(productId) ?: throw IllegalArgumentException("Produk tidak ditemukan")
         if (product.deleted || !product.active || !product.showInCashier) throw IllegalStateException("Produk tidak tampil di kasir")
@@ -357,12 +366,22 @@ object RepositoriLokal {
         return sale
     }
 
-    fun saveProduction(dateTime: String, productId: String, batches: Int, note: String, userId: String): CatatanProduksi {
+    fun saveProduction(
+        dateTime: String,
+        productId: String,
+        batches: Double,
+        note: String,
+        userId: String
+    ): CatatanProduksi {
         val product = getProduct(productId) ?: throw IllegalArgumentException("Produk tidak ditemukan")
         require(batches > 0) { "Jumlah masak harus lebih dari 0" }
+
         val parameter = activeParameter(productId)
-        val result = (parameter?.resultPerBatch ?: 100) * batches
+        val resultPerBatch = parameter?.resultPerBatch ?: 100
+        val result = (resultPerBatch * batches).roundToInt()
+
         product.stock += result
+
         val item = CatatanProduksi(
             id = "PROD-" + nowIso().replace("-", "").replace(":", "").replace("T", "").take(14),
             date = dateTime,
@@ -372,11 +391,16 @@ object RepositoriLokal {
             note = note,
             createdBy = userId
         )
+
         database.productionLogs.add(0, item)
         persist()
-        addActivity("Produksi ${product.name} bertambah ${result} ${product.unit}.", "green")
+        addActivity(
+            "Produksi ${product.name} ${formatBatch(batches)}x masak bertambah ${result} ${product.unit}.",
+            "green"
+        )
         return item
     }
+
 
     fun saveConversion(
         dateTime: String,

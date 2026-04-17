@@ -3,8 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F7F4ED"
-    android:fitsSystemWindows="true">
+    android:background="#F7F4ED">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -35,202 +34,201 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp">
-
-            <com.google.android.material.textfield.TextInputLayout
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:boxBackgroundColor="@android:color/white"
-                app:boxCornerRadiusBottomEnd="20dp"
-                app:boxCornerRadiusBottomStart="20dp"
-                app:boxCornerRadiusTopEnd="20dp"
-                app:boxCornerRadiusTopStart="20dp"
-                app:boxStrokeColor="#5F7D49"
-                app:hintTextColor="#5F7D49">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etName"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:hint="Nama produk"
-                    android:inputType="textCapWords"
-                    android:textColor="#293226" />
-            </com.google.android.material.textfield.TextInputLayout>
+            android:padding="16dp">
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
                 app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="20dp"
+                app:cardCornerRadius="26dp"
                 app:cardElevation="0dp"
                 app:strokeColor="#EAE5D9"
-                app:strokeWidth="1.5dp">
-
-                <Spinner
-                    android:id="@+id/spCategory"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:backgroundTint="#8A8577"
-                    android:paddingHorizontal="16dp" />
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.textfield.TextInputLayout
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:boxBackgroundColor="@android:color/white"
-                app:boxCornerRadiusBottomEnd="20dp"
-                app:boxCornerRadiusBottomStart="20dp"
-                app:boxCornerRadiusTopEnd="20dp"
-                app:boxCornerRadiusTopStart="20dp"
-                app:boxStrokeColor="#5F7D49"
-                app:hintTextColor="#5F7D49">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etUnit"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:hint="Satuan (contoh: pcs, kg)"
-                    android:inputType="textCapWords"
-                    android:textColor="#293226" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:orientation="horizontal"
-                android:weightSum="2">
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    app:boxBackgroundColor="@android:color/white"
-                    app:boxCornerRadiusBottomEnd="20dp"
-                    app:boxCornerRadiusBottomStart="20dp"
-                    app:boxCornerRadiusTopEnd="20dp"
-                    app:boxCornerRadiusTopStart="20dp"
-                    app:boxStrokeColor="#5F7D49"
-                    app:hintTextColor="#5F7D49">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etStock"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:hint="Stok"
-                        android:inputType="number"
-                        android:textColor="#293226" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <Space
-                    android:layout_width="12dp"
-                    android:layout_height="1dp" />
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    app:boxBackgroundColor="@android:color/white"
-                    app:boxCornerRadiusBottomEnd="20dp"
-                    app:boxCornerRadiusBottomStart="20dp"
-                    app:boxCornerRadiusTopEnd="20dp"
-                    app:boxCornerRadiusTopStart="20dp"
-                    app:boxStrokeColor="#5F7D49"
-                    app:hintTextColor="#5F7D49">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etMinStock"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:hint="Stok minimum"
-                        android:inputType="number"
-                        android:textColor="#293226" />
-                </com.google.android.material.textfield.TextInputLayout>
-            </LinearLayout>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:visibility="gone"
-                app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#EAE5D9"
-                app:strokeWidth="1.5dp">
-
-                <Spinner
-                    android:id="@+id/spPhotoTone"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:backgroundTint="#8A8577"
-                    android:paddingHorizontal="16dp" />
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="32dp"
-                app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#EAE5D9"
-                app:strokeWidth="1.5dp">
+                app:strokeWidth="1dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:paddingHorizontal="16dp"
-                    android:paddingVertical="12dp">
+                    android:padding="18dp">
 
-                    <CheckBox
-                        android:id="@+id/cbActive"
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:buttonTint="#5F7D49"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="Produk aktif"
-                        android:textColor="#293226"
-                        android:textSize="15sp" />
+                        app:boxBackgroundColor="@android:color/white"
+                        app:boxCornerRadiusBottomEnd="20dp"
+                        app:boxCornerRadiusBottomStart="20dp"
+                        app:boxCornerRadiusTopEnd="20dp"
+                        app:boxCornerRadiusTopStart="20dp"
+                        app:boxStrokeColor="#B8B1A5">
 
-                    <CheckBox
-                        android:id="@+id/cbShowCashier"
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="Nama produk"
+                            android:inputType="textCapWords"
+                            android:textColor="#293226" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.card.MaterialCardView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:buttonTint="#5F7D49"
-                        android:fontFamily="sans-serif-medium"
-                        android:text="Tampil di kasir"
-                        android:textColor="#293226"
-                        android:textSize="15sp" />
+                        android:layout_marginTop="14dp"
+                        app:cardBackgroundColor="#FBFBFA"
+                        app:cardCornerRadius="20dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#EAE5D9"
+                        app:strokeWidth="1dp">
+
+                        <Spinner
+                            android:id="@+id/spCategory"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:paddingHorizontal="16dp" />
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        app:boxBackgroundColor="@android:color/white"
+                        app:boxCornerRadiusBottomEnd="20dp"
+                        app:boxCornerRadiusBottomStart="20dp"
+                        app:boxCornerRadiusTopEnd="20dp"
+                        app:boxCornerRadiusTopStart="20dp"
+                        app:boxStrokeColor="#B8B1A5">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/etUnit"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="Satuan (pcs, kg, box)"
+                            android:inputType="textCapWords"
+                            android:textColor="#293226" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            app:boxBackgroundColor="@android:color/white"
+                            app:boxCornerRadiusBottomEnd="20dp"
+                            app:boxCornerRadiusBottomStart="20dp"
+                            app:boxCornerRadiusTopEnd="20dp"
+                            app:boxCornerRadiusTopStart="20dp"
+                            app:boxStrokeColor="#B8B1A5">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etStock"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:hint="Stok"
+                                android:inputType="number"
+                                android:textColor="#293226" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <Space
+                            android:layout_width="10dp"
+                            android:layout_height="1dp" />
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            app:boxBackgroundColor="@android:color/white"
+                            app:boxCornerRadiusBottomEnd="20dp"
+                            app:boxCornerRadiusBottomStart="20dp"
+                            app:boxCornerRadiusTopEnd="20dp"
+                            app:boxCornerRadiusTopStart="20dp"
+                            app:boxStrokeColor="#B8B1A5">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etMinStock"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:hint="Min stok"
+                                android:inputType="number"
+                                android:textColor="#293226" />
+                        </com.google.android.material.textfield.TextInputLayout>
+                    </LinearLayout>
+
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/cardPhotoTone"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:visibility="gone"
+                        app:cardBackgroundColor="#FBFBFA"
+                        app:cardCornerRadius="20dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#EAE5D9"
+                        app:strokeWidth="1dp">
+
+                        <Spinner
+                            android:id="@+id/spPhotoTone"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:paddingHorizontal="16dp" />
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <com.google.android.material.card.MaterialCardView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        app:cardBackgroundColor="#FBFBFA"
+                        app:cardCornerRadius="20dp"
+                        app:cardElevation="0dp"
+                        app:strokeColor="#EAE5D9"
+                        app:strokeWidth="1dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:paddingHorizontal="14dp"
+                            android:paddingVertical="10dp">
+
+                            <CheckBox
+                                android:id="@+id/cbActive"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Produk aktif"
+                                android:textColor="#293226"
+                                android:textSize="15sp" />
+
+                            <CheckBox
+                                android:id="@+id/cbShowCashier"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="Tampil di kasir"
+                                android:textColor="#293226"
+                                android:textSize="15sp" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSave"
                 android:layout_width="match_parent"
-                android:layout_height="64dp"
-                android:layout_marginBottom="16dp"
-                android:fontFamily="sans-serif-bold"
+                android:layout_height="56dp"
+                android:layout_marginTop="18dp"
                 android:text="Simpan Produk"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
+                android:textColor="@android:color/white"
                 app:backgroundTint="#5F7D49"
-                app:cornerRadius="20dp"
+                app:cornerRadius="18dp"
                 app:elevation="0dp" />
-
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

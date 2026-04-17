@@ -159,24 +159,27 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
     }
 
     private fun refresh() {
-        val query = searchText().trim().lowercase()
+        val query = searchText()
         val category = primarySelection()
 
         val filteredProducts = products.filter { item ->
             !item.dihapus &&
-                item.namaProduk.lowercase().contains(query) &&
-                (category == "Semua" || item.jenisProduk == category)
+                    item.namaProduk.lowercase().contains(query) &&
+                    (category == "Semua" || item.jenisProduk == category)
         }
 
         totalPages = if (filteredProducts.isEmpty()) 1 else ((filteredProducts.size - 1) / pageSize) + 1
-
         if (currentPage > totalPages) currentPage = totalPages
         if (currentPage < 1) currentPage = 1
 
         val fromIndex = (currentPage - 1) * pageSize
         val toIndex = minOf(fromIndex + pageSize, filteredProducts.size)
 
-        val pagedProducts = if (filteredProducts.isEmpty()) emptyList() else filteredProducts.subList(fromIndex, toIndex)
+        val pagedProducts = if (filteredProducts.isEmpty()) {
+            emptyList()
+        } else {
+            filteredProducts.subList(fromIndex, toIndex)
+        }
 
         val rows = pagedProducts.map { item ->
             val hargaInfo = priceStatusMap[item.id] ?: StatusHargaProduk()
@@ -216,7 +219,7 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                 amount = "Stok ${item.stokSaatIni}",
                 priceStatus = hargaLabel,
                 parameterStatus = parameterLabel,
-                actionLabel = if (item.id == "info_empty") null else "⋮",
+                actionLabel = "⋮",
                 editLabel = null,
                 deleteLabel = null,
                 tone = when {
@@ -229,6 +232,15 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
             )
         }
 
+        submitRows(
+            rows = rows,
+            emptyMessage = if (products.isEmpty()) {
+                "Belum ada produk."
+            } else {
+                "Produk tidak ditemukan."
+            }
+        )
+
         if (filteredProducts.isNotEmpty()) {
             showPagination(
                 currentPage = currentPage,
@@ -239,35 +251,9 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
         } else {
             hidePagination()
         }
-
-        submitRows(
-            if (rows.isNotEmpty()) {
-                rows
-            } else {
-                listOf(
-                    ItemBaris(
-                        id = "info_empty",
-                        title = "Belum ada data produk",
-                        subtitle = "Data produk akan tampil dari Firebase.",
-                        badge = "Info",
-                        amount = "",
-                        priceStatus = "",
-                        parameterStatus = "",
-                        actionLabel = null,
-                        editLabel = null,
-                        deleteLabel = null,
-                        tone = WarnaBaris.GOLD,
-                        priceTone = WarnaBaris.DEFAULT,
-                        parameterTone = WarnaBaris.DEFAULT
-                    )
-                )
-            }
-        )
     }
 
     override fun onRowClick(item: ItemBaris) {
-        if (item.id == "info_empty") return
-
         startActivity(
             Intent(this, AktivitasFormProduk::class.java)
                 .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, item.id)
@@ -275,14 +261,11 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
     }
 
     override fun onRowAction(item: ItemBaris, anchor: View) {
-        if (item.id == "info_empty") return
-
         val product = products.firstOrNull { it.id == item.id } ?: return
         showMenuPopup(product, anchor)
     }
 
     override fun onRowDelete(item: ItemBaris) {
-        if (item.id == "info_empty") return
         val product = products.firstOrNull { it.id == item.id } ?: return
         hapusProduk(product)
     }
@@ -310,7 +293,6 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                 else -> false
             }
         }
-
         popup.show()
     }
 

@@ -3,6 +3,7 @@ package muhamad.irfan.si_tahu.ui.utama
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.commit
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -10,9 +11,6 @@ import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.databinding.ActivityRoleMainBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.masuk.AktivitasMasuk
-import muhamad.irfan.si_tahu.ui.penjualan.AktivitasMenuPenjualan
-import muhamad.irfan.si_tahu.ui.produksi.AktivitasMenuProduksi
-import muhamad.irfan.si_tahu.ui.stok.AktivitasMonitoringStok
 
 class AktivitasUtamaAdmin : AktivitasDasar() {
 
@@ -39,30 +37,7 @@ class AktivitasUtamaAdmin : AktivitasDasar() {
         binding.bottomNavigation.menu.clear()
         binding.bottomNavigation.inflateMenu(R.menu.menu_bottom_admin)
 
-        binding.bottomNavigation.setOnItemSelectedListener {
-            when (it.itemId) {
-                R.id.nav_admin_dashboard,
-                R.id.nav_admin_menu -> {
-                    selectedTabId = it.itemId
-                    showTab(it.itemId)
-                    true
-                }
-                R.id.nav_admin_production -> {
-                    startActivity(Intent(this, AktivitasMenuProduksi::class.java))
-                    false
-                }
-                R.id.nav_admin_sales -> {
-                    startActivity(Intent(this, AktivitasMenuPenjualan::class.java))
-                    false
-                }
-                R.id.nav_admin_stock -> {
-                    startActivity(Intent(this, AktivitasMonitoringStok::class.java))
-                    false
-                }
-                else -> false
-            }
-        }
-
+        setupBottomNavigation()
         handleIntentTab(intent, savedInstanceState == null)
         loadNamaLogin()
     }
@@ -75,6 +50,14 @@ class AktivitasUtamaAdmin : AktivitasDasar() {
 
     fun openTab(tabId: Int) {
         binding.bottomNavigation.selectedItemId = tabId
+    }
+
+    private fun setupBottomNavigation() {
+        binding.bottomNavigation.setOnItemSelectedListener { item ->
+            selectedTabId = item.itemId
+            showTab(item.itemId)
+            true
+        }
     }
 
     private fun handleIntentTab(intent: Intent?, firstCreate: Boolean) {
@@ -108,13 +91,25 @@ class AktivitasUtamaAdmin : AktivitasDasar() {
             .get()
             .addOnSuccessListener { snapshot ->
                 val doc = snapshot.documents.firstOrNull()
-                val namaPengguna = doc?.getString("namaPengguna").orEmpty()
 
-                namaLogin = if (namaPengguna.isBlank()) "Admin / Pemilik" else namaPengguna
+                val namaPengguna = firstNonBlank(
+                    doc?.getString("namaPengguna"),
+                    doc?.getString("namaLengkap"),
+                    doc?.getString("nama"),
+                    auth.currentUser?.displayName,
+                    auth.currentUser?.email,
+                    "Admin / Pemilik"
+                )
+
+                namaLogin = namaPengguna
                 updateToolbarSubtitle()
             }
             .addOnFailureListener {
-                namaLogin = "Admin / Pemilik"
+                namaLogin = firstNonBlank(
+                    auth.currentUser?.displayName,
+                    auth.currentUser?.email,
+                    "Admin / Pemilik"
+                )
                 updateToolbarSubtitle()
             }
     }
@@ -125,6 +120,10 @@ class AktivitasUtamaAdmin : AktivitasDasar() {
 
     private fun showTab(itemId: Int) {
         val (fragment, title) = when (itemId) {
+            R.id.nav_admin_dashboard -> Pair(FragmenDasborAdmin(), "Beranda")
+            R.id.nav_admin_production -> Pair(FragmenProduksi(), "Produksi")
+            R.id.nav_admin_sales -> Pair(FragmenPenjualan(), "Penjualan")
+            R.id.nav_admin_stock -> Pair(FragmenStok(), "Stok")
             R.id.nav_admin_menu -> Pair(FragmenMenuAdmin(), "Menu")
             else -> Pair(FragmenDasborAdmin(), "Beranda")
         }
@@ -135,6 +134,10 @@ class AktivitasUtamaAdmin : AktivitasDasar() {
         supportFragmentManager.commit {
             replace(binding.container.id, fragment, title)
         }
+    }
+
+    private fun firstNonBlank(vararg values: String?): String {
+        return values.firstOrNull { !it.isNullOrBlank() }?.trim().orEmpty()
     }
 
     companion object {

@@ -2,7 +2,8 @@
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#F7F4ED">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -13,58 +14,231 @@
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardBackgroundColor="@android:color/transparent">
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#EAE5D9"
+            app:strokeWidth="1dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_summary_green"
                 android:orientation="vertical"
-                android:padding="18dp">
+                android:padding="22dp">
 
                 <TextView
                     android:id="@+id/tvSalesHeader"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Penjualan hari ini"
-                    android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-                    android:textColor="@color/white" />
+                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                    android:textColor="@android:color/white"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tvSalesTotal"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium"
-                    android:textColor="@color/white" />
+                    android:layout_marginTop="10dp"
+                    android:text="Rp0"
+                    android:textAppearance="@style/TextAppearance.Material3.DisplaySmall"
+                    android:textColor="@android:color/white"
+                    android:textStyle="bold" />
 
-                <TextView android:id="@+id/tvCashierTotal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="@color/white" />
-                <TextView android:id="@+id/tvRecapTotal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/white" />
-                <TextView android:id="@+id/tvSalesCount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/white" />
-                <TextView android:id="@+id/tvSoldQty" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/white" />
+                <TextView
+                    android:id="@+id/tvCashierTotal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Rumahan: Rp0"
+                    android:textColor="@android:color/white"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvRecapTotal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Pasar: Rp0"
+                    android:textColor="@android:color/white"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvSalesCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Transaksi: 0"
+                    android:textColor="@android:color/white"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvSoldQty"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Qty terjual: 0"
+                    android:textColor="@android:color/white"
+                    android:textSize="13sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Aksi penjualan ada di tombol kanan bawah"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-            android:textColor="@color/text_secondary" />
+            android:layout_marginTop="22dp"
+            android:text="Aksi cepat"
+            android:textColor="#2D3428"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/btnHomeSales"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#EAE5D9"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="18dp">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="54dp"
+                    android:layout_height="54dp"
+                    app:cardBackgroundColor="#E8EEFF"
+                    app:cardCornerRadius="18dp"
+                    app:cardElevation="0dp">
+
+                    <ImageView
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:layout_gravity="center"
+                        android:src="@android:drawable/ic_menu_send"
+                        app:tint="#5668D8" />
+                </com.google.android.material.card.MaterialCardView>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Penjualan Rumahan"
+                        android:textColor="#1F251C"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="Catat transaksi eceran dengan flow kasir"
+                        android:textColor="#7B766B"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/btnMarketRecap"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            app:cardBackgroundColor="@android:color/white"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#EAE5D9"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="18dp">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="54dp"
+                    android:layout_height="54dp"
+                    app:cardBackgroundColor="#FFF4D9"
+                    app:cardCornerRadius="18dp"
+                    app:cardElevation="0dp">
+
+                    <ImageView
+                        android:layout_width="26dp"
+                        android:layout_height="26dp"
+                        android:layout_gravity="center"
+                        android:src="@android:drawable/ic_menu_week"
+                        app:tint="#D59A14" />
+                </com.google.android.material.card.MaterialCardView>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Rekap Penjualan Pasar"
+                        android:textColor="#1F251C"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="Input rekap harian pasar per item"
+                        android:textColor="#7B766B"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSalesHistory"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="18dp"
+            android:text="Lihat Riwayat Penjualan" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
+            android:layout_marginTop="24dp"
             android:text="Transaksi terbaru"
-            android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
+            android:textColor="#2D3428"
+            android:textSize="17sp"
+            android:textStyle="bold" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvSalesRecent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="12dp"
             android:nestedScrollingEnabled="false" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

@@ -8,7 +8,6 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fitsSystemWindows="true"
         android:orientation="vertical">
 
         <com.google.android.material.appbar.AppBarLayout
@@ -36,7 +35,7 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:padding="16dp">
 
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/searchContainer"
@@ -44,15 +43,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:boxBackgroundColor="@android:color/white"
-                app:boxCornerRadiusBottomEnd="20dp"
-                app:boxCornerRadiusBottomStart="20dp"
-                app:boxCornerRadiusTopEnd="20dp"
-                app:boxCornerRadiusTopStart="20dp"
-                app:boxStrokeColor="#A8A095"
+                app:boxCornerRadiusBottomEnd="22dp"
+                app:boxCornerRadiusBottomStart="22dp"
+                app:boxCornerRadiusTopEnd="22dp"
+                app:boxCornerRadiusTopStart="22dp"
+                app:boxStrokeColor="#B8B1A5"
                 app:boxStrokeWidth="1.5dp"
                 app:hintTextColor="#8A8577"
                 app:startIconDrawable="@android:drawable/ic_menu_search"
-                app:startIconTint="#B8B1A5">
+                app:startIconTint="#A79F93">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etSearch"
@@ -67,18 +66,17 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="14dp"
                 app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="20dp"
+                app:cardCornerRadius="22dp"
                 app:cardElevation="0dp"
                 app:strokeColor="#EAE5D9"
-                app:strokeWidth="1.5dp">
+                app:strokeWidth="1dp">
 
                 <Spinner
                     android:id="@+id/spPrimaryFilter"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
-                    android:backgroundTint="#8A8577"
                     android:paddingHorizontal="16dp" />
             </com.google.android.material.card.MaterialCardView>
 
@@ -86,19 +84,18 @@
                 android:id="@+id/cardSecondaryFilter"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="10dp"
                 android:visibility="gone"
                 app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="20dp"
+                app:cardCornerRadius="22dp"
                 app:cardElevation="0dp"
                 app:strokeColor="#EAE5D9"
-                app:strokeWidth="1.5dp">
+                app:strokeWidth="1dp">
 
                 <Spinner
                     android:id="@+id/spSecondaryFilter"
                     android:layout_width="match_parent"
                     android:layout_height="52dp"
-                    android:backgroundTint="#8A8577"
                     android:paddingHorizontal="16dp" />
             </com.google.android.material.card.MaterialCardView>
 
@@ -106,44 +103,33 @@
                 android:id="@+id/buttonRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="16dp"
+                android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:visibility="gone"
-                android:weightSum="2">
+                android:visibility="gone">
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnPrimary"
                     android:layout_width="0dp"
-                    android:layout_height="64dp"
+                    android:layout_height="54dp"
                     android:layout_weight="1"
-                    android:fontFamily="sans-serif-bold"
-                    android:text="Tambah"
-                    android:textColor="#FFFFFF"
-                    android:textSize="15sp"
+                    android:text="Aksi 1"
+                    android:textColor="@android:color/white"
                     app:backgroundTint="#5F7D49"
-                    app:cornerRadius="20dp"
-                    app:elevation="0dp"
-                    app:icon="@android:drawable/ic_input_add"
-                    app:iconTint="#FFFFFF" />
+                    app:cornerRadius="18dp"
+                    app:elevation="0dp" />
 
                 <Space
-                    android:layout_width="12dp"
+                    android:layout_width="10dp"
                     android:layout_height="1dp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSecondary"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="0dp"
-                    android:layout_height="64dp"
+                    android:layout_height="54dp"
                     android:layout_weight="1"
-                    android:fontFamily="sans-serif-bold"
-                    android:text="Aksi 2"
-                    android:textColor="#5F7D49"
-                    android:textSize="15sp"
-                    app:backgroundTint="@android:color/white"
-                    app:cornerRadius="20dp"
-                    app:elevation="0dp"
-                    app:strokeColor="#C5D3B8"
-                    app:strokeWidth="1.5dp" />
+                    android:text="Aksi 2" />
             </LinearLayout>
 
             <TextView
@@ -151,28 +137,28 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="40dp"
-                android:fontFamily="sans-serif-bold"
                 android:gravity="center"
                 android:text="Belum ada data"
-                android:textColor="#A09B8E"
-                android:textSize="16sp"
+                android:textColor="#8A8577"
+                android:textSize="15sp"
+                android:textStyle="bold"
                 android:visibility="gone" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvList"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_marginTop="20dp"
+                android:layout_marginTop="16dp"
                 android:layout_weight="1"
                 android:clipToPadding="false"
-                android:paddingBottom="12dp" />
+                android:paddingBottom="8dp" />
 
             <LinearLayout
                 android:id="@+id/paginationContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="start|center_vertical"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
                 android:orientation="horizontal"
                 android:visibility="gone">
 
@@ -182,20 +168,19 @@
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
                     android:minWidth="0dp"
-                    android:text="Prev"
+                    android:text="Sebelumnya"
                     android:textAllCaps="false"
-                    android:textColor="#5F7D49"
-                    android:textSize="12sp" />
+                    android:textColor="#5F7D49" />
 
                 <TextView
                     android:id="@+id/tvPageInfo"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginHorizontal="8dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="Hal 1/1"
+                    android:layout_marginHorizontal="10dp"
+                    android:text="Halaman 1 dari 1"
                     android:textColor="#6F695D"
-                    android:textSize="12sp" />
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnPageNext"
@@ -203,12 +188,10 @@
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
                     android:minWidth="0dp"
-                    android:text="Next"
+                    android:text="Berikutnya"
                     android:textAllCaps="false"
-                    android:textColor="#5F7D49"
-                    android:textSize="12sp" />
+                    android:textColor="#5F7D49" />
             </LinearLayout>
-
         </LinearLayout>
 
         <View
@@ -236,15 +219,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_marginEnd="20dp"
-        android:layout_marginBottom="24dp"
-        android:contentDescription="Tambah Produk"
+        android:layout_marginEnd="18dp"
+        android:layout_marginBottom="22dp"
         app:backgroundTint="#5F7D49"
         app:borderWidth="0dp"
         app:elevation="6dp"
-        app:maxImageSize="28dp"
-        app:rippleColor="#88FFFFFF"
         app:srcCompat="@android:drawable/ic_input_add"
         app:tint="#FFFFFF" />
-
 </FrameLayout>

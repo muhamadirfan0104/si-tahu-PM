@@ -12,6 +12,7 @@ import muhamad.irfan.si_tahu.util.AdapterSpinner
 import muhamad.irfan.si_tahu.util.ItemBaris
 
 abstract class AktivitasDaftarDasar : AktivitasDasar() {
+
     protected lateinit var binding: ActivityListScreenBinding
     protected lateinit var rowAdapter: AdapterBarisUmum
 
@@ -29,11 +30,15 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
 
         binding.rvList.layoutManager = LinearLayoutManager(this)
         binding.rvList.adapter = rowAdapter
-        binding.etSearch.addTextChangedListener { onSearchChanged() }
+
+        binding.etSearch.addTextChangedListener {
+            onSearchChanged()
+        }
 
         binding.buttonRow.isVisible = false
         binding.fabAdd.isVisible = false
         binding.paginationContainer.isVisible = false
+        binding.tvEmpty.isVisible = false
     }
 
     protected fun configureScreen(
@@ -62,7 +67,7 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         selectedIndex: Int = 0,
         onChange: () -> Unit
     ) {
-        binding.spSecondaryFilter.isVisible = true
+        binding.cardSecondaryFilter.isVisible = true
         binding.spSecondaryFilter.adapter = AdapterSpinner.stringAdapter(this, options)
         binding.spSecondaryFilter.setSelection(selectedIndex)
         binding.spSecondaryFilter.onItemSelectedListener = PendengarPilihItemSederhana(onChange)
@@ -77,7 +82,7 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
     }
 
     protected fun hideSecondaryFilter() {
-        binding.spSecondaryFilter.isVisible = false
+        binding.cardSecondaryFilter.isVisible = false
     }
 
     protected fun setPrimaryButton(label: String, listener: View.OnClickListener) {
@@ -115,19 +120,15 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         onNext: (() -> Unit)?
     ) {
         binding.paginationContainer.isVisible = totalPages > 1
-        binding.tvPageInfo.text = "Hal $currentPage/$totalPages"
+        binding.tvPageInfo.text = "Halaman $currentPage dari $totalPages"
 
         binding.btnPagePrev.isEnabled = onPrev != null
         binding.btnPagePrev.alpha = if (onPrev != null) 1f else 0.45f
-        binding.btnPagePrev.setOnClickListener {
-            onPrev?.invoke()
-        }
+        binding.btnPagePrev.setOnClickListener { onPrev?.invoke() }
 
         binding.btnPageNext.isEnabled = onNext != null
         binding.btnPageNext.alpha = if (onNext != null) 1f else 0.45f
-        binding.btnPageNext.setOnClickListener {
-            onNext?.invoke()
-        }
+        binding.btnPageNext.setOnClickListener { onNext?.invoke() }
     }
 
     protected fun hidePagination() {
@@ -146,9 +147,10 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         return binding.spSecondaryFilter.selectedItem?.toString().orEmpty()
     }
 
-    protected fun submitRows(rows: List<ItemBaris>) {
+    protected fun submitRows(rows: List<ItemBaris>, emptyMessage: String = "Belum ada data") {
         rowAdapter.submitList(rows)
         binding.tvEmpty.isVisible = rows.isEmpty()
+        binding.tvEmpty.text = emptyMessage
         binding.rvList.isVisible = rows.isNotEmpty()
     }
 

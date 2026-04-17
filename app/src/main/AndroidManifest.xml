@@ -28,9 +28,6 @@
         <activity android:name=".ui.stok.AktivitasDetailStok" />
         <activity android:name=".ui.stok.AktivitasMonitoringStok" />
         <activity android:name=".ui.produksi.AktivitasRiwayatProduksi" />
-        <activity android:name=".ui.produksi.AktivitasKonversi" />
-        <activity android:name=".ui.produksi.AktivitasProduksiDasar" />
-        <activity android:name=".ui.produksi.AktivitasMenuProduksi" />
         <activity android:name=".ui.pengguna.AktivitasFormPengguna" />
         <activity android:name=".ui.pengguna.AktivitasDaftarPengguna" />
         <activity android:name=".ui.pengaturan.AktivitasPengaturanUsaha" />
@@ -42,7 +39,9 @@
         <activity android:name=".ui.produk.AktivitasDaftarProduk" />
         <activity android:name=".ui.utama.AktivitasUtamaKasir" />
         <activity android:name=".ui.utama.AktivitasUtamaAdmin" />
-        <activity android:name=".ui.pengaturan.AktivitasPengaturanUsaha" />
+        <activity android:name=".ui.produksi.AktivitasProduksiTahuDasar" />
+        <activity android:name=".ui.produksi.AktivitasKonversiProduk" />
+        <activity android:name=".ui.stok.AktivitasAdjustmentStok" />
 
         <activity
             android:name=".ui.masuk.AktivitasMasuk"

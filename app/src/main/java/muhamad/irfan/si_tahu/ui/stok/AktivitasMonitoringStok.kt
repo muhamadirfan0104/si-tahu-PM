@@ -3,68 +3,51 @@ package muhamad.irfan.si_tahu.ui.stok
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import android.widget.PopupMenu
-import androidx.core.view.isVisible
-import androidx.core.view.updateLayoutParams
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
+import android.widget.TextView
+import androidx.core.widget.addTextChangedListener
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.R
-import muhamad.irfan.si_tahu.data.Produk
-import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
-import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
-import muhamad.irfan.si_tahu.ui.penjualan.AktivitasMenuPenjualan
-import muhamad.irfan.si_tahu.ui.produksi.AktivitasMenuProduksi
-import muhamad.irfan.si_tahu.ui.utama.AktivitasUtamaAdmin
+import muhamad.irfan.si_tahu.databinding.ActivityListScreenBinding
+import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
+import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
+import muhamad.irfan.si_tahu.ui.utama.PendengarPilihItemSederhana
+import muhamad.irfan.si_tahu.util.AdapterSpinner
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
 
-class AktivitasMonitoringStok : AktivitasDaftarDasar() {
+class AktivitasMonitoringStok : AktivitasDasar() {
 
-    private var products: List<Produk> = emptyList()
+    private lateinit var binding: ActivityListScreenBinding
+    private val firestore by lazy { FirebaseFirestore.getInstance() }
+
+    private val adapter by lazy {
+        AdapterBarisUmum(
+            onItemClick = { item ->
+                val intent = Intent(this, AktivitasDetailStok::class.java)
+                intent.putExtra(EXTRA_PRODUCT_ID, item.id)
+                startActivity(intent)
+            }
+        )
+    }
+
+    private val statusOptions = listOf("Semua Stok", "Aman", "Menipis", "Habis")
+    private var semuaProduk: List<ProdukStokItem> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        configureScreen("Monitoring Stok", "Pantau stok semua produk", showBack = false)
-        setPrimaryFilter(listOf("Semua", "Aman", "Menipis", "Habis")) { refresh() }
-        hideSecondaryFilter()
-        hideButtons()
-        setFabAdd {
-            startActivity(Intent(this, AktivitasStockAdjustment::class.java))
-        }
-        binding.bottomNavigation.isVisible = true
-        binding.bottomDivider.isVisible = true
-        binding.fabAdd.updateLayoutParams<android.widget.FrameLayout.LayoutParams> {
-            bottomMargin = (96 * resources.displayMetrics.density).toInt()
-        }
-        setupBottomNavigation()
-    }
+        binding = ActivityListScreenBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-    private fun setupBottomNavigation() {
-        binding.bottomNavigation.menu.clear()
-        binding.bottomNavigation.inflateMenu(R.menu.menu_bottom_admin)
-        binding.bottomNavigation.selectedItemId = R.id.nav_admin_stock
-        binding.bottomNavigation.setOnItemSelectedListener {
-            when (it.itemId) {
-                R.id.nav_admin_dashboard -> {
-                    startActivity(AktivitasUtamaAdmin.intent(this, R.id.nav_admin_dashboard, clearTop = true))
-                    true
-                }
-                R.id.nav_admin_menu -> {
-                    startActivity(AktivitasUtamaAdmin.intent(this, R.id.nav_admin_menu, clearTop = true))
-                    true
-                }
-                R.id.nav_admin_production -> {
-                    startActivity(Intent(this, AktivitasMenuProduksi::class.java))
-                    true
-                }
-                R.id.nav_admin_sales -> {
-                    startActivity(Intent(this, AktivitasMenuPenjualan::class.java))
-                    true
-                }
-                R.id.nav_admin_stock -> true
-                else -> false
-            }
-        }
+        bindToolbar(
+            binding.toolbar,
+            "Monitoring Stok",
+            "Pantau stok real-time dan status minimum"
+        )
+
+        setupView()
+        setupActions()
+        loadProducts()
     }
 
     override fun onResume() {
@@ -72,74 +55,149 @@ class AktivitasMonitoringStok : AktivitasDaftarDasar() {
         loadProducts()
     }
 
-    override fun onSearchChanged() = refresh()
+    private fun setupView() = with(binding) {
+        rvList.layoutManager = LinearLayoutManager(this@AktivitasMonitoringStok)
+        rvList.adapter = adapter
 
-    private fun productStatus(product: Produk): String = when {
-        product.stock <= 0 -> "Habis"
-        product.stock <= product.minStock -> "Menipis"
-        else -> "Aman"
+        spPrimaryFilter.adapter = AdapterSpinner.stringAdapter(
+            this@AktivitasMonitoringStok,
+            statusOptions
+        )
+
+        cardSecondaryFilter.visibility = View.GONE
+        buttonRow.visibility = View.VISIBLE
+        fabAdd.visibility = View.GONE
+
+        btnPrimary.text = "Adjustment"
+        btnSecondary.text = "Refresh"
+    }
+
+    private fun setupActions() = with(binding) {
+        btnPrimary.setOnClickListener {
+            startActivity(Intent(this@AktivitasMonitoringStok, AktivitasAdjustmentStok::class.java))
+        }
+
+        btnSecondary.setOnClickListener {
+            loadProducts()
+        }
+
+        etSearch.addTextChangedListener {
+            renderList()
+        }
+
+        spPrimaryFilter.onItemSelectedListener = PendengarPilihItemSederhana {
+            renderList()
+        }
     }
 
     private fun loadProducts() {
-        lifecycleScope.launch {
-            runCatching { RepositoriFirebaseUtama.muatMonitoringStok() }
-                .onSuccess {
-                    products = it
-                    refresh()
-                }
-                .onFailure {
-                    products = emptyList()
-                    submitRows(emptyList())
-                    showMessage(it.message ?: "Gagal memuat stok")
-                }
-        }
+        setEmptyStateVisible(false)
+
+        firestore.collection("produk")
+            .whereEqualTo("dihapus", false)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                semuaProduk = snapshot.documents.map { doc ->
+                    ProdukStokItem(
+                        id = doc.id,
+                        namaProduk = doc.getString("namaProduk").orEmpty(),
+                        jenisProduk = doc.getString("jenisProduk").orEmpty(),
+                        satuan = doc.getString("satuan").orEmpty(),
+                        stokSaatIni = doc.getLong("stokSaatIni") ?: 0L,
+                        stokMinimum = doc.getLong("stokMinimum") ?: 0L,
+                        aktifDijual = doc.getBoolean("aktifDijual") ?: true
+                    )
+                }.sortedBy { it.namaProduk.lowercase() }
+
+                renderList()
+            }
+            .addOnFailureListener { e ->
+                showMessage("Gagal memuat stok: ${e.message}")
+            }
     }
 
-    private fun refresh() {
-        val keyword = searchText()
-        val filter = primarySelection()
-        val rows = products.filter { product ->
-            val status = productStatus(product)
-            (filter == "Semua" || filter == status) &&
-                (keyword.isBlank() || product.name.lowercase().contains(keyword) || product.code.lowercase().contains(keyword))
-        }.map { product ->
-            val status = productStatus(product)
+    private fun renderList() {
+        val keyword = binding.etSearch.text?.toString()?.trim().orEmpty().lowercase()
+        val selectedStatus = statusOptions.getOrNull(binding.spPrimaryFilter.selectedItemPosition)
+            ?: statusOptions.first()
+
+        val filtered = semuaProduk.filter { produk ->
+            val cocokNama = keyword.isBlank() || produk.namaProduk.lowercase().contains(keyword)
+            val status = produk.statusStok()
+
+            val cocokStatus = when (selectedStatus) {
+                "Aman" -> status == "Aman"
+                "Menipis" -> status == "Menipis"
+                "Habis" -> status == "Habis"
+                else -> true
+            }
+
+            cocokNama && cocokStatus
+        }
+
+        val listItems = filtered.map { produk ->
             ItemBaris(
-                id = product.id,
-                title = product.name,
-                subtitle = "${product.code} • ${product.category} • ${product.unit}",
-                badge = status,
-                amount = "Stok ${product.stock} • Min ${product.minStock}",
-                priceStatus = if (product.showInCashier) "Tampil di kasir" else "Tidak tampil",
-                parameterStatus = if (product.active) "Aktif" else "Nonaktif",
-                tone = when (status) {
+                id = produk.id,
+                title = produk.namaProduk,
+                subtitle = "${produk.jenisProduk} • Minimum ${produk.stokMinimum} ${produk.satuan}",
+                badge = if (produk.aktifDijual) "Aktif" else "Nonaktif",
+                amount = "${produk.stokSaatIni} ${produk.satuan}",
+                priceStatus = produk.statusStok(),
+                parameterStatus = "",
+                tone = when (produk.statusStok()) {
                     "Aman" -> WarnaBaris.GREEN
                     "Menipis" -> WarnaBaris.GOLD
-                    else -> WarnaBaris.ORANGE
+                    else -> WarnaBaris.RED
                 },
-                priceTone = WarnaBaris.BLUE,
-                parameterTone = if (product.active) WarnaBaris.GREEN else WarnaBaris.ORANGE,
-                actionLabel = "⋮"
+                priceTone = when (produk.statusStok()) {
+                    "Aman" -> WarnaBaris.GREEN
+                    "Menipis" -> WarnaBaris.GOLD
+                    else -> WarnaBaris.RED
+                }
             )
         }
-        submitRows(rows)
-    }
 
-    override fun onRowClick(item: ItemBaris) {
-        startActivity(Intent(this, AktivitasDetailStok::class.java).putExtra(AktivitasDetailStok.EXTRA_PRODUCT_ID, item.id))
-    }
+        adapter.submitList(listItems)
 
-    override fun onRowAction(item: ItemBaris, anchor: View) {
-        PopupMenu(this, anchor).apply {
-            menu.add("Lihat detail stok")
-            menu.add("Adjustment")
-            setOnMenuItemClickListener {
-                when (it.title.toString()) {
-                    "Lihat detail stok" -> onRowClick(item)
-                    "Adjustment" -> startActivity(Intent(this@AktivitasMonitoringStok, AktivitasStockAdjustment::class.java).putExtra(AktivitasStockAdjustment.EXTRA_PRODUCT_ID, item.id))
-                }
-                true
+        if (listItems.isEmpty()) {
+            val emptyText = if (semuaProduk.isEmpty()) {
+                "Belum ada data produk"
+            } else {
+                "Tidak ada data yang cocok"
             }
-        }.show()
+            setEmptyStateVisible(true, emptyText)
+        } else {
+            setEmptyStateVisible(false)
+        }
+    }
+
+    private fun setEmptyStateVisible(visible: Boolean, text: String = "") {
+        val emptyView = findViewById<TextView?>(R.id.tvEmpty)
+        emptyView?.visibility = if (visible) View.VISIBLE else View.GONE
+        if (text.isNotBlank()) {
+            emptyView?.text = text
+        }
+    }
+
+    companion object {
+        const val EXTRA_PRODUCT_ID = "extra_product_id"
+    }
+}
+
+data class ProdukStokItem(
+    val id: String,
+    val namaProduk: String,
+    val jenisProduk: String,
+    val satuan: String,
+    val stokSaatIni: Long,
+    val stokMinimum: Long,
+    val aktifDijual: Boolean
+) {
+    fun statusStok(): String {
+        return when {
+            stokSaatIni <= 0L -> "Habis"
+            stokSaatIni <= stokMinimum -> "Menipis"
+            else -> "Aman"
+        }
     }
 }

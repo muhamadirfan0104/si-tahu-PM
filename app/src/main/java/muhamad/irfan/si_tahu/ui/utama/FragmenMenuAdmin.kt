@@ -115,7 +115,6 @@ class FragmenMenuAdmin : FragmenDasar(R.layout.fragment_admin_menu) {
 
                 currentUserDoc = doc
                 currentProfile = profile
-
                 applyVisibility(profile)
             }
             .addOnFailureListener { e ->
