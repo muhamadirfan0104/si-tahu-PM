@@ -1,4 +1,3 @@
-// AdapterProduk.kt
 package muhamad.irfan.si_tahu.ui.umum
 
 import android.view.LayoutInflater
@@ -6,12 +5,13 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.data.Produk
-import muhamad.irfan.si_tahu.data.RepositoriLokal
 import muhamad.irfan.si_tahu.databinding.ItemProductCardBinding
 import muhamad.irfan.si_tahu.util.Formatter
 
 class AdapterProduk(
-    private val onAdd: (Produk) -> Unit
+    private val onAdd: (Produk) -> Unit,
+    private val getHarga: (Produk) -> Long,
+    private val getStatus: (Produk) -> String
 ) : RecyclerView.Adapter<AdapterProduk.PenampungProduk>() {
 
     private val items = mutableListOf<Produk>()
@@ -39,9 +39,9 @@ class AdapterProduk(
         fun bind(item: Produk) {
             binding.tvTitle.text = item.name
             binding.tvSubtitle.text = "Stok ${item.stock} ${item.unit} • Minimum ${item.minStock}"
-            binding.tvPrice.text = Formatter.currency(RepositoriLokal.defaultChannel(item)?.price ?: 0)
+            binding.tvPrice.text = Formatter.currency(getHarga(item))
             binding.tvCategory.text = item.category
-            val status = RepositoriLokal.productStatus(item)
+            val status = getStatus(item)
             binding.tvStatus.text = status
 
             val tone = when (status) {

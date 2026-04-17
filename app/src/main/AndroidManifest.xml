@@ -20,6 +20,17 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <activity android:name=".ui.penjualan.AktivitasRiwayatPenjualan" />
+        <activity android:name=".ui.penjualan.AktivitasRekapPasar" />
+        <activity android:name=".ui.penjualan.AktivitasPenjualanRumahan" />
+        <activity android:name=".ui.penjualan.AktivitasMenuPenjualan" />
+        <activity android:name=".ui.stok.AktivitasStockAdjustment" />
+        <activity android:name=".ui.stok.AktivitasDetailStok" />
+        <activity android:name=".ui.stok.AktivitasMonitoringStok" />
+        <activity android:name=".ui.produksi.AktivitasRiwayatProduksi" />
+        <activity android:name=".ui.produksi.AktivitasKonversi" />
+        <activity android:name=".ui.produksi.AktivitasProduksiDasar" />
+        <activity android:name=".ui.produksi.AktivitasMenuProduksi" />
         <activity android:name=".ui.pengguna.AktivitasFormPengguna" />
         <activity android:name=".ui.pengguna.AktivitasDaftarPengguna" />
         <activity android:name=".ui.pengaturan.AktivitasPengaturanUsaha" />

@@ -53,11 +53,11 @@ class AktivitasMasuk : AktivitasDasar() {
 
     private fun loadBusinessIdentity() {
         firestore.collection("pengaturan")
-            .document("usaha")
+            .document("umum")
             .get()
             .addOnSuccessListener { doc ->
-                val logoText = doc.getString("logoText").orEmpty().trim()
-                val namaUsaha = doc.getString("namaUsaha").orEmpty().trim()
+                val logoText = doc.getString("teksLogo").orEmpty().ifBlank { doc.getString("logoText").orEmpty() }.trim()
+                val namaUsaha = doc.getString("namaTampilanToko").orEmpty().ifBlank { doc.getString("namaUsaha").orEmpty() }.trim()
 
                 binding.tvLogo.text = if (logoText.isBlank()) {
                     "TAHU"

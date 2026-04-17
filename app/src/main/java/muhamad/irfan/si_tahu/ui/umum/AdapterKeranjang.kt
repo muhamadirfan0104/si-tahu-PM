@@ -1,18 +1,18 @@
-// AdapterKeranjang.kt
 package muhamad.irfan.si_tahu.ui.umum
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import muhamad.irfan.si_tahu.data.ItemKeranjang
-import muhamad.irfan.si_tahu.data.RepositoriLokal
+import muhamad.irfan.si_tahu.data.Produk
 import muhamad.irfan.si_tahu.databinding.ItemCartRowBinding
 import muhamad.irfan.si_tahu.util.Formatter
 
 class AdapterKeranjang(
     private val onIncrease: (ItemKeranjang) -> Unit,
     private val onDecrease: (ItemKeranjang) -> Unit,
-    private val onRemove: (ItemKeranjang) -> Unit
+    private val onRemove: (ItemKeranjang) -> Unit,
+    private val getProduk: (String) -> Produk?
 ) : RecyclerView.Adapter<AdapterKeranjang.PenampungKeranjang>() {
 
     private val items = mutableListOf<ItemKeranjang>()
@@ -38,7 +38,7 @@ class AdapterKeranjang(
         private val binding: ItemCartRowBinding
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: ItemKeranjang) {
-            val product = RepositoriLokal.getProduct(item.productId)
+            val product = getProduk(item.productId)
             binding.tvTitle.text = product?.name ?: "Produk"
             binding.tvSubtitle.text = "${item.qty} x ${Formatter.currency(item.price)}"
             binding.tvQty.text = item.qty.toString()

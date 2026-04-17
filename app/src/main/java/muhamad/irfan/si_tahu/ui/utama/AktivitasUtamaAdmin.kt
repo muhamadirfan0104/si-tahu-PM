@@ -10,6 +10,9 @@ import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.databinding.ActivityRoleMainBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.masuk.AktivitasMasuk
+import muhamad.irfan.si_tahu.ui.penjualan.AktivitasMenuPenjualan
+import muhamad.irfan.si_tahu.ui.produksi.AktivitasMenuProduksi
+import muhamad.irfan.si_tahu.ui.stok.AktivitasMonitoringStok
 
 class AktivitasUtamaAdmin : AktivitasDasar() {
 
@@ -25,7 +28,7 @@ class AktivitasUtamaAdmin : AktivitasDasar() {
         super.onCreate(savedInstanceState)
 
         if (auth.currentUser == null) {
-            startActivity(AktivitasUtamaAdmin.intent(this, R.id.nav_admin_menu, clearTop = true))
+            startActivity(Intent(this, AktivitasMasuk::class.java))
             finish()
             return
         }
@@ -43,6 +46,18 @@ class AktivitasUtamaAdmin : AktivitasDasar() {
                     selectedTabId = it.itemId
                     showTab(it.itemId)
                     true
+                }
+                R.id.nav_admin_production -> {
+                    startActivity(Intent(this, AktivitasMenuProduksi::class.java))
+                    false
+                }
+                R.id.nav_admin_sales -> {
+                    startActivity(Intent(this, AktivitasMenuPenjualan::class.java))
+                    false
+                }
+                R.id.nav_admin_stock -> {
+                    startActivity(Intent(this, AktivitasMonitoringStok::class.java))
+                    false
                 }
                 else -> false
             }

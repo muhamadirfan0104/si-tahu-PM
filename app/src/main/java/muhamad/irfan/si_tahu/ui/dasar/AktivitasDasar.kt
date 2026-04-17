@@ -18,7 +18,6 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.auth.FirebaseAuth
 import muhamad.irfan.si_tahu.R
-import muhamad.irfan.si_tahu.data.RepositoriLokal
 import muhamad.irfan.si_tahu.ui.masuk.AktivitasMasuk
 import muhamad.irfan.si_tahu.util.PembantuCetak
 import muhamad.irfan.si_tahu.util.PembantuModal
@@ -29,7 +28,6 @@ open class AktivitasDasar : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        RepositoriLokal.init(applicationContext)
         super.onCreate(savedInstanceState)
         window.statusBarColor = ContextCompat.getColor(this, R.color.screen_bg_light)
         window.navigationBarColor = ContextCompat.getColor(this, R.color.card_surface)

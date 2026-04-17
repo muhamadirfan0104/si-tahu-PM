@@ -13,7 +13,7 @@ class AktivitasPengaturanUsaha : AktivitasDasar() {
     private val firestore by lazy { FirebaseFirestore.getInstance() }
 
     private val docRef by lazy {
-        firestore.collection("pengaturan").document("usaha")
+        firestore.collection("pengaturan").document("umum")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,12 +58,12 @@ class AktivitasPengaturanUsaha : AktivitasDasar() {
         docRef.get()
             .addOnSuccessListener { doc ->
                 if (doc.exists()) {
-                    binding.etBusinessName.setText(doc.getString("namaUsaha").orEmpty())
-                    binding.etAddress.setText(doc.getString("alamat").orEmpty())
+                    binding.etBusinessName.setText(doc.getString("namaTampilanToko").orEmpty().ifBlank { doc.getString("namaUsaha").orEmpty() })
+                    binding.etAddress.setText(doc.getString("alamatToko").orEmpty().ifBlank { doc.getString("alamat").orEmpty() })
                     binding.etPhone.setText(doc.getString("nomorTelepon").orEmpty())
-                    binding.etLogoText.setText(doc.getString("logoText").orEmpty())
+                    binding.etLogoText.setText(doc.getString("teksLogo").orEmpty().ifBlank { doc.getString("logoText").orEmpty() })
                     binding.etReceiptFooter.setText(doc.getString("footerStruk").orEmpty())
-                    binding.etBusinessNote.setText(doc.getString("catatanUsaha").orEmpty())
+                    binding.etBusinessNote.setText(doc.getString("namaPemilik").orEmpty().ifBlank { doc.getString("catatanUsaha").orEmpty() })
                 }
 
                 updatePreview()
@@ -110,17 +110,17 @@ class AktivitasPengaturanUsaha : AktivitasDasar() {
                 val now = Timestamp.now()
 
                 val data = hashMapOf<String, Any>(
-                    "namaUsaha" to namaUsaha,
-                    "alamat" to alamat,
+                    "namaTampilanToko" to namaUsaha,
+                    "namaPemilik" to catatanUsaha,
+                    "alamatToko" to alamat,
                     "nomorTelepon" to nomorTelepon,
-                    "logoText" to logoText,
+                    "teksLogo" to logoText,
                     "footerStruk" to footerStruk,
-                    "catatanUsaha" to catatanUsaha,
+                    "aktif" to true,
                     "diperbaruiPada" to now
                 )
 
                 if (!doc.exists()) {
-                    data["dibuatPada"] = now
                 }
 
                 docRef.set(data)

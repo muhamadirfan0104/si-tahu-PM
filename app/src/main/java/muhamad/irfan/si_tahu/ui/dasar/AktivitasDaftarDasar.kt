@@ -39,9 +39,10 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
     protected fun configureScreen(
         title: String,
         subtitle: String? = null,
-        searchHint: String = "Cari data..."
+        searchHint: String = "Cari data...",
+        showBack: Boolean = true
     ) {
-        bindToolbar(binding.toolbar, title, subtitle)
+        bindToolbar(binding.toolbar, title, subtitle, showBack)
         binding.etSearch.hint = searchHint
     }
 

@@ -10,6 +10,8 @@ import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.databinding.ActivityRoleMainBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.masuk.AktivitasMasuk
+import muhamad.irfan.si_tahu.ui.penjualan.AktivitasPenjualanRumahan
+import muhamad.irfan.si_tahu.ui.penjualan.AktivitasRiwayatPenjualan
 
 class AktivitasUtamaKasir : AktivitasDasar() {
 
@@ -24,7 +26,7 @@ class AktivitasUtamaKasir : AktivitasDasar() {
         super.onCreate(savedInstanceState)
 
         if (auth.currentUser == null) {
-            startActivity(AktivitasUtamaKasir.intent(this, R.id.nav_cashier_menu, clearTop = true))
+            startActivity(Intent(this, AktivitasMasuk::class.java))
             finish()
             return
         }
@@ -41,6 +43,14 @@ class AktivitasUtamaKasir : AktivitasDasar() {
                 R.id.nav_cashier_menu -> {
                     showTab(it.itemId)
                     true
+                }
+                R.id.nav_cashier_sale -> {
+                    startActivity(Intent(this, AktivitasPenjualanRumahan::class.java))
+                    false
+                }
+                R.id.nav_cashier_history -> {
+                    startActivity(Intent(this, AktivitasRiwayatPenjualan::class.java))
+                    false
                 }
                 else -> false
             }

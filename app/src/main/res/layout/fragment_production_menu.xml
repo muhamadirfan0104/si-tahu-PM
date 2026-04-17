@@ -21,12 +21,13 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:orientation="vertical">
-            <com.google.android.material.button.MaterialButton android:id="@+id/btnBasicProduction" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Produksi Dasar" />
-            <com.google.android.material.button.MaterialButton android:id="@+id/btnConversion" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Produksi Turunan" />
-            <com.google.android.material.button.MaterialButton android:id="@+id/btnProductionHistory" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Riwayat Produksi" />
-            <com.google.android.material.button.MaterialButton android:id="@+id/btnParameterList" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Parameter Produksi" />
-        </LinearLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Aksi produksi ada di tombol kanan bawah"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textColor="@color/text_secondary" />
 
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:text="Aktivitas produksi terbaru" android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
         <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvProductionRecent" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:nestedScrollingEnabled="false" />
