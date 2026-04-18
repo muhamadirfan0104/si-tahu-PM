@@ -42,6 +42,7 @@
         <activity android:name=".ui.produksi.AktivitasProduksiTahuDasar" />
         <activity android:name=".ui.produksi.AktivitasKonversiProduk" />
         <activity android:name=".ui.stok.AktivitasAdjustmentStok" />
+        <activity android:name=".ui.penjualan.AktivitasCheckoutRumahan" />
 
         <activity
             android:name=".ui.masuk.AktivitasMasuk"

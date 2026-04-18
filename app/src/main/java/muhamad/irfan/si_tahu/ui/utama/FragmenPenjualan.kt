@@ -1,12 +1,18 @@
 package muhamad.irfan.si_tahu.ui.utama
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.R
-import muhamad.irfan.si_tahu.data.RepositoriLokal
+import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.databinding.FragmentSalesMenuBinding
 import muhamad.irfan.si_tahu.ui.dasar.FragmenDasar
+import muhamad.irfan.si_tahu.ui.penjualan.AktivitasPenjualanRumahan
+import muhamad.irfan.si_tahu.ui.penjualan.AktivitasRekapPasar
+import muhamad.irfan.si_tahu.ui.penjualan.AktivitasRiwayatPenjualan
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
@@ -18,7 +24,7 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
     private val binding get() = _binding!!
 
     private val recentAdapter by lazy {
-        AdapterBarisUmum(onItemClick = {})
+        AdapterBarisUmum(onItemClick = ::openDetailPenjualan)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -34,7 +40,9 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
 
     override fun onResume() {
         super.onResume()
-        if (_binding != null) renderSummary()
+        if (_binding != null) {
+            renderSummary()
+        }
     }
 
     private fun setupView() = with(binding) {
@@ -43,60 +51,108 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
     }
 
     private fun setupActions() = with(binding) {
+        // Flow baru: page katalog -> cart action -> checkout page
         btnHomeSales.setOnClickListener {
-            showMessage(root, "Penjualan Rumahan kita pasang penuh di step berikutnya.")
+            startActivity(Intent(requireContext(), AktivitasPenjualanRumahan::class.java))
         }
 
         btnMarketRecap.setOnClickListener {
-            showMessage(root, "Rekap Penjualan Pasar kita pasang penuh di step berikutnya.")
+            startActivity(Intent(requireContext(), AktivitasRekapPasar::class.java))
         }
 
         btnSalesHistory.setOnClickListener {
-            showMessage(root, "Riwayat penjualan detail kita lanjut setelah form penjualan jadi.")
+            startActivity(Intent(requireContext(), AktivitasRiwayatPenjualan::class.java))
         }
     }
 
-    private fun renderSummary() = with(binding) {
-        val sales = RepositoriLokal.db().sales
+    private fun renderSummary() {
+        val currentBinding = _binding ?: return
 
-        val totalSales = sales.sumOf { it.total }
-        val totalCount = sales.size
-        val totalQty = sales.sumOf { sale -> sale.items.sumOf { it.qty } }
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { RepositoriFirebaseUtama.muatRingkasanPenjualan() }
+                .onSuccess { summary ->
+                    currentBinding.tvSalesHeader.text = "Penjualan hari ini"
+                    currentBinding.tvSalesTotal.text = Formatter.currency(summary.totalHariIni)
+                    currentBinding.tvCashierTotal.text =
+                        "Rumahan: ${Formatter.currency(summary.totalKasirHariIni)}"
+                    currentBinding.tvRecapTotal.text =
+                        "Pasar: ${Formatter.currency(summary.totalRekapHariIni)}"
+                    currentBinding.tvSalesCount.text =
+                        "Transaksi: ${summary.jumlahTransaksiHariIni}"
+                    currentBinding.tvSoldQty.text =
+                        "Qty terjual: ${summary.totalItemHariIni}"
 
-        tvSalesHeader.text = "Penjualan hari ini"
-        tvSalesTotal.text = Formatter.currency(totalSales)
-        tvCashierTotal.text = "Rumahan: ${Formatter.currency(totalSales)}"
-        tvRecapTotal.text = "Pasar: ${Formatter.currency(0)}"
-        tvSalesCount.text = "Transaksi: $totalCount"
-        tvSoldQty.text = "Qty terjual: $totalQty"
+                    val rows = summary.recentRows.map {
+                        ItemBaris(
+                            id = it.id,
+                            title = it.title,
+                            subtitle = it.subtitle,
+                            badge = it.badge,
+                            amount = it.amount,
+                            tone = when (it.badge) {
+                                "Rumahan" -> WarnaBaris.GREEN
+                                "PASAR" -> WarnaBaris.BLUE
+                                else -> WarnaBaris.GOLD
+                            },
+                            actionLabel = "⋮"
+                        )
+                    }
 
-        val items = sales.take(6).map { sale ->
-            ItemBaris(
-                id = sale.id,
-                title = if (sale.source.equals("RUMAHAN", true)) "Penjualan Rumahan" else "Penjualan",
-                subtitle = "${sale.items.size} item • ${sale.paymentMethod}",
-                badge = sale.source,
-                amount = Formatter.currency(sale.total),
-                tone = WarnaBaris.BLUE
-            )
-        }
-
-        recentAdapter.submitList(
-            if (items.isEmpty()) {
-                listOf(
-                    ItemBaris(
-                        id = "placeholder-sales",
-                        title = "Belum ada transaksi",
-                        subtitle = "Penjualan Rumahan dan Rekap Pasar akan kita pasang berikutnya",
-                        badge = "Draft",
-                        amount = Formatter.currency(0),
-                        tone = WarnaBaris.GOLD
+                    recentAdapter.submitList(
+                        if (rows.isEmpty()) {
+                            listOf(
+                                ItemBaris(
+                                    id = "empty-sales",
+                                    title = "Belum ada transaksi penjualan",
+                                    subtitle = "Penjualan Rumahan dan Rekap Pasar yang tersimpan akan tampil paling atas di sini",
+                                    badge = "Kosong",
+                                    amount = Formatter.currency(0),
+                                    tone = WarnaBaris.GOLD
+                                )
+                            )
+                        } else {
+                            rows
+                        }
                     )
-                )
-            } else {
-                items
-            }
-        )
+                }
+                .onFailure {
+                    currentBinding.tvSalesHeader.text = "Penjualan hari ini"
+                    currentBinding.tvSalesTotal.text = Formatter.currency(0)
+                    currentBinding.tvCashierTotal.text = "Rumahan: ${Formatter.currency(0)}"
+                    currentBinding.tvRecapTotal.text = "Pasar: ${Formatter.currency(0)}"
+                    currentBinding.tvSalesCount.text = "Transaksi: 0"
+                    currentBinding.tvSoldQty.text = "Qty terjual: 0"
+
+                    recentAdapter.submitList(
+                        listOf(
+                            ItemBaris(
+                                id = "error-sales",
+                                title = "Ringkasan belum bisa dimuat",
+                                subtitle = it.message ?: "Terjadi kendala saat mengambil data penjualan",
+                                badge = "Error",
+                                amount = "",
+                                tone = WarnaBaris.RED
+                            )
+                        )
+                    )
+
+                    showMessage(requireView(), it.message ?: "Gagal memuat ringkasan penjualan")
+                }
+        }
+    }
+
+    private fun openDetailPenjualan(item: ItemBaris) {
+        if (item.id == "empty-sales" || item.id == "error-sales") return
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
+                .onSuccess { detail ->
+                    showReceiptModal("Detail Penjualan", detail, "Bagikan")
+                }
+                .onFailure {
+                    showMessage(requireView(), it.message ?: "Gagal memuat detail penjualan")
+                }
+        }
     }
 
     override fun onDestroyView() {

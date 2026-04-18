@@ -108,7 +108,7 @@ class FragmenDasborAdmin : FragmenDasar(R.layout.fragment_admin_dashboard) {
                             badge = it.badge,
                             tone = when (it.badge) {
                                 "Rumahan", "Produksi Dasar" -> WarnaBaris.GREEN
-                                "Konversi", "PASAR", "RESELLER" -> WarnaBaris.BLUE
+                                "Konversi", "Pasar" -> WarnaBaris.BLUE
                                 else -> WarnaBaris.GOLD
                             }
                         )
@@ -124,7 +124,10 @@ class FragmenDasborAdmin : FragmenDasar(R.layout.fragment_admin_dashboard) {
 
     private fun openRecentDetail(item: ItemBaris) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val detail = RepositoriFirebaseUtama.buildTransactionDetailText(item.id, item.title)
+            val detail = RepositoriFirebaseUtama.buildTransactionDetailText(
+                id = item.id,
+                type = "${item.title} ${item.badge}"
+            )
             showDetailModal("Detail Aktivitas", detail)
         }
     }

@@ -1,5 +1,6 @@
 package muhamad.irfan.si_tahu.ui.penjualan
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.PopupMenu
@@ -12,15 +13,29 @@ import muhamad.irfan.si_tahu.util.WarnaBaris
 
 class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
 
-    private var rows: List<ItemBaris> = emptyList()
+    private var semuaRows: List<ItemBaris> = emptyList()
+    private var filteredRows: List<ItemBaris> = emptyList()
+
+    private var halamanSaatIni = 1
+    private val itemPerHalaman = 10
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         configureScreen("Riwayat Penjualan", "Rumahan dan pasar")
-        setPrimaryFilter(listOf("Semua", "Rumahan", "PASAR", "RESELLER")) { refresh() }
+
+        setPrimaryFilter(listOf("Semua", "Rumahan", "Pasar")) {
+            halamanSaatIni = 1
+            refresh()
+        }
         hideSecondaryFilter()
-        setPrimaryButton("Penjualan Rumahan") { startActivity(android.content.Intent(this, AktivitasPenjualanRumahan::class.java)) }
-        setSecondaryButton("Rekap Pasar") { startActivity(android.content.Intent(this, AktivitasRekapPasar::class.java)) }
+
+        setPrimaryButton("Penjualan Rumahan") {
+            startActivity(Intent(this, AktivitasPenjualanRumahan::class.java))
+        }
+
+        setSecondaryButton("Rekap Pasar") {
+            startActivity(Intent(this, AktivitasRekapPasar::class.java))
+        }
     }
 
     override fun onResume() {
@@ -28,13 +43,16 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         buildRows()
     }
 
-    override fun onSearchChanged() = refresh()
+    override fun onSearchChanged() {
+        halamanSaatIni = 1
+        refresh()
+    }
 
     private fun buildRows() {
         lifecycleScope.launch {
             runCatching { RepositoriFirebaseUtama.muatRiwayatPenjualan() }
                 .onSuccess { sales ->
-                    rows = sales.map {
+                    semuaRows = sales.map {
                         ItemBaris(
                             id = it.id,
                             title = it.title,
@@ -45,11 +63,15 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                             actionLabel = "⋮"
                         )
                     }
+                    halamanSaatIni = 1
                     refresh()
                 }
                 .onFailure {
-                    rows = emptyList()
-                    submitRows(emptyList())
+                    semuaRows = emptyList()
+                    filteredRows = emptyList()
+                    halamanSaatIni = 1
+                    hidePagination()
+                    submitRows(emptyList(), "Riwayat penjualan belum tersedia")
                     showMessage(it.message ?: "Gagal memuat riwayat penjualan")
                 }
         }
@@ -58,15 +80,72 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
     private fun refresh() {
         val keyword = searchText()
         val filter = primarySelection()
-        submitRows(rows.filter {
+
+        filteredRows = semuaRows.filter {
             (filter == "Semua" || it.badge == filter) &&
-                (keyword.isBlank() || it.title.lowercase().contains(keyword) || it.subtitle.lowercase().contains(keyword))
-        })
+                    (
+                            keyword.isBlank() ||
+                                    it.title.lowercase().contains(keyword) ||
+                                    it.subtitle.lowercase().contains(keyword) ||
+                                    it.badge.lowercase().contains(keyword)
+                            )
+        }
+
+        val totalPages =
+            if (filteredRows.isEmpty()) 1 else ((filteredRows.size - 1) / itemPerHalaman) + 1
+
+        if (halamanSaatIni > totalPages) halamanSaatIni = totalPages
+        if (halamanSaatIni < 1) halamanSaatIni = 1
+
+        val fromIndex = (halamanSaatIni - 1) * itemPerHalaman
+        val untilIndex = minOf(fromIndex + itemPerHalaman, filteredRows.size)
+
+        val currentPageRows = if (filteredRows.isEmpty()) {
+            emptyList()
+        } else {
+            filteredRows.subList(fromIndex, untilIndex)
+        }
+
+        submitRows(
+            currentPageRows,
+            if (semuaRows.isEmpty()) "Belum ada riwayat penjualan" else "Tidak ada data yang cocok"
+        )
+
+        if (filteredRows.isEmpty()) {
+            hidePagination()
+        } else {
+            showPagination(
+                currentPage = halamanSaatIni,
+                totalPages = totalPages,
+                onPrev = if (halamanSaatIni > 1) {
+                    {
+                        halamanSaatIni--
+                        refresh()
+                    }
+                } else {
+                    null
+                },
+                onNext = if (halamanSaatIni < totalPages) {
+                    {
+                        halamanSaatIni++
+                        refresh()
+                    }
+                } else {
+                    null
+                }
+            )
+        }
     }
 
     override fun onRowClick(item: ItemBaris) {
         lifecycleScope.launch {
-            showReceiptModal("Detail Penjualan", RepositoriFirebaseUtama.buildReceiptText(item.id), "Bagikan")
+            runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
+                .onSuccess { detail ->
+                    showReceiptModal("Detail Penjualan", detail, "Bagikan")
+                }
+                .onFailure {
+                    showMessage(it.message ?: "Gagal memuat detail penjualan")
+                }
         }
     }
 
@@ -75,11 +154,18 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
             menu.add("Lihat detail")
             menu.add("Bagikan")
             menu.add("Hapus")
+
             setOnMenuItemClickListener {
                 when (it.title.toString()) {
                     "Lihat detail" -> onRowClick(item)
                     "Bagikan" -> lifecycleScope.launch {
-                        sharePlainText("Penjualan ${item.id}", RepositoriFirebaseUtama.buildReceiptText(item.id))
+                        runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
+                            .onSuccess { detail ->
+                                sharePlainText("Penjualan ${item.title}", detail)
+                            }
+                            .onFailure {
+                                showMessage(it.message ?: "Gagal membagikan detail penjualan")
+                            }
                     }
                     "Hapus" -> confirmDelete(item)
                 }
@@ -89,14 +175,19 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
     }
 
     private fun confirmDelete(item: ItemBaris) {
-        showConfirmationModal("Hapus transaksi", "Transaksi ${item.title} akan dihapus dan stok produk dikembalikan.") {
+        showConfirmationModal(
+            "Hapus transaksi",
+            "Transaksi ${item.title} akan dihapus dan stok produk dikembalikan."
+        ) {
             lifecycleScope.launch {
                 runCatching { RepositoriFirebaseUtama.hapusPenjualan(item.id) }
                     .onSuccess {
                         buildRows()
                         showMessage("Transaksi berhasil dihapus")
                     }
-                    .onFailure { showMessage(it.message ?: "Gagal menghapus transaksi") }
+                    .onFailure {
+                        showMessage(it.message ?: "Gagal menghapus transaksi")
+                    }
             }
         }
     }
