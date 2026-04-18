@@ -8,9 +8,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.R
+import muhamad.irfan.si_tahu.ui.stok.AktivitasStockAdjustment
 import muhamad.irfan.si_tahu.databinding.FragmentStockListBinding
 import muhamad.irfan.si_tahu.ui.dasar.FragmenDasar
-import muhamad.irfan.si_tahu.ui.stok.AktivitasAdjustmentStok
 import muhamad.irfan.si_tahu.ui.stok.AktivitasDetailStok
 import muhamad.irfan.si_tahu.ui.stok.AktivitasMonitoringStok
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
@@ -35,7 +35,7 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
         AdapterBarisUmum(
             onItemClick = { item ->
                 val intent = Intent(requireContext(), AktivitasDetailStok::class.java)
-                intent.putExtra(AktivitasMonitoringStok.EXTRA_PRODUCT_ID, item.id)
+                intent.putExtra(AktivitasStockAdjustment.EXTRA_PRODUCT_ID, item.id)
                 startActivity(intent)
             }
         )
@@ -76,7 +76,7 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
         }
 
         btnAdjustment.setOnClickListener {
-            startActivity(Intent(requireContext(), AktivitasAdjustmentStok::class.java))
+            startActivity(Intent(requireContext(), AktivitasStockAdjustment::class.java))
         }
 
         btnPrevPage.setOnClickListener {

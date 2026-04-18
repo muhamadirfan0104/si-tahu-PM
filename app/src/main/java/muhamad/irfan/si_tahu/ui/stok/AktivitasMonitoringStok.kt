@@ -74,7 +74,7 @@ class AktivitasMonitoringStok : AktivitasDasar() {
 
     private fun setupActions() = with(binding) {
         btnPrimary.setOnClickListener {
-            startActivity(Intent(this@AktivitasMonitoringStok, AktivitasAdjustmentStok::class.java))
+            startActivity(Intent(this@AktivitasMonitoringStok, AktivitasStockAdjustment::class.java))
         }
 
         btnSecondary.setOnClickListener {

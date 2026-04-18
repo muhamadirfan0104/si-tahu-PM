@@ -22,7 +22,12 @@ class AktivitasStockAdjustment : AktivitasDasar() {
 
         binding = ActivityStockAdjustmentBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        bindToolbar(binding.toolbar, "Stock Adjustment", "Tambah atau kurangi stok")
+
+        bindToolbar(
+            binding.toolbar,
+            "Stock Adjustment",
+            "Sesuaikan stok fisik dengan stok sistem"
+        )
 
         setupForm()
         loadProducts()
@@ -30,23 +35,46 @@ class AktivitasStockAdjustment : AktivitasDasar() {
 
     private fun setupForm() {
         binding.etDate.setText(Formatter.currentDateOnly())
+
         binding.etDate.setOnClickListener {
-            PembantuPilihTanggalWaktu.showDatePicker(this, binding.etDate.text?.toString()) { binding.etDate.setText(it) }
+            PembantuPilihTanggalWaktu.showDatePicker(
+                this,
+                binding.etDate.text?.toString()
+            ) { selectedDate ->
+                binding.etDate.setText(selectedDate)
+            }
         }
-        binding.spType.adapter = AdapterSpinner.stringAdapter(this, listOf("Tambah stok", "Kurangi stok"))
-        binding.btnSave.setOnClickListener { saveAdjustment() }
+
+        binding.spType.adapter = AdapterSpinner.stringAdapter(
+            this,
+            listOf("Tambah stok", "Kurangi stok")
+        )
+
+        binding.btnSave.setOnClickListener {
+            saveAdjustment()
+        }
     }
 
     private fun loadProducts() {
         lifecycleScope.launch {
             runCatching { RepositoriFirebaseUtama.muatSemuaProduk() }
-                .onSuccess {
-                    products = it
-                    val labels = if (products.isEmpty()) listOf("Belum ada produk") else products.map { produk -> "${produk.code} • ${produk.name}" }
-                    binding.spProduct.adapter = AdapterSpinner.stringAdapter(this@AktivitasStockAdjustment, labels)
+                .onSuccess { result ->
+                    products = result
+
+                    val labels = if (products.isEmpty()) {
+                        listOf("Belum ada produk")
+                    } else {
+                        products.map { "${it.name} • stok ${it.stock} ${it.unit}" }
+                    }
+
+                    binding.spProduct.adapter =
+                        AdapterSpinner.stringAdapter(this@AktivitasStockAdjustment, labels)
+
                     val preselectedId = intent.getStringExtra(EXTRA_PRODUCT_ID)
-                    val preselectedIndex = products.indexOfFirst { product -> product.id == preselectedId }
-                    if (preselectedIndex >= 0) binding.spProduct.setSelection(preselectedIndex)
+                    val preselectedIndex = products.indexOfFirst { it.id == preselectedId }
+                    if (preselectedIndex >= 0) {
+                        binding.spProduct.setSelection(preselectedIndex)
+                    }
                 }
                 .onFailure {
                     showMessage(it.message ?: "Gagal memuat produk")
@@ -60,15 +88,40 @@ class AktivitasStockAdjustment : AktivitasDasar() {
             showMessage("Produk belum tersedia")
             return
         }
-        val type = if (binding.spType.selectedItemPosition == 0) "add" else "subtract"
-        val qty = binding.etQty.text?.toString()?.toIntOrNull() ?: 0
-        val note = binding.etNote.text?.toString().orEmpty().trim()
+
         val date = binding.etDate.text?.toString().orEmpty()
+        val type = if (binding.spType.selectedItemPosition == 0) "add" else "subtract"
+        val qty = binding.etQty.text?.toString()?.trim()?.toIntOrNull() ?: 0
+        val note = binding.etNote.text?.toString()?.trim().orEmpty()
+
+        if (date.isBlank()) {
+            showMessage("Tanggal wajib diisi")
+            return
+        }
+
+        if (qty <= 0) {
+            showMessage("Jumlah adjustment harus lebih dari 0")
+            return
+        }
+
+        if (note.isBlank()) {
+            showMessage("Alasan adjustment wajib diisi")
+            return
+        }
 
         lifecycleScope.launch {
             binding.btnSave.isEnabled = false
+            binding.btnSave.text = "Menyimpan..."
+
             runCatching {
-                val id = RepositoriFirebaseUtama.simpanAdjustment(date, product.id, type, qty, note, currentUserId())
+                val id = RepositoriFirebaseUtama.simpanAdjustment(
+                    dateOnly = date,
+                    productId = product.id,
+                    type = type,
+                    qty = qty,
+                    note = note,
+                    userAuthId = currentUserId()
+                )
                 RepositoriFirebaseUtama.buildAdjustmentDetailText(id)
             }.onSuccess { detail ->
                 showReceiptModal("Adjustment tersimpan", detail, "Bagikan")
@@ -78,7 +131,9 @@ class AktivitasStockAdjustment : AktivitasDasar() {
             }.onFailure {
                 showMessage(it.message ?: "Gagal menyimpan adjustment")
             }
+
             binding.btnSave.isEnabled = true
+            binding.btnSave.text = "Simpan Adjustment"
         }
     }
 

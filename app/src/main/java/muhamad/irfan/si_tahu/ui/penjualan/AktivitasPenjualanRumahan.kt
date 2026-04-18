@@ -28,7 +28,11 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
 
         binding = ActivityCashierSaleCatalogBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        bindToolbar(binding.toolbar, "Penjualan Rumahan", "Pilih produk untuk dimasukkan ke keranjang")
+        bindToolbar(
+            binding.toolbar,
+            "Penjualan Rumahan",
+            "Tampilkan hanya produk siap dijual dengan harga kasir yang valid"
+        )
 
         productAdapter = AdapterProduk(
             onAdd = { addToCart(it) },
@@ -53,7 +57,22 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         binding.spCategory.adapter =
             AdapterSpinner.stringAdapter(this, listOf("Semua"))
 
+        binding.spStockMode.adapter =
+            AdapterSpinner.stringAdapter(
+                this,
+                listOf(
+                    MODE_READY,
+                    MODE_ALL,
+                    MODE_LOW,
+                    MODE_EMPTY
+                )
+            )
+
         binding.spCategory.onItemSelectedListener = SimpleSpinnerListener {
+            renderProducts()
+        }
+
+        binding.spStockMode.onItemSelectedListener = SimpleSpinnerListener {
             renderProducts()
         }
 
@@ -83,6 +102,8 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
             runCatching { RepositoriFirebaseUtama.muatProdukKasir() }
                 .onSuccess { result ->
                     products = result
+                        .filter { hasValidCashierPrice(it) }
+                        .sortedWith(productComparator())
 
                     val categories = listOf("Semua") + products.map { it.category }
                         .distinct()
@@ -90,6 +111,8 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
 
                     binding.spCategory.adapter =
                         AdapterSpinner.stringAdapter(this@AktivitasPenjualanRumahan, categories)
+
+                    binding.spStockMode.setSelection(0)
 
                     renderProducts()
                     renderBottomAction()
@@ -109,33 +132,92 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
             ?: 0L
     }
 
+    private fun hasValidCashierPrice(product: Produk): Boolean {
+        return defaultPrice(product) > 0L
+    }
+
     private fun productStatus(product: Produk): String = when {
-        product.stock <= 0 -> "Habis"
-        product.stock <= product.minStock -> "Menipis"
-        else -> "Aman"
+        product.stock <= 0 -> STATUS_EMPTY
+        product.stock <= product.minStock -> STATUS_LOW
+        else -> STATUS_READY
+    }
+
+    private fun productComparator(): Comparator<Produk> {
+        return compareBy<Produk>(
+            { statusRank(productStatus(it)) },
+            { it.name.lowercase() }
+        )
+    }
+
+    private fun statusRank(status: String): Int {
+        return when (status) {
+            STATUS_READY -> 0
+            STATUS_LOW -> 1
+            STATUS_EMPTY -> 2
+            else -> 3
+        }
+    }
+
+    private fun selectedMode(): String {
+        return binding.spStockMode.selectedItem?.toString().orEmpty().ifBlank { MODE_READY }
     }
 
     private fun renderProducts() {
         val keyword = binding.etSearch.text?.toString().orEmpty().trim().lowercase()
         val category = binding.spCategory.selectedItem?.toString().orEmpty().ifBlank { "Semua" }
+        val mode = selectedMode()
 
-        val filtered = products.filter {
-            (keyword.isBlank()
-                    || it.name.lowercase().contains(keyword)
-                    || it.code.lowercase().contains(keyword)) &&
-                    (category == "Semua" || it.category == category)
-        }
+        val filtered = products
+            .filter { product ->
+                val status = productStatus(product)
+
+                val cocokKeyword =
+                    keyword.isBlank() ||
+                            product.name.lowercase().contains(keyword) ||
+                            product.code.lowercase().contains(keyword)
+
+                val cocokKategori =
+                    category == "Semua" || product.category == category
+
+                val cocokMode = when (mode) {
+                    MODE_READY -> status == STATUS_READY
+                    MODE_LOW -> status == STATUS_LOW
+                    MODE_EMPTY -> status == STATUS_EMPTY
+                    MODE_ALL -> true
+                    else -> status == STATUS_READY
+                }
+
+                cocokKeyword && cocokKategori && cocokMode
+            }
+            .sortedWith(productComparator())
 
         productAdapter.submitList(filtered)
 
+        val totalReady = products.count { productStatus(it) == STATUS_READY }
+        val totalLow = products.count { productStatus(it) == STATUS_LOW }
+        val totalEmpty = products.count { productStatus(it) == STATUS_EMPTY }
+
         binding.tvProductSummary.text = when {
-            products.isEmpty() -> "Belum ada produk aktif untuk kasir"
-            filtered.isEmpty() -> "Tidak ada produk yang cocok"
-            else -> "${filtered.size} produk tampil • stok real-time"
+            products.isEmpty() ->
+                "Belum ada produk kasir dengan harga aktif di atas 0"
+            filtered.isEmpty() ->
+                "Tidak ada produk yang cocok • siap $totalReady • menipis $totalLow • habis $totalEmpty"
+            else ->
+                "${filtered.size} produk tampil • siap $totalReady • menipis $totalLow • habis $totalEmpty"
         }
     }
 
     private fun addToCart(product: Produk) {
+        if (defaultPrice(product) <= 0L) {
+            showMessage("Produk ${product.name} belum punya harga kasir yang valid")
+            return
+        }
+
+        if (product.stock <= 0) {
+            showMessage("Produk ${product.name} sedang habis")
+            return
+        }
+
         val success = SessionKeranjangRumahan.addOrIncrease(
             productId = product.id,
             price = defaultPrice(product),
@@ -201,6 +283,17 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
     private fun openCheckout() {
         if (SessionKeranjangRumahan.isEmpty()) return
         startActivity(Intent(this, AktivitasCheckoutRumahan::class.java))
+    }
+
+    companion object {
+        private const val MODE_READY = "Siap Dijual"
+        private const val MODE_ALL = "Semua Status"
+        private const val MODE_LOW = "Menipis"
+        private const val MODE_EMPTY = "Habis"
+
+        private const val STATUS_READY = "Aman"
+        private const val STATUS_LOW = "Menipis"
+        private const val STATUS_EMPTY = "Habis"
     }
 }
 

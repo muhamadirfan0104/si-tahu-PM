@@ -45,8 +45,8 @@ class AktivitasDetailStok : AktivitasDasar() {
         binding.rvMovement.adapter = movementAdapter
 
         binding.btnAdjustStock.setOnClickListener {
-            val intent = Intent(this, AktivitasAdjustmentStok::class.java)
-            intent.putExtra(AktivitasMonitoringStok.EXTRA_PRODUCT_ID, productId)
+            val intent = Intent(this, AktivitasStockAdjustment::class.java)
+            intent.putExtra(AktivitasStockAdjustment.EXTRA_PRODUCT_ID, productId)
             startActivity(intent)
         }
 

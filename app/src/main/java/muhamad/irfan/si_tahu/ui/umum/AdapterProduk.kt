@@ -23,7 +23,11 @@ class AdapterProduk(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PenampungProduk {
-        val binding = ItemProductCardBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+        val binding = ItemProductCardBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
         return PenampungProduk(binding)
     }
 
@@ -36,12 +40,16 @@ class AdapterProduk(
     inner class PenampungProduk(
         private val binding: ItemProductCardBinding
     ) : RecyclerView.ViewHolder(binding.root) {
+
         fun bind(item: Produk) {
+            val status = getStatus(item)
+            val harga = getHarga(item)
+            val bisaDitambah = item.stock > 0 && harga > 0L
+
             binding.tvTitle.text = item.name
             binding.tvSubtitle.text = "Stok ${item.stock} ${item.unit} • Minimum ${item.minStock}"
-            binding.tvPrice.text = Formatter.currency(getHarga(item))
+            binding.tvPrice.text = Formatter.currency(harga)
             binding.tvCategory.text = item.category
-            val status = getStatus(item)
             binding.tvStatus.text = status
 
             val tone = when (status) {
@@ -51,7 +59,20 @@ class AdapterProduk(
             }
 
             binding.tvStatus.setBackgroundResource(tone)
-            binding.btnAdd.setOnClickListener { onAdd(item) }
+
+            binding.btnAdd.isEnabled = bisaDitambah
+            binding.btnAdd.alpha = if (bisaDitambah) 1f else 0.5f
+            binding.btnAdd.text = if (bisaDitambah) {
+                "Tambah ke Keranjang"
+            } else {
+                "Tidak Bisa Ditambahkan"
+            }
+
+            binding.btnAdd.setOnClickListener {
+                if (bisaDitambah) {
+                    onAdd(item)
+                }
+            }
         }
     }
 }

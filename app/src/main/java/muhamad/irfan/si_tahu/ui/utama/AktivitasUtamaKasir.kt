@@ -49,7 +49,7 @@ class AktivitasUtamaKasir : AktivitasDasar() {
                     false
                 }
                 R.id.nav_cashier_history -> {
-                    startActivity(Intent(this, AktivitasRiwayatPenjualan::class.java))
+                    startActivity(AktivitasRiwayatPenjualan.intentRiwayatKasir(this))
                     false
                 }
                 else -> false

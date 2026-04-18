@@ -139,7 +139,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Penjualan Rumahan"
+                        android:text="Riwayat Penjualan Rumahan"
                         android:textColor="#1F251C"
                         android:textSize="16sp"
                         android:textStyle="bold" />
@@ -148,7 +148,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="3dp"
-                        android:text="Catat transaksi eceran dengan flow kasir"
+                        android:text="Lihat transaksi rumahan tanpa membuka checkout"
                         android:textColor="#7B766B"
                         android:textSize="13sp" />
                 </LinearLayout>
@@ -223,7 +223,7 @@
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:layout_marginTop="18dp"
-            android:text="Lihat Riwayat Penjualan" />
+            android:text="Lihat Semua Riwayat Penjualan" />
 
         <TextView
             android:layout_width="wrap_content"

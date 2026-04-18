@@ -10,7 +10,6 @@ import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.databinding.FragmentSalesMenuBinding
 import muhamad.irfan.si_tahu.ui.dasar.FragmenDasar
-import muhamad.irfan.si_tahu.ui.penjualan.AktivitasPenjualanRumahan
 import muhamad.irfan.si_tahu.ui.penjualan.AktivitasRekapPasar
 import muhamad.irfan.si_tahu.ui.penjualan.AktivitasRiwayatPenjualan
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
@@ -51,9 +50,10 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
     }
 
     private fun setupActions() = with(binding) {
-        // Flow baru: page katalog -> cart action -> checkout page
         btnHomeSales.setOnClickListener {
-            startActivity(Intent(requireContext(), AktivitasPenjualanRumahan::class.java))
+            startActivity(
+                AktivitasRiwayatPenjualan.intentRiwayatRumahanAdmin(requireContext())
+            )
         }
 
         btnMarketRecap.setOnClickListener {
@@ -61,7 +61,9 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
         }
 
         btnSalesHistory.setOnClickListener {
-            startActivity(Intent(requireContext(), AktivitasRiwayatPenjualan::class.java))
+            startActivity(
+                AktivitasRiwayatPenjualan.intentRiwayatSemuaAdmin(requireContext())
+            )
         }
     }
 
@@ -91,7 +93,7 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
                             amount = it.amount,
                             tone = when (it.badge) {
                                 "Rumahan" -> WarnaBaris.GREEN
-                                "PASAR" -> WarnaBaris.BLUE
+                                "Pasar" -> WarnaBaris.BLUE
                                 else -> WarnaBaris.GOLD
                             },
                             actionLabel = "⋮"
