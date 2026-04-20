@@ -20,32 +20,31 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <activity android:name=".ui.receipt.AktivitasStruk" />
-        <activity android:name=".ui.user.AktivitasFormPengguna" />
-        <activity android:name=".ui.user.AktivitasDaftarPengguna" />
-        <activity android:name=".ui.settings.AktivitasPengaturanUsaha" />
-        <activity android:name=".ui.history.AktivitasRiwayatTransaksi" />
-        <activity android:name=".ui.report.AktivitasLaporan" />
-        <activity android:name=".ui.expense.AktivitasFormPengeluaran" />
-        <activity android:name=".ui.expense.AktivitasDaftarPengeluaran" />
+        <activity android:name=".ui.penjualan.AktivitasRiwayatPenjualan" />
+        <activity android:name=".ui.penjualan.AktivitasRekapPasar" />
+        <activity android:name=".ui.penjualan.AktivitasPenjualanRumahan" />
+        <activity android:name=".ui.stok.AktivitasStockAdjustment" />
+        <activity android:name=".ui.stok.AktivitasDetailStok" />
+        <activity android:name=".ui.stok.AktivitasRiwayatSemuaStok" />
+        <activity android:name=".ui.stok.AktivitasMonitoringStok" />
+        <activity android:name=".ui.produksi.AktivitasRiwayatProduksi" />
+        <activity android:name=".ui.pengguna.AktivitasFormPengguna" />
+        <activity android:name=".ui.pengguna.AktivitasDaftarPengguna" />
+        <activity android:name=".ui.pengaturan.AktivitasPengaturanUsaha" />
         <activity android:name=".ui.parameter.AktivitasFormParameter" />
         <activity android:name=".ui.parameter.AktivitasDaftarParameter" />
-        <activity android:name=".ui.price.AktivitasFormHarga" />
-        <activity android:name=".ui.price.AktivitasDaftarHarga" />
-        <activity android:name=".ui.product.AktivitasFormProduk" />
-        <activity android:name=".ui.product.AktivitasDaftarProduk" />
-        <activity android:name=".ui.stock.AktivitasPenyesuaianStok" />
-        <activity android:name=".ui.stock.AktivitasDetailStok" />
-        <activity android:name=".ui.sales.AktivitasRiwayatPenjualan" />
-        <activity android:name=".ui.sales.AktivitasRekapPasar" />
-        <activity android:name=".ui.production.AktivitasRiwayatProduksi" />
-        <activity android:name=".ui.production.AktivitasKonversi" />
-        <activity android:name=".ui.production.AktivitasProduksiDasar" />
-        <activity android:name=".ui.main.AktivitasUtamaKasir" />
-        <activity android:name=".ui.main.AktivitasUtamaAdmin" />
+        <activity android:name=".ui.harga.AktivitasFormHarga" />
+        <activity android:name=".ui.harga.AktivitasDaftarHarga" />
+        <activity android:name=".ui.produk.AktivitasFormProduk" />
+        <activity android:name=".ui.produk.AktivitasDaftarProduk" />
+        <activity android:name=".ui.utama.AktivitasUtamaKasir" />
+        <activity android:name=".ui.utama.AktivitasUtamaAdmin" />
+        <activity android:name=".ui.produksi.AktivitasProduksiTahuDasar" />
+        <activity android:name=".ui.produksi.AktivitasKonversiProduk" />
+        <activity android:name=".ui.penjualan.AktivitasCheckoutRumahan" />
 
         <activity
-            android:name=".ui.login.AktivitasMasuk"
+            android:name=".ui.masuk.AktivitasMasuk"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -54,5 +53,4 @@
         </activity>
 
     </application>
-
 </manifest>
