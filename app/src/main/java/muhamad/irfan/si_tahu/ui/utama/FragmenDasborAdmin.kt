@@ -1,0 +1,165 @@
+package muhamad.irfan.si_tahu.ui.utama
+
+import android.os.Bundle
+import android.os.SystemClock
+import android.view.View
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import kotlinx.coroutines.launch
+import muhamad.irfan.si_tahu.R
+import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
+import muhamad.irfan.si_tahu.databinding.FragmentAdminDashboardBinding
+import muhamad.irfan.si_tahu.ui.dasar.FragmenDasar
+import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
+import muhamad.irfan.si_tahu.util.Formatter
+import muhamad.irfan.si_tahu.util.ItemBaris
+import muhamad.irfan.si_tahu.util.WarnaBaris
+
+class FragmenDasborAdmin : FragmenDasar(R.layout.fragment_admin_dashboard) {
+
+    private var _binding: FragmentAdminDashboardBinding? = null
+    private val binding get() = _binding!!
+
+    private val lowStockAdapter = AdapterBarisUmum(onItemClick = {})
+    private val recentAdapter = AdapterBarisUmum(onItemClick = ::openRecentDetail)
+    private var hasLoadedOnce = false
+    private var isLoading = false
+    private var lastLoadedAt = 0L
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        if (!requireLoginOrRedirect()) return
+
+        _binding = FragmentAdminDashboardBinding.bind(view)
+
+        setupRecyclerView()
+        setupActions()
+        renderDashboard()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (_binding != null && shouldRefreshData()) {
+            renderDashboard()
+        }
+    }
+
+    private fun shouldRefreshData(): Boolean {
+        if (!hasLoadedOnce) return true
+        return SystemClock.elapsedRealtime() - lastLoadedAt > 30_000L
+    }
+
+    private fun setupRecyclerView() {
+        binding.rvLowStock.layoutManager = LinearLayoutManager(requireContext())
+        binding.rvLowStock.adapter = lowStockAdapter
+
+        binding.rvRecentTransactions.layoutManager = LinearLayoutManager(requireContext())
+        binding.rvRecentTransactions.adapter = recentAdapter
+    }
+
+    private fun setupActions() {
+        binding.btnGoProduction.visibility = View.VISIBLE
+        binding.btnGoSales.visibility = View.VISIBLE
+        binding.btnGoStock.visibility = View.VISIBLE
+        binding.btnNewExpense.visibility = View.GONE
+
+        binding.btnGoProduction.setOnClickListener {
+            if (shouldIgnoreRapidTap(minIntervalMs = 200L)) return@setOnClickListener
+            (activity as? AktivitasUtamaAdmin)?.openTab(R.id.nav_admin_production)
+        }
+
+        binding.btnGoSales.setOnClickListener {
+            if (shouldIgnoreRapidTap(minIntervalMs = 200L)) return@setOnClickListener
+            (activity as? AktivitasUtamaAdmin)?.openTab(R.id.nav_admin_sales)
+        }
+
+        binding.btnGoStock.setOnClickListener {
+            if (shouldIgnoreRapidTap(minIntervalMs = 200L)) return@setOnClickListener
+            (activity as? AktivitasUtamaAdmin)?.openTab(R.id.nav_admin_stock)
+        }
+    }
+
+    private fun renderDashboard() {
+        val currentBinding = _binding ?: return
+        if (isLoading) return
+
+        isLoading = true
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { RepositoriFirebaseUtama.muatRingkasanDashboard() }
+                .onSuccess { dashboard ->
+                    val safeBinding = _binding ?: return@onSuccess
+                    hasLoadedOnce = true
+                    lastLoadedAt = SystemClock.elapsedRealtime()
+
+                    safeBinding.tvBusinessName.text = dashboard.namaUsaha
+                    safeBinding.tvSummaryDate.text = Formatter.readableDate(dashboard.tanggalRingkasan)
+                    safeBinding.tvSummarySales.text = Formatter.currency(dashboard.totalPenjualan)
+                    safeBinding.tvSummaryProduction.text = "Produksi: ${dashboard.totalProduksi} pcs"
+                    safeBinding.tvSummaryExpenses.text = Formatter.currency(dashboard.totalPengeluaran)
+                    safeBinding.tvSummaryTransactions.visibility = View.VISIBLE
+                    safeBinding.tvSummaryTransactions.text = "Transaksi: ${dashboard.totalTransaksi}"
+                    safeBinding.tvSummaryProfit.text = Formatter.currency(dashboard.totalLaba)
+
+                    lowStockAdapter.submitList(dashboard.lowStock.map { product ->
+                        val status = when {
+                            product.stock <= 0 -> "Habis"
+                            product.stock <= product.minStock -> "Menipis"
+                            else -> "Aman"
+                        }
+                        ItemBaris(
+                            id = product.id,
+                            title = product.name,
+                            subtitle = "${product.code} • ${product.category}",
+                            badge = status,
+                            amount = "Stok ${product.stock} • Min ${product.minStock}",
+                            tone = when (status) {
+                                "Aman" -> WarnaBaris.GREEN
+                                "Menipis" -> WarnaBaris.GOLD
+                                else -> WarnaBaris.ORANGE
+                            }
+                        )
+                    })
+
+                    recentAdapter.submitList(dashboard.recentItems.map {
+                        ItemBaris(
+                            id = it.id,
+                            title = it.title,
+                            subtitle = it.subtitle,
+                            amount = it.amount,
+                            badge = it.badge,
+                            tone = when (it.badge) {
+                                "Rumahan", "Produksi Dasar" -> WarnaBaris.GREEN
+                                "Konversi", "Pasar" -> WarnaBaris.BLUE
+                                else -> WarnaBaris.GOLD
+                            }
+                        )
+                    })
+
+                    isLoading = false
+                }
+                .onFailure {
+                    isLoading = false
+                    if (!hasLoadedOnce) {
+                        lowStockAdapter.submitList(emptyList())
+                        recentAdapter.submitList(emptyList())
+                    }
+                    showMessage(currentBinding.root, it.message ?: "Gagal memuat dashboard")
+                }
+        }
+    }
+
+    private fun openRecentDetail(item: ItemBaris) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val detail = RepositoriFirebaseUtama.buildTransactionDetailText(
+                id = item.id,
+                type = "${item.title} ${item.badge}"
+            )
+            showDetailModal("Detail Aktivitas", detail)
+        }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
+    }
+}

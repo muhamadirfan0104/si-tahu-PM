@@ -1,0 +1,21 @@
+Migrasi Sprint 2 ke Firebase / Cloud Firestore
+
+Yang sudah diarahkan ke Firebase:
+- Login & baca identitas usaha dari pengaturan/umum
+- Dashboard admin
+- Produksi tahu dasar
+- Produksi produk olahan / konversi
+- Monitoring stok
+- Detail stok dan pergerakan stok
+- Stock adjustment
+- Penjualan rumahan
+- Rekap penjualan pasar
+- Riwayat produksi
+- Riwayat penjualan
+- Rekalkulasi ringkasanHarian
+
+Catatan penting:
+- ZIP ini berisi source hasil revisi, bukan project Gradle lengkap.
+- Tambahkan dependency Firebase Auth + Firestore di build.gradle/module Android Studio milikmu.
+- Pastikan google-services.json sudah dipasang di module app.
+- Struktur Firestore yang dipakai mengikuti schema final yang user kirim.
