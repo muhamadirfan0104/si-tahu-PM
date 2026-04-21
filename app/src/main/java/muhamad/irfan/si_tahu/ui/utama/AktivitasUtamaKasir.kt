@@ -13,8 +13,6 @@ import muhamad.irfan.si_tahu.data.PenggunaFirestoreCompat
 import muhamad.irfan.si_tahu.databinding.ActivityRoleMainBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.masuk.AktivitasMasuk
-import muhamad.irfan.si_tahu.ui.penjualan.AktivitasPenjualanRumahan
-import muhamad.irfan.si_tahu.ui.penjualan.AktivitasRiwayatPenjualan
 
 class AktivitasUtamaKasir : AktivitasDasar() {
 
@@ -52,28 +50,12 @@ class AktivitasUtamaKasir : AktivitasDasar() {
             }
 
             selectedTabId = item.itemId
-            when (item.itemId) {
-                R.id.nav_cashier_dashboard,
-                R.id.nav_cashier_menu -> {
-                    showTab(item.itemId, bypassDebounce = true)
-                    true
-                }
-                R.id.nav_cashier_sale -> {
-                    startActivity(Intent(this, AktivitasPenjualanRumahan::class.java))
-                    false
-                }
-                R.id.nav_cashier_history -> {
-                    startActivity(AktivitasRiwayatPenjualan.intentRiwayatKasir(this))
-                    false
-                }
-                else -> false
-            }
+            showTab(item.itemId, bypassDebounce = true)
+            true
         }
 
         binding.bottomNavigation.setOnItemReselectedListener { item ->
-            if (item.itemId == R.id.nav_cashier_dashboard || item.itemId == R.id.nav_cashier_menu) {
-                showTab(item.itemId, bypassDebounce = true)
-            }
+            showTab(item.itemId, bypassDebounce = true)
         }
 
         handleIntentTab(intent, savedInstanceState == null)
@@ -161,6 +143,8 @@ class AktivitasUtamaKasir : AktivitasDasar() {
         if (!bypassDebounce && shouldIgnoreRapidTabChange(minIntervalMs = 120L)) return
 
         val (title, tag) = when (itemId) {
+            R.id.nav_cashier_sale -> Pair("Kasir", "tab_cashier_sale")
+            R.id.nav_cashier_history -> Pair("Riwayat", "tab_cashier_history")
             R.id.nav_cashier_menu -> Pair("Menu", "tab_cashier_menu")
             else -> Pair("Beranda", "tab_cashier_dashboard")
         }
@@ -181,6 +165,7 @@ class AktivitasUtamaKasir : AktivitasDasar() {
 
         fm.commit {
             setReorderingAllowed(true)
+
             fm.fragments
                 .filter { it.id == binding.container.id && it.isAdded && !it.isHidden }
                 .forEach { hide(it) }
@@ -190,12 +175,15 @@ class AktivitasUtamaKasir : AktivitasDasar() {
             } else {
                 add(binding.container.id, target, tag)
             }
+
             setPrimaryNavigationFragment(target)
         }
     }
 
     private fun createFragmentFor(itemId: Int): Fragment {
         return when (itemId) {
+            R.id.nav_cashier_sale -> FragmenKasirSale()
+            R.id.nav_cashier_history -> FragmenKasirHistory()
             R.id.nav_cashier_menu -> FragmenMenuKasir()
             else -> FragmenDasborKasir()
         }

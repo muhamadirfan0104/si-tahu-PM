@@ -7,8 +7,10 @@ import android.view.View
 import android.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
+import muhamad.irfan.si_tahu.ui.utama.AktivitasUtamaKasir
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
 
@@ -50,7 +52,14 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
 
         if (tampilkanTombolTransaksiBaru) {
             setPrimaryButton("Transaksi Baru") {
-                startActivity(Intent(this, AktivitasPenjualanRumahan::class.java))
+                startActivity(
+                    AktivitasUtamaKasir.intent(
+                        context = this,
+                        tabId = R.id.nav_cashier_sale,
+                        clearTop = true
+                    )
+                )
+                finish()
             }
         } else {
             hidePrimaryButton()
@@ -80,13 +89,16 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
     }
 
     private fun bacaIntent() {
-        judulLayar = intent.getStringExtra(EXTRA_SCREEN_TITLE).orEmpty()
+        judulLayar = intent.getStringExtra(EXTRA_SCREEN_TITLE)
+            .orEmpty()
             .ifBlank { "Riwayat Penjualan" }
 
-        subjudulLayar = intent.getStringExtra(EXTRA_SCREEN_SUBTITLE).orEmpty()
+        subjudulLayar = intent.getStringExtra(EXTRA_SCREEN_SUBTITLE)
+            .orEmpty()
             .ifBlank { "Rumahan dan pasar" }
 
-        defaultFilter = intent.getStringExtra(EXTRA_DEFAULT_FILTER).orEmpty()
+        defaultFilter = intent.getStringExtra(EXTRA_DEFAULT_FILTER)
+            .orEmpty()
             .ifBlank { FILTER_SEMUA }
 
         lockFilter = intent.getBooleanExtra(EXTRA_LOCK_FILTER, false)
@@ -238,6 +250,7 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                                 showMessage(it.message ?: "Gagal membagikan detail penjualan")
                             }
                     }
+
                     "Hapus" -> confirmDelete(item)
                 }
                 true

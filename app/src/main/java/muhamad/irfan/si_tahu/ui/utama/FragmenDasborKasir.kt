@@ -1,6 +1,5 @@
 package muhamad.irfan.si_tahu.ui.utama
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.lifecycle.lifecycleScope
@@ -10,7 +9,6 @@ import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.databinding.FragmentCashierDashboardBinding
 import muhamad.irfan.si_tahu.ui.dasar.FragmenDasar
-import muhamad.irfan.si_tahu.ui.penjualan.AktivitasPenjualanRumahan
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
@@ -38,8 +36,7 @@ class FragmenDasborKasir : FragmenDasar(R.layout.fragment_cashier_dashboard) {
 
         binding.btnNewSale.text = "Transaksi Baru"
         binding.btnNewSale.setOnClickListener {
-            val safeContext = context ?: return@setOnClickListener
-            launchActivitySafely(Intent(safeContext, AktivitasPenjualanRumahan::class.java))
+            (activity as? AktivitasUtamaKasir)?.openTab(R.id.nav_cashier_sale)
         }
 
         renderDashboard()

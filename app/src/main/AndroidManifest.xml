@@ -22,7 +22,6 @@
 
         <activity android:name=".ui.penjualan.AktivitasRiwayatPenjualan" />
         <activity android:name=".ui.penjualan.AktivitasRekapPasar" />
-        <activity android:name=".ui.penjualan.AktivitasPenjualanRumahan" />
         <activity android:name=".ui.stok.AktivitasStockAdjustment" />
         <activity android:name=".ui.stok.AktivitasDetailStok" />
         <activity android:name=".ui.stok.AktivitasMonitoringStok" />
