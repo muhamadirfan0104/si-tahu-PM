@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
+import androidx.core.view.children
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -17,6 +18,7 @@ import muhamad.irfan.si_tahu.ui.penjualan.AktivitasRiwayatPenjualan
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
+import muhamad.irfan.si_tahu.util.PembantuFloatingMenu
 import muhamad.irfan.si_tahu.util.WarnaBaris
 
 class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
@@ -31,12 +33,14 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
     private var hasLoadedOnce = false
     private var isLoading = false
     private var lastLoadedAt = 0L
+    private var isActionMenuOpen = false
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         if (!requireLoginOrRedirect()) return
 
         _binding = FragmentSalesMenuBinding.bind(view)
+        prepareActionMenuState()
 
         setupView()
         setupActions()
@@ -45,6 +49,7 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
 
     override fun onResume() {
         super.onResume()
+        closeActionMenuImmediately()
         if (_binding != null && shouldRefreshData()) {
             renderSummary(forceInitialLoading = !hasLoadedOnce)
         }
@@ -61,32 +66,155 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
     }
 
     private fun setupActions() = with(binding) {
-        btnHomeSales.setOnClickListener {
-            val safeContext = context ?: return@setOnClickListener
-            launchActivitySafely(
-                AktivitasRiwayatPenjualan.intentRiwayatRumahanAdmin(safeContext)
-            )
+        fabToggleSalesMenu.setOnClickListener {
+            toggleActionMenu(!isActionMenuOpen)
+        }
+
+        salesActionScrim.setOnClickListener {
+            toggleActionMenu(false)
         }
 
         btnMarketRecap.setOnClickListener {
+            toggleActionMenu(false)
             val safeContext = context ?: return@setOnClickListener
             launchActivitySafely(Intent(safeContext, AktivitasRekapPasar::class.java))
         }
 
         btnSalesHistory.setOnClickListener {
+            toggleActionMenu(false)
             val safeContext = context ?: return@setOnClickListener
             launchActivitySafely(
                 AktivitasRiwayatPenjualan.intentRiwayatSemuaAdmin(safeContext)
             )
         }
+    }
 
-        btnSalesQuickHistory.setOnClickListener {
-            val safeContext = context ?: return@setOnClickListener
-            launchActivitySafely(
-                AktivitasRiwayatPenjualan.intentRiwayatRumahanAdmin(safeContext)
-            )
+    private fun prepareActionMenuState() {
+        val currentBinding = _binding ?: return
+        PembantuFloatingMenu.siapkanLatar(currentBinding.salesActionScrim)
+        currentBinding.salesFabMenu.apply {
+            isVisible = false
+            alpha = 0f
+            translationY = menuOffsetPx()
+            children.forEach { child ->
+                child.alpha = 0f
+                child.translationY = menuOffsetPx() / 2f
+                child.scaleX = 0.92f
+                child.scaleY = 0.92f
+            }
+        }
+        currentBinding.fabToggleSalesMenu.rotation = 0f
+    }
+
+    private fun closeActionMenuImmediately() {
+        toggleActionMenu(open = false, animate = false)
+    }
+
+    private fun toggleActionMenu(open: Boolean, animate: Boolean = true) {
+        val currentBinding = _binding ?: return
+        if (open == isActionMenuOpen && currentBinding.salesFabMenu.isVisible == open) return
+
+        isActionMenuOpen = open
+        currentBinding.salesFabMenu.animate().cancel()
+        currentBinding.fabToggleSalesMenu.animate().cancel()
+        currentBinding.salesFabMenu.children.forEach { it.animate().cancel() }
+
+        val offset = menuOffsetPx()
+        PembantuFloatingMenu.aturLatar(
+            content = currentBinding.contentSales,
+            scrim = currentBinding.salesActionScrim,
+            terbuka = open,
+            animate = animate
+        )
+        if (open) {
+            currentBinding.salesFabMenu.isVisible = true
+            currentBinding.salesFabMenu.alpha = if (animate) 0f else 1f
+            currentBinding.salesFabMenu.translationY = if (animate) offset else 0f
+
+            currentBinding.salesFabMenu.children.forEachIndexed { index, child ->
+                child.alpha = if (animate) 0f else 1f
+                child.translationY = if (animate) offset / 2f else 0f
+                child.scaleX = if (animate) 0.92f else 1f
+                child.scaleY = if (animate) 0.92f else 1f
+
+                if (animate) {
+                    child.animate()
+                        .alpha(1f)
+                        .translationY(0f)
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setStartDelay((index * 24L))
+                        .setDuration(180L)
+                        .start()
+                }
+            }
+
+            if (animate) {
+                currentBinding.salesFabMenu.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(200L)
+                    .start()
+
+                currentBinding.fabToggleSalesMenu.animate()
+                    .rotation(45f)
+                    .scaleX(1.06f)
+                    .scaleY(1.06f)
+                    .setDuration(180L)
+                    .withEndAction {
+                        currentBinding.fabToggleSalesMenu.animate()
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(90L)
+                            .start()
+                    }
+                    .start()
+            } else {
+                currentBinding.fabToggleSalesMenu.rotation = 45f
+            }
+        } else {
+            if (animate) {
+                currentBinding.salesFabMenu.children.forEach { child ->
+                    child.animate()
+                        .alpha(0f)
+                        .translationY(offset / 3f)
+                        .scaleX(0.92f)
+                        .scaleY(0.92f)
+                        .setDuration(120L)
+                        .start()
+                }
+
+                currentBinding.salesFabMenu.animate()
+                    .alpha(0f)
+                    .translationY(offset / 2f)
+                    .setDuration(140L)
+                    .withEndAction {
+                        if (!isActionMenuOpen) {
+                            currentBinding.salesFabMenu.isVisible = false
+                        }
+                    }
+                    .start()
+
+                currentBinding.fabToggleSalesMenu.animate()
+                    .rotation(0f)
+                    .setDuration(160L)
+                    .start()
+            } else {
+                currentBinding.salesFabMenu.isVisible = false
+                currentBinding.salesFabMenu.alpha = 0f
+                currentBinding.salesFabMenu.translationY = offset
+                currentBinding.salesFabMenu.children.forEach { child ->
+                    child.alpha = 0f
+                    child.translationY = offset / 2f
+                    child.scaleX = 0.92f
+                    child.scaleY = 0.92f
+                }
+                currentBinding.fabToggleSalesMenu.rotation = 0f
+            }
         }
     }
+
+    private fun menuOffsetPx(): Float = 24f * resources.displayMetrics.density
 
     private fun renderSummary(forceInitialLoading: Boolean) {
         val currentBinding = _binding ?: return
@@ -200,7 +328,18 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
         }
     }
 
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (hidden) closeActionMenuImmediately()
+    }
+
+    override fun onPause() {
+        closeActionMenuImmediately()
+        super.onPause()
+    }
+
     override fun onDestroyView() {
+        closeActionMenuImmediately()
         _binding = null
         super.onDestroyView()
     }

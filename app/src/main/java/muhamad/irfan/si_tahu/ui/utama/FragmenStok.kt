@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
+import androidx.core.view.children
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -12,13 +13,14 @@ import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.databinding.FragmentStockListBinding
 import muhamad.irfan.si_tahu.ui.dasar.FragmenDasar
-import muhamad.irfan.si_tahu.ui.produk.AktivitasDaftarProduk
 import muhamad.irfan.si_tahu.ui.stok.AktivitasDetailStok
 import muhamad.irfan.si_tahu.ui.stok.AktivitasMonitoringStok
+import muhamad.irfan.si_tahu.ui.stok.AktivitasRiwayatSemuaStok
 import muhamad.irfan.si_tahu.ui.stok.AktivitasStockAdjustment
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
 import muhamad.irfan.si_tahu.util.AdapterSpinner
 import muhamad.irfan.si_tahu.util.ItemBaris
+import muhamad.irfan.si_tahu.util.PembantuFloatingMenu
 import muhamad.irfan.si_tahu.util.WarnaBaris
 
 class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
@@ -36,13 +38,14 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
     private var hasLoadedOnce = false
     private var isLoading = false
     private var lastLoadedAt = 0L
+    private var isActionMenuOpen = false
 
     private val adapter by lazy {
         AdapterBarisUmum(
             onItemClick = onItemClick@{ item ->
                 val safeContext = context ?: return@onItemClick
                 val intent = Intent(safeContext, AktivitasDetailStok::class.java)
-                intent.putExtra(AktivitasStockAdjustment.EXTRA_PRODUCT_ID, item.id)
+                intent.putExtra(AktivitasMonitoringStok.EXTRA_PRODUCT_ID, item.id)
                 launchActivitySafely(intent)
             }
         )
@@ -53,6 +56,7 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
         if (!requireLoginOrRedirect()) return
 
         _binding = FragmentStockListBinding.bind(view)
+        prepareActionMenuState()
 
         setupView()
         setupActions()
@@ -61,6 +65,7 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
 
     override fun onResume() {
         super.onResume()
+        closeActionMenuImmediately()
         if (_binding != null && shouldRefreshData()) {
             loadProducts(forceInitialLoading = !hasLoadedOnce)
         }
@@ -88,23 +93,24 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
             refreshList()
         }
 
+        fabToggleStockMenu.setOnClickListener {
+            toggleActionMenu(!isActionMenuOpen)
+        }
+
+        stockActionScrim.setOnClickListener {
+            toggleActionMenu(false)
+        }
+
         btnAdjustment.setOnClickListener {
+            toggleActionMenu(false)
             val safeContext = context ?: return@setOnClickListener
             launchActivitySafely(Intent(safeContext, AktivitasStockAdjustment::class.java))
         }
 
         btnOpenMonitoring.setOnClickListener {
+            toggleActionMenu(false)
             val safeContext = context ?: return@setOnClickListener
-            launchActivitySafely(Intent(safeContext, AktivitasMonitoringStok::class.java))
-        }
-
-        btnAllProducts.setOnClickListener {
-            val safeContext = context ?: return@setOnClickListener
-            launchActivitySafely(Intent(safeContext, AktivitasDaftarProduk::class.java))
-        }
-
-        btnRefreshStock.setOnClickListener {
-            loadProducts(forceInitialLoading = false)
+            launchActivitySafely(Intent(safeContext, AktivitasRiwayatSemuaStok::class.java))
         }
 
         btnPrevPage.setOnClickListener {
@@ -121,6 +127,133 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
             }
         }
     }
+
+    private fun prepareActionMenuState() {
+        val currentBinding = _binding ?: return
+        PembantuFloatingMenu.siapkanLatar(currentBinding.stockActionScrim)
+        currentBinding.stockFabMenu.apply {
+            isVisible = false
+            alpha = 0f
+            translationY = menuOffsetPx()
+            children.forEach { child ->
+                child.alpha = 0f
+                child.translationY = menuOffsetPx() / 2f
+                child.scaleX = 0.92f
+                child.scaleY = 0.92f
+            }
+        }
+        currentBinding.fabToggleStockMenu.rotation = 0f
+    }
+
+    private fun closeActionMenuImmediately() {
+        toggleActionMenu(open = false, animate = false)
+    }
+
+    private fun toggleActionMenu(open: Boolean, animate: Boolean = true) {
+        val currentBinding = _binding ?: return
+        if (open == isActionMenuOpen && currentBinding.stockFabMenu.isVisible == open) return
+
+        isActionMenuOpen = open
+        currentBinding.stockFabMenu.animate().cancel()
+        currentBinding.fabToggleStockMenu.animate().cancel()
+        currentBinding.stockFabMenu.children.forEach { it.animate().cancel() }
+
+        val offset = menuOffsetPx()
+        PembantuFloatingMenu.aturLatar(
+            content = currentBinding.contentStock,
+            scrim = currentBinding.stockActionScrim,
+            terbuka = open,
+            animate = animate
+        )
+        if (open) {
+            currentBinding.stockFabMenu.isVisible = true
+            currentBinding.stockFabMenu.alpha = if (animate) 0f else 1f
+            currentBinding.stockFabMenu.translationY = if (animate) offset else 0f
+
+            currentBinding.stockFabMenu.children.forEachIndexed { index, child ->
+                child.alpha = if (animate) 0f else 1f
+                child.translationY = if (animate) offset / 2f else 0f
+                child.scaleX = if (animate) 0.92f else 1f
+                child.scaleY = if (animate) 0.92f else 1f
+
+                if (animate) {
+                    child.animate()
+                        .alpha(1f)
+                        .translationY(0f)
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setStartDelay((index * 24L))
+                        .setDuration(180L)
+                        .start()
+                }
+            }
+
+            if (animate) {
+                currentBinding.stockFabMenu.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(200L)
+                    .start()
+
+                currentBinding.fabToggleStockMenu.animate()
+                    .rotation(45f)
+                    .scaleX(1.06f)
+                    .scaleY(1.06f)
+                    .setDuration(180L)
+                    .withEndAction {
+                        currentBinding.fabToggleStockMenu.animate()
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(90L)
+                            .start()
+                    }
+                    .start()
+            } else {
+                currentBinding.fabToggleStockMenu.rotation = 45f
+            }
+        } else {
+            if (animate) {
+                currentBinding.stockFabMenu.children.forEach { child ->
+                    child.animate()
+                        .alpha(0f)
+                        .translationY(offset / 3f)
+                        .scaleX(0.92f)
+                        .scaleY(0.92f)
+                        .setDuration(120L)
+                        .start()
+                }
+
+                currentBinding.stockFabMenu.animate()
+                    .alpha(0f)
+                    .translationY(offset / 2f)
+                    .setDuration(140L)
+                    .withEndAction {
+                        if (!isActionMenuOpen) {
+                            currentBinding.stockFabMenu.isVisible = false
+                        }
+                    }
+                    .start()
+
+                currentBinding.fabToggleStockMenu.animate()
+                    .rotation(0f)
+                    .setDuration(160L)
+                    .start()
+            } else {
+                currentBinding.stockFabMenu.isVisible = false
+                currentBinding.stockFabMenu.alpha = 0f
+                currentBinding.stockFabMenu.translationY = offset
+                currentBinding.stockFabMenu.children.forEach { child ->
+                    child.alpha = 0f
+                    child.translationY = offset / 2f
+                    child.scaleX = 0.92f
+                    child.scaleY = 0.92f
+                }
+                currentBinding.fabToggleStockMenu.rotation = 0f
+            }
+        }
+    }
+
+    private fun menuOffsetPx(): Float = 24f * resources.displayMetrics.density
 
     private fun loadProducts(forceInitialLoading: Boolean) {
         val currentBinding = _binding ?: return
@@ -187,11 +320,11 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
         val stokMenipis = semuaProduk.count { it.statusStok() == "Menipis" }
         val stokHabis = semuaProduk.count { it.statusStok() == "Habis" }
 
-        currentBinding.tvStockTitle.text = "Stok hari ini"
+        currentBinding.tvStockTitle.text = "Stok produk"
         currentBinding.tvStockTotal.text = "$totalProduk produk"
         currentBinding.tvStockLow.text = "Menipis: $stokMenipis"
         currentBinding.tvStockOut.text = "Habis: $stokHabis"
-        currentBinding.tvStockSubtitle.text = "Pantau stok real-time, minimum stok, dan adjustment"
+        currentBinding.tvStockSubtitle.text = "Ketuk produk untuk melihat riwayat stok per produk"
 
         totalPages = if (filtered.isEmpty()) 1 else ((filtered.size - 1) / pageSize) + 1
         if (currentPage > totalPages) currentPage = totalPages
@@ -210,7 +343,7 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
                     badge = if (produk.aktifDijual) "Aktif" else "Nonaktif",
                     amount = "${produk.stokSaatIni} ${produk.satuan}",
                     priceStatus = produk.statusStok(),
-                    parameterStatus = "",
+                    parameterStatus = "Tap untuk riwayat",
                     tone = when (produk.statusStok()) {
                         "Aman" -> WarnaBaris.GREEN
                         "Menipis" -> WarnaBaris.GOLD
@@ -220,7 +353,8 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
                         "Aman" -> WarnaBaris.GREEN
                         "Menipis" -> WarnaBaris.GOLD
                         else -> WarnaBaris.RED
-                    }
+                    },
+                    parameterTone = WarnaBaris.BLUE
                 )
             }
         )
@@ -246,7 +380,18 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
         currentBinding.contentStock.isVisible = !showLoading
     }
 
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (hidden) closeActionMenuImmediately()
+    }
+
+    override fun onPause() {
+        closeActionMenuImmediately()
+        super.onPause()
+    }
+
     override fun onDestroyView() {
+        closeActionMenuImmediately()
         _binding = null
         super.onDestroyView()
     }

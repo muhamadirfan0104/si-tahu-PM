@@ -19,4 +19,8 @@
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
 
+    <color name="floating_menu_toggle">#5F7D49</color>
+    <color name="floating_menu_surface">#EEF5E7</color>
+    <color name="floating_menu_overlay">#BFF7F4ED</color>
+
 </resources>
