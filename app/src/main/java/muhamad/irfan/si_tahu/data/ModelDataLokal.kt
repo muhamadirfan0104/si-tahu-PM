@@ -178,6 +178,7 @@ data class ItemDraftRekap(
     val id: String,
     val productId: String,
     val productName: String,
+    val channelLabel: String,
     var qty: Int,
     var price: Long
 )

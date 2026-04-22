@@ -207,7 +207,7 @@ object RepositoriLokal {
             rows += BarisTransaksi(
                 id = item.id,
                 date = item.date,
-                type = "Konversi",
+                type = "Produk Olahan",
                 subtitle = (getProduct(item.fromProductId)?.name ?: "Bahan") + " -> " + (getProduct(item.toProductId)?.name ?: "Hasil"),
                 valueText = item.outputQty.toString() + " pcs",
                 source = "KONVERSI"
@@ -246,10 +246,10 @@ object RepositoriLokal {
         }
         database.conversions.forEach {
             if (it.fromProductId == productId) {
-                rows += PergerakanStok(it.id + "-out", it.date, "Konversi keluar", "Dipakai ke ${getProduct(it.toProductId)?.name ?: "produk"}", "-${it.inputQty} ${product.unit}", "orange")
+                rows += PergerakanStok(it.id + "-out", it.date, "Produk Olahan keluar", "Dipakai ke ${getProduct(it.toProductId)?.name ?: "produk"}", "-${it.inputQty} ${product.unit}", "orange")
             }
             if (it.toProductId == productId) {
-                rows += PergerakanStok(it.id + "-in", it.date, "Konversi masuk", "Hasil dari ${getProduct(it.fromProductId)?.name ?: "produk"}", "+${it.outputQty} ${product.unit}", "green")
+                rows += PergerakanStok(it.id + "-in", it.date, "Produk Olahan masuk", "Hasil dari ${getProduct(it.fromProductId)?.name ?: "produk"}", "+${it.outputQty} ${product.unit}", "green")
             }
         }
         database.sales.forEach { sale ->
@@ -430,7 +430,7 @@ object RepositoriLokal {
         )
         database.conversions.add(0, item)
         persist()
-        addActivity("Konversi ${fromProduct.name} -> ${toProduct.name} berhasil.", "blue")
+        addActivity("Produk olahan ${fromProduct.name} -> ${toProduct.name} berhasil.", "blue")
         return item
     }
 
@@ -695,17 +695,17 @@ object RepositoriLokal {
     }
 
     fun deleteConversion(conversionId: String): CatatanKonversi {
-        val item = getConversionLog(conversionId) ?: throw IllegalArgumentException("Data konversi tidak ditemukan")
+        val item = getConversionLog(conversionId) ?: throw IllegalArgumentException("Data produk olahan tidak ditemukan")
         val fromProduct = getProduct(item.fromProductId) ?: throw IllegalArgumentException("Produk bahan tidak ditemukan")
         val toProduct = getProduct(item.toProductId) ?: throw IllegalArgumentException("Produk hasil tidak ditemukan")
         if (toProduct.stock < item.outputQty) {
-            throw IllegalStateException("Stok hasil konversi sudah terpakai, data tidak bisa dihapus")
+            throw IllegalStateException("Stok hasil produk olahan sudah terpakai, data tidak bisa dihapus")
         }
         toProduct.stock -= item.outputQty
         fromProduct.stock += item.inputQty
         database.conversions.removeAll { it.id == conversionId }
         persist()
-        addActivity("Konversi ${item.id} dihapus.", "orange")
+        addActivity("Produk olahan ${item.id} dihapus.", "orange")
         return item
     }
 
@@ -749,7 +749,6 @@ object RepositoriLokal {
             appendLine(separator())
             appendLine(detailLine("No. Transaksi", sale.id))
             appendLine(detailLine("Tanggal", Formatter.readableDateTime(sale.date)))
-            appendLine(detailLine("Sumber", sale.source))
             appendLine(detailLine("Kasir", cashier?.name ?: "Pengguna"))
             appendLine(detailLine("Pembayaran", sale.paymentMethod))
             appendLine(separator())
@@ -795,7 +794,7 @@ object RepositoriLokal {
         return buildString {
             appendLine("DETAIL KONVERSI")
             appendLine(separator())
-            appendLine(detailLine("ID Konversi", item.id))
+            appendLine(detailLine("ID Produk Olahan", item.id))
             appendLine(detailLine("Tanggal", Formatter.readableDateTime(item.date)))
             appendLine(detailLine("Produk Bahan", from?.name ?: item.fromProductId))
             appendLine(detailLine("Jumlah Bahan", item.inputQty.toString() + " " + (from?.unit ?: "pcs")))
@@ -842,7 +841,7 @@ object RepositoriLokal {
     fun buildTransactionDetailText(rowId: String, type: String): String = when (type) {
         "Penjualan", "Rekap Pasar" -> buildReceiptText(rowId)
         "Produksi" -> buildProductionDetailText(rowId)
-        "Konversi" -> buildConversionDetailText(rowId)
+        "Produk Olahan" -> buildConversionDetailText(rowId)
         "Pengeluaran" -> buildExpenseDetailText(rowId)
         "Adjustment" -> buildAdjustmentDetailText(rowId)
         else -> "Detail belum tersedia"

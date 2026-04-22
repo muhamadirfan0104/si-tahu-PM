@@ -196,16 +196,17 @@ class AktivitasKonversiProduk : AktivitasDasar() {
                     userAuthId = currentUserId()
                 )
             }.onSuccess {
+                setResult(RESULT_OK)
                 showMessage(
-                    "Konversi berhasil. ${produkAsal.name} berkurang $qtyBahan ${produkAsal.unit}, ${produkHasil.name} bertambah $qtyHasil ${produkHasil.unit}."
+                    "Produk olahan berhasil disimpan. ${produkAsal.name} berkurang $qtyBahan ${produkAsal.unit}, ${produkHasil.name} bertambah $qtyHasil ${produkHasil.unit}."
                 )
                 finish()
             }.onFailure {
-                showMessage(it.message ?: "Gagal menyimpan konversi")
+                showMessage(it.message ?: "Gagal menyimpan produk olahan")
             }
 
             binding.btnSave.isEnabled = true
-            binding.btnSave.text = "Simpan Konversi"
+            binding.btnSave.text = "Simpan Produk Olahan"
         }
     }
 }

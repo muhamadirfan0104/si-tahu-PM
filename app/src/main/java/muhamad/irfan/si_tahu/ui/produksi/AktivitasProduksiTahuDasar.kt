@@ -221,6 +221,7 @@ class AktivitasProduksiTahuDasar : AktivitasDasar() {
             }.onSuccess {
                 binding.btnSave.isEnabled = true
                 binding.btnSave.text = "Simpan Produksi"
+                setResult(RESULT_OK)
                 showMessage("Produksi dasar berhasil disimpan.")
                 finish()
             }.onFailure {

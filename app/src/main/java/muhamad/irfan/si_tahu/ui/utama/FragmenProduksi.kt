@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
+import android.widget.PopupMenu
 import androidx.core.view.children
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
@@ -27,7 +28,10 @@ class FragmenProduksi : FragmenDasar(R.layout.fragment_production_menu) {
     private val binding get() = _binding!!
 
     private val recentAdapter by lazy {
-        AdapterBarisUmum(onItemClick = {})
+        AdapterBarisUmum(
+            onItemClick = ::openRecentDetail,
+            onActionClick = ::showRecentActionMenu
+        )
     }
 
     private var hasLoadedOnce = false
@@ -52,14 +56,9 @@ class FragmenProduksi : FragmenDasar(R.layout.fragment_production_menu) {
     override fun onResume() {
         super.onResume()
         closeActionMenuImmediately()
-        if (_binding != null && shouldRefreshData()) {
+        if (_binding != null) {
             renderSummary(forceInitialLoading = !hasLoadedOnce)
         }
-    }
-
-    private fun shouldRefreshData(): Boolean {
-        if (!hasLoadedOnce) return true
-        return SystemClock.elapsedRealtime() - lastLoadedAt > 30_000L
     }
 
     private fun setupActions() = with(binding) {
@@ -233,8 +232,8 @@ class FragmenProduksi : FragmenDasar(R.layout.fragment_production_menu) {
                     lastLoadedAt = SystemClock.elapsedRealtime()
 
                     safeBinding.tvProductionTotal.text = "${summary.totalProduksiDasarHariIni} pcs"
-                    safeBinding.tvProductionBatch.text = "Batch dasar tercatat: ${summary.totalBatchHariIni}"
-                    safeBinding.tvProductionDerived.text = "Konversi tercatat: ${summary.totalKonversiHariIni} transaksi"
+                    safeBinding.tvProductionBatch.text = "Masak dasar tercatat: ${summary.totalBatchHariIni}"
+                    safeBinding.tvProductionDerived.text = "Produk olahan tercatat: ${summary.totalKonversiHariIni} transaksi"
                     safeBinding.tvParameterActive.text = "Parameter aktif: ${summary.totalParameterAktif}"
                     safeBinding.tvProductionHistoryCount.text = "Riwayat total: ${summary.totalRiwayat} catatan"
 
@@ -246,7 +245,8 @@ class FragmenProduksi : FragmenDasar(R.layout.fragment_production_menu) {
                                 subtitle = it.subtitle,
                                 badge = it.badge,
                                 amount = it.amount,
-                                tone = if (it.badge == "Konversi") WarnaBaris.BLUE else WarnaBaris.GREEN
+                                actionLabel = "⋮",
+                                tone = if (it.badge == "Produk Olahan") WarnaBaris.BLUE else WarnaBaris.GREEN
                             )
                         }
                     )
@@ -270,6 +270,52 @@ class FragmenProduksi : FragmenDasar(R.layout.fragment_production_menu) {
         val currentBinding = _binding ?: return
         currentBinding.progressLoadProduction.isVisible = showLoading
         currentBinding.contentProduction.isVisible = !showLoading
+    }
+
+
+    private fun openRecentDetail(item: ItemBaris) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val detail = runCatching {
+                RepositoriFirebaseUtama.buildProductionDetailText(item.id)
+            }.getOrElse {
+                it.message ?: "Gagal memuat detail produksi"
+            }
+            showDetailModal("Detail ${item.badge}", detail)
+        }
+    }
+
+    private fun showRecentActionMenu(item: ItemBaris, anchor: View) {
+        val safeContext = context ?: return
+        PopupMenu(safeContext, anchor).apply {
+            menu.add("Lihat detail")
+            menu.add("Hapus")
+            setOnMenuItemClickListener {
+                when (it.title.toString()) {
+                    "Lihat detail" -> openRecentDetail(item)
+                    "Hapus" -> confirmDelete(item)
+                }
+                true
+            }
+        }.show()
+    }
+
+    private fun confirmDelete(item: ItemBaris) {
+        val safeBinding = _binding ?: return
+        showConfirmationModal(
+            title = "Hapus ${item.badge}",
+            message = "Data ${item.title} akan dihapus dan stok akan disesuaikan kembali."
+        ) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                runCatching { RepositoriFirebaseUtama.hapusCatatanProduksi(item.id) }
+                    .onSuccess {
+                        renderSummary(forceInitialLoading = false)
+                        showMessage(safeBinding.root, "Data produksi berhasil dihapus")
+                    }
+                    .onFailure {
+                        showMessage(safeBinding.root, it.message ?: "Gagal menghapus data produksi")
+                    }
+            }
+        }
     }
 
     override fun onHiddenChanged(hidden: Boolean) {

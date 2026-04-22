@@ -8,13 +8,19 @@ import android.webkit.WebViewClient
 
 object PembantuCetak {
     fun printPlainText(context: Context, jobName: String, text: String) {
+        val safeText = text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\n", "<br>")
+
         val html = buildString {
-            append("<html><body style=\"font-family:monospace;padding:24px;white-space:pre-wrap;color:#293226;background:#ffffff;\">")
-            append(text
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;"))
-            append("</body></html>")
+            append("<html><body style=\"margin:0;padding:32px;background:#f6f1e7;font-family:monospace;color:#223022;\">")
+            append("<div style=\"max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #e6ddcf;border-radius:18px;padding:28px;box-shadow:0 6px 18px rgba(0,0,0,0.05);white-space:normal;line-height:1.6;\">")
+            append("<div style=\"font-size:12px;letter-spacing:2px;color:#8a7c65;margin-bottom:12px;\">NOTA PENJUALAN</div>")
+            append("<div style=\"white-space:pre-wrap;font-size:13px;\">")
+            append(safeText)
+            append("</div></div></body></html>")
         }
         val webView = WebView(context)
         webView.webViewClient = object : WebViewClient() {

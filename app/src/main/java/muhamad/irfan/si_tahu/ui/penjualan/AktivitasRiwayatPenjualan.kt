@@ -124,6 +124,11 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                     semuaRows = sales
                         .sortedByDescending { it.tanggalIso }
                         .map {
+                            val statusLabel = if (it.statusPenjualan.equals("BATAL", true)) {
+                                "Batal"
+                            } else {
+                                "Selesai"
+                            }
                             ItemBaris(
                                 id = it.id,
                                 title = it.title,
@@ -135,6 +140,8 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                                     FILTER_PASAR -> WarnaBaris.BLUE
                                     else -> WarnaBaris.GOLD
                                 },
+                                parameterStatus = statusLabel,
+                                parameterTone = if (statusLabel == "Batal") WarnaBaris.RED else WarnaBaris.GREEN,
                                 actionLabel = "⋮"
                             )
                         }
@@ -167,7 +174,8 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                 keyword.isBlank() ||
                         it.title.lowercase().contains(keyword) ||
                         it.subtitle.lowercase().contains(keyword) ||
-                        it.badge.lowercase().contains(keyword)
+                        it.badge.lowercase().contains(keyword) ||
+                        it.parameterStatus.lowercase().contains(keyword)
 
             cocokFilter && cocokKeyword
         }
@@ -234,6 +242,9 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         PopupMenu(this, anchor).apply {
             menu.add("Lihat detail")
             menu.add("Bagikan")
+            if (!item.parameterStatus.equals("Batal", true)) {
+                menu.add("Batalkan penjualan")
+            }
             if (izinkanHapus) {
                 menu.add("Hapus")
             }
@@ -251,11 +262,31 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                             }
                     }
 
+                    "Batalkan penjualan" -> confirmCancel(item)
                     "Hapus" -> confirmDelete(item)
                 }
                 true
             }
         }.show()
+    }
+
+    private fun confirmCancel(item: ItemBaris) {
+        showInputModal(
+            title = "Batalkan penjualan",
+            hint = "Alasan pembatalan",
+            confirmLabel = "Batalkan"
+        ) { alasan ->
+            lifecycleScope.launch {
+                runCatching { RepositoriFirebaseUtama.batalkanPenjualan(item.id, alasan, currentUserId()) }
+                    .onSuccess {
+                        buildRows()
+                        showMessage("Penjualan berhasil dibatalkan")
+                    }
+                    .onFailure {
+                        showMessage(it.message ?: "Gagal membatalkan penjualan")
+                    }
+            }
+        }
     }
 
     private fun confirmDelete(item: ItemBaris) {

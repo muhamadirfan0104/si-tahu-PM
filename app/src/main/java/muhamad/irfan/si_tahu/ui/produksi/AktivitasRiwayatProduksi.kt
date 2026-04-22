@@ -13,11 +13,17 @@ import muhamad.irfan.si_tahu.util.WarnaBaris
 class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
 
     private var rows: List<ItemBaris> = emptyList()
+    private var filteredRows: List<ItemBaris> = emptyList()
+    private var halamanSaatIni = 1
+    private val itemPerHalaman = 10
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        configureScreen("Riwayat Produksi", "Dasar dan konversi")
-        setPrimaryFilter(listOf("Semua", "Produksi Dasar", "Konversi")) { refresh() }
+        configureScreen("Riwayat Produksi", "Dasar dan produk olahan")
+        setPrimaryFilter(listOf("Semua", "Produksi Dasar", "Produk Olahan")) {
+            halamanSaatIni = 1
+            refresh()
+        }
         hideSecondaryFilter()
     }
 
@@ -26,7 +32,10 @@ class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
         buildRows()
     }
 
-    override fun onSearchChanged() = refresh()
+    override fun onSearchChanged() {
+        halamanSaatIni = 1
+        refresh()
+    }
 
     private fun buildRows() {
         lifecycleScope.launch {
@@ -39,15 +48,21 @@ class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
                             subtitle = it.subtitle,
                             badge = it.badge,
                             amount = it.amount,
-                            tone = if (it.badge == "Konversi") WarnaBaris.BLUE else WarnaBaris.GREEN,
-                            priceTone = if (it.badge == "Konversi") WarnaBaris.BLUE else WarnaBaris.GREEN
+                            actionLabel = "⋮",
+                            tone = if (it.badge == "Produk Olahan") WarnaBaris.BLUE else WarnaBaris.GREEN,
+                            priceTone = if (it.badge == "Produk Olahan") WarnaBaris.BLUE else WarnaBaris.GREEN
                         )
                     }
+                    filteredRows = rows
+                    halamanSaatIni = 1
                     refresh()
                 }
                 .onFailure {
                     rows = emptyList()
-                    submitRows(emptyList())
+                    filteredRows = emptyList()
+                    halamanSaatIni = 1
+                    hidePagination()
+                    submitRows(emptyList(), "Riwayat produksi belum tersedia")
                     showMessage(it.message ?: "Gagal memuat riwayat produksi")
                 }
         }
@@ -55,12 +70,65 @@ class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
 
     private fun refresh() {
         val keyword = searchText()
-        val filter = primarySelection()
-        val filtered = rows.filter {
+        val filter = primarySelection().ifBlank { "Semua" }
+
+        filteredRows = rows.filter {
             (filter == "Semua" || it.badge == filter) &&
-                (keyword.isBlank() || it.title.lowercase().contains(keyword) || it.subtitle.lowercase().contains(keyword))
+                (
+                    keyword.isBlank() ||
+                        it.title.lowercase().contains(keyword) ||
+                        it.subtitle.lowercase().contains(keyword) ||
+                        it.badge.lowercase().contains(keyword)
+                    )
         }
-        submitRows(filtered)
+
+        val totalPages = if (filteredRows.isEmpty()) {
+            1
+        } else {
+            ((filteredRows.size - 1) / itemPerHalaman) + 1
+        }
+
+        if (halamanSaatIni > totalPages) halamanSaatIni = totalPages
+        if (halamanSaatIni < 1) halamanSaatIni = 1
+
+        val fromIndex = (halamanSaatIni - 1) * itemPerHalaman
+        val untilIndex = minOf(fromIndex + itemPerHalaman, filteredRows.size)
+
+        val currentPageRows = if (filteredRows.isEmpty()) {
+            emptyList()
+        } else {
+            filteredRows.subList(fromIndex, untilIndex)
+        }
+
+        submitRows(
+            currentPageRows,
+            if (rows.isEmpty()) "Belum ada riwayat produksi" else "Tidak ada data yang cocok"
+        )
+
+        if (filteredRows.isEmpty()) {
+            hidePagination()
+        } else {
+            showPagination(
+                currentPage = halamanSaatIni,
+                totalPages = totalPages,
+                onPrev = if (halamanSaatIni > 1) {
+                    {
+                        halamanSaatIni--
+                        refresh()
+                    }
+                } else {
+                    null
+                },
+                onNext = if (halamanSaatIni < totalPages) {
+                    {
+                        halamanSaatIni++
+                        refresh()
+                    }
+                } else {
+                    null
+                }
+            )
+        }
     }
 
     override fun onRowClick(item: ItemBaris) {

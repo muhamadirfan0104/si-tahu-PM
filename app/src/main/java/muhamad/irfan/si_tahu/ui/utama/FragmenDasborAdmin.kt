@@ -129,7 +129,7 @@ class FragmenDasborAdmin : FragmenDasar(R.layout.fragment_admin_dashboard) {
                             badge = it.badge,
                             tone = when (it.badge) {
                                 "Rumahan", "Produksi Dasar" -> WarnaBaris.GREEN
-                                "Konversi", "Pasar" -> WarnaBaris.BLUE
+                                "Produk Olahan", "Pasar" -> WarnaBaris.BLUE
                                 else -> WarnaBaris.GOLD
                             }
                         )

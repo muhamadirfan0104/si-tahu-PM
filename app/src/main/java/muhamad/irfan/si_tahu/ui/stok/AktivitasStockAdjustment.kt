@@ -1,5 +1,6 @@
 package muhamad.irfan.si_tahu.ui.stok
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -124,6 +125,7 @@ class AktivitasStockAdjustment : AktivitasDasar() {
                 )
                 RepositoriFirebaseUtama.buildAdjustmentDetailText(id)
             }.onSuccess { detail ->
+                setResult(RESULT_OK, Intent().putExtra(EXTRA_STOCK_UPDATED, true))
                 showReceiptModal("Adjustment tersimpan", detail)
                 binding.etQty.setText("")
                 binding.etNote.setText("")
@@ -139,5 +141,6 @@ class AktivitasStockAdjustment : AktivitasDasar() {
 
     companion object {
         const val EXTRA_PRODUCT_ID = "extra_product_id"
+        const val EXTRA_STOCK_UPDATED = "extra_stock_updated"
     }
 }

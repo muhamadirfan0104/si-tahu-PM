@@ -5,6 +5,8 @@ import android.graphics.Typeface
 import android.text.method.LinkMovementMethod
 import android.widget.ScrollView
 import android.widget.TextView
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import androidx.appcompat.app.AlertDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -41,6 +43,46 @@ object PembantuModal {
                 if (negativeLabel != null) setNegativeButton(negativeLabel) { _, _ -> onNegative?.invoke() }
             }
             .show()
+    }
+
+    fun showInputModal(
+        context: Context,
+        title: String,
+        hint: String,
+        confirmLabel: String = "Simpan",
+        initialValue: String = "",
+        onConfirm: (String) -> Unit
+    ): AlertDialog {
+        val density = context.resources.displayMetrics.density
+        val inputLayout = TextInputLayout(context).apply {
+            setPadding((20 * density).toInt(), (8 * density).toInt(), (20 * density).toInt(), 0)
+        }
+        val input = TextInputEditText(context).apply {
+            setText(initialValue)
+            setHint(hint)
+            maxLines = 4
+            minLines = 3
+        }
+        inputLayout.addView(input)
+
+        val dialog = MaterialAlertDialogBuilder(context)
+            .setTitle(title)
+            .setView(inputLayout)
+            .setNegativeButton("Tutup", null)
+            .setPositiveButton(confirmLabel, null)
+            .show()
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val value = input.text?.toString()?.trim().orEmpty()
+            if (value.isBlank()) {
+                inputLayout.error = "$hint wajib diisi"
+            } else {
+                inputLayout.error = null
+                onConfirm(value)
+                dialog.dismiss()
+            }
+        }
+        return dialog
     }
 
     fun showConfirmationModal(

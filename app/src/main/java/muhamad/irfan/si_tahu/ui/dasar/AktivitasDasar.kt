@@ -125,6 +125,23 @@ open class AktivitasDasar : AppCompatActivity() {
         )
     }
 
+    protected fun showInputModal(
+        title: String,
+        hint: String,
+        confirmLabel: String = "Simpan",
+        initialValue: String = "",
+        onConfirm: (String) -> Unit
+    ) {
+        PembantuModal.showInputModal(
+            context = this,
+            title = title,
+            hint = hint,
+            confirmLabel = confirmLabel,
+            initialValue = initialValue,
+            onConfirm = onConfirm
+        )
+    }
+
     protected fun showConfirmationModal(
         title: String,
         message: String,

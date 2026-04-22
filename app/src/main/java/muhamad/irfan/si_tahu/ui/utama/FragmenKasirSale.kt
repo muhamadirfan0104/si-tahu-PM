@@ -8,6 +8,7 @@ import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.data.Produk
@@ -16,8 +17,10 @@ import muhamad.irfan.si_tahu.data.SessionKeranjangRumahan
 import muhamad.irfan.si_tahu.databinding.FragmentCashierSaleBinding
 import muhamad.irfan.si_tahu.ui.dasar.FragmenDasar
 import muhamad.irfan.si_tahu.ui.penjualan.AktivitasCheckoutRumahan
+import muhamad.irfan.si_tahu.ui.umum.AdapterKeranjang
 import muhamad.irfan.si_tahu.ui.umum.AdapterProduk
 import muhamad.irfan.si_tahu.util.AdapterSpinner
+import muhamad.irfan.si_tahu.util.Formatter
 
 class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
 
@@ -25,6 +28,9 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
     private val binding get() = _binding!!
 
     private lateinit var productAdapter: AdapterProduk
+    private lateinit var cartAdapter: AdapterKeranjang
+    private lateinit var cartBottomSheetBehavior: BottomSheetBehavior<View>
+
     private var products: List<Produk> = emptyList()
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -52,11 +58,27 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
             getHarga = { product -> defaultPrice(product) },
             getStatus = { product -> productStatus(product) }
         )
+
+        cartAdapter = AdapterKeranjang(
+            onIncrease = { item -> changeCartItemQty(item.productId, 1) },
+            onDecrease = { item -> changeCartItemQty(item.productId, -1) },
+            onRemove = { item ->
+                SessionKeranjangRumahan.remove(item.productId)
+                renderBottomCart()
+            },
+            getProduk = { productId ->
+                products.firstOrNull { it.id == productId }
+            }
+        )
     }
 
     private fun setupView() {
         binding.rvProducts.layoutManager = LinearLayoutManager(requireContext())
         binding.rvProducts.adapter = productAdapter
+
+        binding.rvCart.layoutManager = LinearLayoutManager(requireContext())
+        binding.rvCart.adapter = cartAdapter
+        binding.rvCart.isNestedScrollingEnabled = true
 
         binding.spCategory.adapter =
             AdapterSpinner.stringAdapter(requireContext(), listOf("Semua"))
@@ -79,20 +101,34 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
             renderProducts()
         }
 
-        binding.btnMinusQty.setOnClickListener {
-            changeCartQty(-1)
-        }
-
-        binding.btnPlusQty.setOnClickListener {
-            changeCartQty(1)
-        }
-
         binding.btnCheckout.setOnClickListener {
             if (SessionKeranjangRumahan.getItems().isEmpty()) return@setOnClickListener
             startActivity(Intent(requireContext(), AktivitasCheckoutRumahan::class.java))
         }
 
+        binding.layoutCartHeader.setOnClickListener {
+            toggleCartSheet()
+        }
+        binding.viewCartHandle.setOnClickListener {
+            toggleCartSheet()
+        }
+
+        cartBottomSheetBehavior = BottomSheetBehavior.from(binding.cardBottomCart)
+        binding.cardBottomCart.post {
+            cartBottomSheetBehavior.peekHeight = dpToPx(190)
+            cartBottomSheetBehavior.isHideable = false
+            cartBottomSheetBehavior.skipCollapsed = false
+            cartBottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+        }
+
         renderBottomCart()
+    }
+
+    private fun toggleCartSheet() {
+        cartBottomSheetBehavior.state = when (cartBottomSheetBehavior.state) {
+            BottomSheetBehavior.STATE_EXPANDED -> BottomSheetBehavior.STATE_COLLAPSED
+            else -> BottomSheetBehavior.STATE_EXPANDED
+        }
     }
 
     private fun loadProducts() {
@@ -174,8 +210,8 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
 
                 val cocokKeyword =
                     keyword.isBlank() ||
-                            product.name.lowercase().contains(keyword) ||
-                            product.code.lowercase().contains(keyword)
+                        product.name.lowercase().contains(keyword) ||
+                        product.code.lowercase().contains(keyword)
 
                 val cocokKategori =
                     category == "Semua" || product.category == category
@@ -222,6 +258,7 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
             return
         }
 
+        val wasEmpty = SessionKeranjangRumahan.isEmpty()
         val success = SessionKeranjangRumahan.addOrIncrease(
             productId = product.id,
             price = defaultPrice(product),
@@ -234,24 +271,23 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
         }
 
         renderBottomCart()
+        if (wasEmpty) {
+            cartBottomSheetBehavior.state = BottomSheetBehavior.STATE_EXPANDED
+        }
         showMessage(binding.root, "${product.name} masuk ke keranjang")
     }
 
-    private fun changeCartQty(delta: Int) {
-        val items = SessionKeranjangRumahan.getItems()
-        if (items.isEmpty()) return
-
-        val lastItem = items.last()
-        val product = products.firstOrNull { it.id == lastItem.productId } ?: return
+    private fun changeCartItemQty(productId: String, delta: Int) {
+        val product = products.firstOrNull { it.id == productId } ?: return
 
         if (delta > 0) {
-            val success = SessionKeranjangRumahan.changeQty(lastItem.productId, 1, product.stock)
+            val success = SessionKeranjangRumahan.changeQty(productId, 1, product.stock)
             if (!success) {
                 showMessage(binding.root, "Stok ${product.name} tidak mencukupi")
                 return
             }
         } else {
-            SessionKeranjangRumahan.changeQty(lastItem.productId, -1, product.stock)
+            SessionKeranjangRumahan.changeQty(productId, -1, product.stock)
         }
 
         renderBottomCart()
@@ -260,22 +296,36 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
     private fun renderBottomCart() {
         val items = SessionKeranjangRumahan.getItems()
         val totalQty = SessionKeranjangRumahan.totalQty()
+        val totalAmount = SessionKeranjangRumahan.totalAmount()
         val emptyCart = items.isEmpty()
 
-        binding.tvCartTitle.text = "Keranjang"
+        cartAdapter.submitList(items)
 
-        binding.tvCartSubtitle.text = if (emptyCart) {
-            "Belum ada produk"
+        binding.tvCartTitle.text = if (emptyCart) {
+            "Keranjang kosong"
         } else {
-            "$totalQty item"
+            "$totalQty item di keranjang"
         }
 
-        binding.tvQtyCart.text = totalQty.toString()
+        binding.tvCartSubtitle.text = if (emptyCart) {
+            "Tarik panel ke atas untuk melihat item"
+        } else {
+            "${items.size} baris produk • tarik ke atas untuk melihat lebih banyak"
+        }
 
-        binding.btnMinusQty.isEnabled = !emptyCart
-        binding.btnPlusQty.isEnabled = !emptyCart
+        binding.tvCartTotal.text = Formatter.currency(totalAmount)
+        binding.tvEmptyCart.isVisible = emptyCart
+        binding.rvCart.isVisible = !emptyCart
         binding.btnCheckout.isEnabled = !emptyCart
         binding.btnCheckout.alpha = if (emptyCart) 0.5f else 1f
+
+        if (emptyCart && ::cartBottomSheetBehavior.isInitialized) {
+            cartBottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+        }
+    }
+
+    private fun dpToPx(valueDp: Int): Int {
+        return (valueDp * resources.displayMetrics.density).toInt()
     }
 
     override fun onDestroyView() {

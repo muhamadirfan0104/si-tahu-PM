@@ -26,7 +26,7 @@
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_tone_neutral"
                 android:padding="14dp"
-                android:text="Konversi akan mengurangi stok bahan dan menambah stok produk turunan." />
+                android:text="Produk olahan akan mengurangi stok bahan dan menambah stok hasil olahan." />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
@@ -111,7 +111,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="Simpan Konversi" />
+                android:text="Simpan Produk Olahan" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

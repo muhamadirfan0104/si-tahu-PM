@@ -139,8 +139,8 @@ class AktivitasDetailStok : AktivitasDasar() {
 
                         val title = when {
                             jenisMutasi.contains("PRODUKSI_DASAR_MASUK") -> "Produksi Dasar"
-                            jenisMutasi.contains("KONVERSI_MASUK") -> "Konversi Masuk"
-                            jenisMutasi.contains("KONVERSI_KELUAR") -> "Konversi Keluar"
+                            jenisMutasi.contains("KONVERSI_MASUK") -> "Produk Olahan Masuk"
+                            jenisMutasi.contains("KONVERSI_KELUAR") -> "Produk Olahan Keluar"
                             jenisMutasi.contains("ADJUSTMENT_TAMBAH") -> "Penyesuaian Stok (+)"
                             jenisMutasi.contains("ADJUSTMENT_KURANG") -> "Penyesuaian Stok (-)"
                             jenisMutasi.contains("PENJUALAN") -> "Penjualan"

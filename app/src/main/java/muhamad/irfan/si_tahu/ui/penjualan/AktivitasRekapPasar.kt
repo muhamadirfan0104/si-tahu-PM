@@ -5,7 +5,9 @@ import android.view.View
 import android.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import kotlinx.coroutines.launch
+import muhamad.irfan.si_tahu.data.HargaKanal
 import muhamad.irfan.si_tahu.data.ItemDraftRekap
 import muhamad.irfan.si_tahu.data.Produk
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
@@ -22,9 +24,11 @@ class AktivitasRekapPasar : AktivitasDasar() {
 
     private lateinit var binding: ActivityMarketRecapBinding
     private val itemAdapter = AdapterBarisUmum(onItemClick = {}, onActionClick = ::showItemMenu)
+    private lateinit var draftBottomSheetBehavior: BottomSheetBehavior<View>
 
     private var products: List<Produk> = emptyList()
     private val draftItems = mutableListOf<ItemDraftRekap>()
+    private var opsiHargaAktif: List<OpsiHargaRekap> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,6 +44,8 @@ class AktivitasRekapPasar : AktivitasDasar() {
 
     private fun setupView() {
         binding.etDate.setText(Formatter.currentDateOnly())
+        binding.etTime.setText(Formatter.currentTimeOnly())
+
         binding.etDate.setOnClickListener {
             PembantuPilihTanggalWaktu.showDatePicker(
                 this,
@@ -47,20 +53,34 @@ class AktivitasRekapPasar : AktivitasDasar() {
             ) { binding.etDate.setText(it) }
         }
 
+        binding.etTime.setOnClickListener {
+            val previewDateTime = "${binding.etDate.text?.toString().orEmpty()}T${binding.etTime.text?.toString().orEmpty()}:00"
+            PembantuPilihTanggalWaktu.showTimePicker(this, previewDateTime) { binding.etTime.setText(it) }
+        }
+
         binding.rvItems.layoutManager = LinearLayoutManager(this)
         binding.rvItems.adapter = itemAdapter
-        binding.rvItems.isNestedScrollingEnabled = false
+        binding.rvItems.isNestedScrollingEnabled = true
 
-        binding.spChannel.adapter =
-            AdapterSpinner.stringAdapter(this, listOf("Pasar"))
+        binding.spProduct.adapter = AdapterSpinner.stringAdapter(this, listOf("Belum ada produk"))
+        binding.spPrice.adapter = AdapterSpinner.stringAdapter(this, listOf("Belum ada harga aktif"))
 
-        binding.spProduct.onItemSelectedListener = RecapSpinnerListener { updateChannelPrice() }
-        binding.spChannel.onItemSelectedListener = RecapSpinnerListener { updateChannelPrice() }
+        binding.spProduct.onItemSelectedListener = RecapSpinnerListener { refreshPriceOptions() }
+        binding.spPrice.onItemSelectedListener = RecapSpinnerListener { updateSelectedPriceInfo() }
 
         binding.btnAddItem.setOnClickListener { addItem() }
         binding.btnSaveRecap.setOnClickListener { saveRecap() }
 
+        draftBottomSheetBehavior = BottomSheetBehavior.from(binding.sheetDraft)
+        binding.sheetDraft.post {
+            draftBottomSheetBehavior.peekHeight = dpToPx(220)
+            draftBottomSheetBehavior.isHideable = false
+            draftBottomSheetBehavior.skipCollapsed = false
+            draftBottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
+        }
+
         refreshDraft()
+        updateSelectedPriceInfo()
     }
 
     private fun loadProducts() {
@@ -77,11 +97,12 @@ class AktivitasRekapPasar : AktivitasDasar() {
                     binding.spProduct.adapter =
                         AdapterSpinner.stringAdapter(this@AktivitasRekapPasar, labels)
 
-                    updateChannelPrice()
+                    refreshPriceOptions()
                     refreshDraft()
                 }
                 .onFailure {
                     products = emptyList()
+                    refreshPriceOptions()
                     refreshDraft()
                     showMessage(it.message ?: "Gagal memuat produk")
                 }
@@ -91,23 +112,71 @@ class AktivitasRekapPasar : AktivitasDasar() {
     private fun selectedProduct(): Produk? =
         products.getOrNull(binding.spProduct.selectedItemPosition)
 
-    private fun channelPrice(product: Produk?, channel: String): Long {
-        if (product == null) return 0L
-        return product.channels.firstOrNull { it.label.equals(channel, true) && it.active }?.price
-            ?: product.channels.firstOrNull { it.defaultCashier && it.active }?.price
-            ?: product.channels.firstOrNull { it.active }?.price
-            ?: 0L
+    private fun selectedPriceOption(): OpsiHargaRekap? =
+        opsiHargaAktif.getOrNull(binding.spPrice.selectedItemPosition)
+
+    private fun refreshPriceOptions() {
+        val product = selectedProduct()
+        opsiHargaAktif = product?.channels
+            ?.filter { it.active && it.price > 0L }
+            ?.sortedWith(compareByDescending<HargaKanal> { it.defaultCashier }.thenBy { it.label.lowercase() })
+            ?.map {
+                OpsiHargaRekap(
+                    label = it.label,
+                    price = it.price,
+                    defaultCashier = it.defaultCashier
+                )
+            }
+            ?: emptyList()
+
+        val labels = if (opsiHargaAktif.isEmpty()) {
+            listOf("Belum ada harga aktif")
+        } else {
+            opsiHargaAktif.map { opsi ->
+                buildString {
+                    append(opsi.label)
+                    append(" • ")
+                    append(Formatter.currency(opsi.price))
+                    if (opsi.defaultCashier) append(" (Default Kasir)")
+                }
+            }
+        }
+
+        binding.spPrice.adapter = AdapterSpinner.stringAdapter(this, labels)
+        updateSelectedPriceInfo()
     }
 
-    private fun updateChannelPrice() {
+    private fun updateSelectedPriceInfo() {
         val product = selectedProduct()
-        val channel = binding.spChannel.selectedItem?.toString().orEmpty()
-        val price = channelPrice(product, channel)
+        val selectedPrice = selectedPriceOption()
 
-        binding.tvChannelPrice.text = if (product == null) {
-            "Pilih produk untuk melihat harga kanal."
+        binding.tvSelectedPrice.text = if (product == null) {
+            "Pilih produk untuk melihat harga."
+        } else if (selectedPrice == null) {
+            "Produk ${product.name} belum punya harga aktif yang bisa dipakai rekap."
         } else {
-            "Harga ${channel.ifBlank { "kanal" }} untuk ${product.name}: ${Formatter.currency(price)}"
+            val labelDefault = if (selectedPrice.defaultCashier) " • Default Kasir" else ""
+            "Harga terpilih: ${selectedPrice.label}$labelDefault\n${Formatter.currency(selectedPrice.price)}"
+        }
+
+        binding.tvProductInfo.text = if (product == null) {
+            "Belum ada produk yang dipilih"
+        } else {
+            val hargaInfo = product.channels
+                .filter { it.active }
+                .sortedWith(compareByDescending<HargaKanal> { it.defaultCashier }.thenBy { it.label.lowercase() })
+                .joinToString("\n") {
+                    val infoDefault = if (it.defaultCashier) " (Default Kasir)" else ""
+                    "• ${it.label}: ${Formatter.currency(it.price)}$infoDefault"
+                }
+                .ifBlank { "Belum ada harga aktif" }
+            "Pilihan harga produk:\n$hargaInfo"
+        }
+
+        binding.tvSelectedStock.text = if (product == null) {
+            ""
+        } else {
+            "Stok tersedia: ${product.stock} ${product.unit}"
         }
     }
 
@@ -118,30 +187,40 @@ class AktivitasRekapPasar : AktivitasDasar() {
             return
         }
 
+        val opsiHarga = selectedPriceOption()
+        if (opsiHarga == null) {
+            showMessage("Pilih harga yang aktif untuk ${product.name}")
+            return
+        }
+
         val qty = binding.etQty.text?.toString()?.toIntOrNull() ?: 0
         if (qty <= 0) {
             showMessage("Jumlah harus lebih dari 0")
             return
         }
 
-        val channel = binding.spChannel.selectedItem?.toString().orEmpty()
-        val price = channelPrice(product, channel)
-
-        val existing = draftItems.firstOrNull { it.productId == product.id && it.price == price }
-        val totalQty = (existing?.qty ?: 0) + qty
-
-        if (totalQty > product.stock) {
+        val totalDraftProduk = draftItems
+            .filter { it.productId == product.id }
+            .sumOf { it.qty }
+        if (totalDraftProduk + qty > product.stock) {
             showMessage("Stok ${product.name} tidak mencukupi")
             return
         }
 
+        val existing = draftItems.firstOrNull {
+            it.productId == product.id &&
+                it.channelLabel.equals(opsiHarga.label, true) &&
+                it.price == opsiHarga.price
+        }
+
         if (existing == null) {
             draftItems += ItemDraftRekap(
-                id = "draft-${product.id}-${draftItems.size + 1}",
+                id = "draft-${product.id}-${opsiHarga.label}-${draftItems.size + 1}",
                 productId = product.id,
                 productName = product.name,
+                channelLabel = opsiHarga.label,
                 qty = qty,
-                price = price
+                price = opsiHarga.price
             )
         } else {
             existing.qty += qty
@@ -149,6 +228,7 @@ class AktivitasRekapPasar : AktivitasDasar() {
 
         binding.etQty.setText("")
         refreshDraft()
+        draftBottomSheetBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
     }
 
     private fun refreshDraft() {
@@ -158,13 +238,21 @@ class AktivitasRekapPasar : AktivitasDasar() {
                 title = it.productName,
                 subtitle = "${it.qty} pcs x ${Formatter.currency(it.price)}",
                 amount = Formatter.currency(it.qty.toLong() * it.price),
-                badge = "Draft",
+                badge = it.channelLabel,
+                parameterStatus = "Harga ${it.channelLabel}",
+                parameterTone = WarnaBaris.BLUE,
                 tone = WarnaBaris.BLUE,
                 actionLabel = "⋮"
             )
         }
 
         itemAdapter.submitList(rows)
+        binding.tvDraftEmpty.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
+        binding.tvDraftSummary.text = if (draftItems.isEmpty()) {
+            "Belum ada item. Pilih produk dan harga lalu tambahkan ke draft."
+        } else {
+            "${draftItems.size} item draft • ${draftItems.sumOf { it.qty }} pcs"
+        }
         binding.tvTotal.text =
             "Total rekap: ${Formatter.currency(draftItems.sumOf { it.qty.toLong() * it.price })}"
         binding.btnSaveRecap.isEnabled = draftItems.isNotEmpty()
@@ -193,14 +281,19 @@ class AktivitasRekapPasar : AktivitasDasar() {
             return
         }
 
-        val channel = binding.spChannel.selectedItem?.toString().orEmpty()
+        val time = binding.etTime.text?.toString().orEmpty()
+        if (time.isBlank()) {
+            showMessage("Jam rekap wajib diisi")
+            return
+        }
 
         lifecycleScope.launch {
             binding.btnSaveRecap.isEnabled = false
             runCatching {
                 val saleId = RepositoriFirebaseUtama.simpanRekapPasar(
                     dateOnly = date,
-                    sumberTransaksi = channel,
+                    timeOnly = time,
+                    sumberTransaksi = "PASAR",
                     draftItems = draftItems.toList(),
                     userAuthId = currentUserId(),
                     products = products
@@ -218,6 +311,16 @@ class AktivitasRekapPasar : AktivitasDasar() {
             }
         }
     }
+
+    private fun dpToPx(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
+    }
+
+    private data class OpsiHargaRekap(
+        val label: String,
+        val price: Long,
+        val defaultCashier: Boolean
+    )
 }
 
 private class RecapSpinnerListener(

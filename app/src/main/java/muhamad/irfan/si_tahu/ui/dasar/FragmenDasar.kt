@@ -88,6 +88,24 @@ open class FragmenDasar(layoutRes: Int) : Fragment(layoutRes) {
         )
     }
 
+    protected fun showInputModal(
+        title: String,
+        hint: String,
+        confirmLabel: String = "Simpan",
+        initialValue: String = "",
+        onConfirm: (String) -> Unit
+    ) {
+        val safeContext = context ?: return
+        PembantuModal.showInputModal(
+            context = safeContext,
+            title = title,
+            hint = hint,
+            confirmLabel = confirmLabel,
+            initialValue = initialValue,
+            onConfirm = onConfirm
+        )
+    }
+
     protected fun showConfirmationModal(
         title: String,
         message: String,

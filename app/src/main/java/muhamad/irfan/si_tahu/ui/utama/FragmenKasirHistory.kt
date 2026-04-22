@@ -57,6 +57,12 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
                         .filter { it.badge.equals("Rumahan", ignoreCase = true) }
                         .sortedByDescending { it.tanggalIso }
                         .map {
+                            val statusLabel = if (it.statusPenjualan.equals("BATAL", true)) {
+                                "Batal"
+                            } else {
+                                "Selesai"
+                            }
+
                             ItemBaris(
                                 id = it.id,
                                 title = it.title,
@@ -64,6 +70,8 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
                                 amount = it.amount,
                                 badge = it.badge,
                                 tone = WarnaBaris.GREEN,
+                                parameterStatus = statusLabel,
+                                parameterTone = if (statusLabel == "Batal") WarnaBaris.RED else WarnaBaris.GREEN,
                                 actionLabel = "⋮"
                             )
                         }
@@ -84,9 +92,10 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
 
         filteredRows = semuaRows.filter {
             keyword.isBlank() ||
-                    it.title.lowercase().contains(keyword) ||
-                    it.subtitle.lowercase().contains(keyword) ||
-                    it.badge.lowercase().contains(keyword)
+                it.title.lowercase().contains(keyword) ||
+                it.subtitle.lowercase().contains(keyword) ||
+                it.badge.lowercase().contains(keyword) ||
+                it.parameterStatus.lowercase().contains(keyword)
         }
 
         historyAdapter.submitList(filteredRows)
@@ -108,13 +117,15 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
         PopupMenu(requireContext(), anchor).apply {
             menu.add("Lihat detail")
             menu.add("Bagikan")
-            menu.add("Hapus")
+            if (!item.parameterStatus.equals("Batal", true)) {
+                menu.add("Batalkan penjualan")
+            }
 
             setOnMenuItemClickListener {
                 when (it.title.toString()) {
                     "Lihat detail" -> openDetail(item)
                     "Bagikan" -> shareItem(item)
-                    "Hapus" -> confirmDelete(item)
+                    "Batalkan penjualan" -> confirmCancel(item)
                 }
                 true
             }
@@ -133,19 +144,20 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
         }
     }
 
-    private fun confirmDelete(item: ItemBaris) {
-        showConfirmationModal(
-            "Hapus transaksi",
-            "Transaksi ${item.title} akan dihapus dan stok produk dikembalikan."
-        ) {
+    private fun confirmCancel(item: ItemBaris) {
+        showInputModal(
+            title = "Batalkan penjualan",
+            hint = "Alasan pembatalan",
+            confirmLabel = "Batalkan"
+        ) { alasan ->
             viewLifecycleOwner.lifecycleScope.launch {
-                runCatching { RepositoriFirebaseUtama.hapusPenjualan(item.id) }
+                runCatching { RepositoriFirebaseUtama.batalkanPenjualan(item.id, alasan, currentUserId()) }
                     .onSuccess {
                         buildRows()
-                        showMessage(binding.root, "Transaksi berhasil dihapus")
+                        showMessage(binding.root, "Penjualan berhasil dibatalkan")
                     }
                     .onFailure {
-                        showMessage(binding.root, it.message ?: "Gagal menghapus transaksi")
+                        showMessage(binding.root, it.message ?: "Gagal membatalkan penjualan")
                     }
             }
         }

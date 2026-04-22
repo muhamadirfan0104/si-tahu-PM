@@ -2,7 +2,6 @@ package muhamad.irfan.si_tahu.ui.utama
 
 import android.content.Intent
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.View
 import androidx.core.view.children
 import androidx.core.view.isVisible
@@ -37,7 +36,6 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
     private var totalPages = 1
     private var hasLoadedOnce = false
     private var isLoading = false
-    private var lastLoadedAt = 0L
     private var isActionMenuOpen = false
 
     private val adapter by lazy {
@@ -66,14 +64,12 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
     override fun onResume() {
         super.onResume()
         closeActionMenuImmediately()
-        if (_binding != null && shouldRefreshData()) {
-            loadProducts(forceInitialLoading = !hasLoadedOnce)
-        }
+        refreshStockIfVisible(forceInitialLoading = !hasLoadedOnce)
     }
 
-    private fun shouldRefreshData(): Boolean {
-        if (!hasLoadedOnce) return true
-        return SystemClock.elapsedRealtime() - lastLoadedAt > 30_000L
+    private fun refreshStockIfVisible(forceInitialLoading: Boolean = false) {
+        if (_binding == null || isHidden) return
+        loadProducts(forceInitialLoading = forceInitialLoading)
     }
 
     private fun setupView() = with(binding) {
@@ -286,7 +282,6 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
                     )
 
                 hasLoadedOnce = true
-                lastLoadedAt = SystemClock.elapsedRealtime()
                 currentPage = 1
                 refreshList()
                 setLoadingState(showLoading = false)
@@ -382,7 +377,11 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
 
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
-        if (hidden) closeActionMenuImmediately()
+        if (hidden) {
+            closeActionMenuImmediately()
+        } else {
+            refreshStockIfVisible(forceInitialLoading = !hasLoadedOnce)
+        }
     }
 
     override fun onPause() {

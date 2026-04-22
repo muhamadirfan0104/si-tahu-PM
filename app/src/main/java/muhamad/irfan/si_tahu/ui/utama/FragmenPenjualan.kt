@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
+import android.widget.PopupMenu
 import androidx.core.view.children
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
@@ -27,7 +28,10 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
     private val binding get() = _binding!!
 
     private val recentAdapter by lazy {
-        AdapterBarisUmum(onItemClick = ::openDetailPenjualan)
+        AdapterBarisUmum(
+            onItemClick = ::openDetailPenjualan,
+            onActionClick = ::openActionPenjualan
+        )
     }
 
     private var hasLoadedOnce = false
@@ -57,7 +61,7 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
 
     private fun shouldRefreshData(): Boolean {
         if (!hasLoadedOnce) return true
-        return SystemClock.elapsedRealtime() - lastLoadedAt > 30_000L
+        return SystemClock.elapsedRealtime() - lastLoadedAt > 3_000L
     }
 
     private fun setupView() = with(binding) {
@@ -242,12 +246,19 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
                         "Item terjual: ${summary.totalItemHariIni}"
 
                     val rows = summary.recentRows.map {
+                        val statusLabel = if (it.statusPenjualan.equals("BATAL", true)) {
+                            "Batal"
+                        } else {
+                            "Selesai"
+                        }
                         ItemBaris(
                             id = it.id,
                             title = it.title,
                             subtitle = it.subtitle,
                             badge = it.badge,
                             amount = it.amount,
+                            parameterStatus = statusLabel,
+                            parameterTone = if (statusLabel == "Batal") WarnaBaris.RED else WarnaBaris.GREEN,
                             tone = when (it.badge) {
                                 "Rumahan" -> WarnaBaris.GREEN
                                 "Pasar" -> WarnaBaris.BLUE
@@ -325,6 +336,60 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
                 .onFailure {
                     showMessage(currentBinding.root, it.message ?: "Gagal memuat detail penjualan")
                 }
+        }
+    }
+
+    private fun openActionPenjualan(item: ItemBaris, anchor: View) {
+        if (item.id == "empty-sales" || item.id == "error-sales") return
+
+        PopupMenu(requireContext(), anchor).apply {
+            menu.add("Lihat detail")
+            menu.add("Bagikan")
+            if (!item.parameterStatus.equals("Batal", true)) {
+                menu.add("Batalkan penjualan")
+            }
+
+            setOnMenuItemClickListener { menuItem ->
+                when (menuItem.title.toString()) {
+                    "Lihat detail" -> openDetailPenjualan(item)
+                    "Bagikan" -> sharePenjualan(item)
+                    "Batalkan penjualan" -> promptCancelPenjualan(item)
+                }
+                true
+            }
+        }.show()
+    }
+
+    private fun sharePenjualan(item: ItemBaris) {
+        val currentBinding = _binding ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
+                .onSuccess { detail ->
+                    sharePlainText("Penjualan ${item.title}", detail)
+                }
+                .onFailure {
+                    showMessage(currentBinding.root, it.message ?: "Gagal membagikan detail penjualan")
+                }
+        }
+    }
+
+    private fun promptCancelPenjualan(item: ItemBaris) {
+        val currentBinding = _binding ?: return
+        showInputModal(
+            title = "Batalkan penjualan",
+            hint = "Alasan pembatalan",
+            confirmLabel = "Batalkan"
+        ) { alasan ->
+            viewLifecycleOwner.lifecycleScope.launch {
+                runCatching {
+                    RepositoriFirebaseUtama.batalkanPenjualan(item.id, alasan, currentUserId())
+                }.onSuccess {
+                    showMessage(currentBinding.root, "Penjualan berhasil dibatalkan")
+                    renderSummary(forceInitialLoading = false)
+                }.onFailure {
+                    showMessage(currentBinding.root, it.message ?: "Gagal membatalkan penjualan")
+                }
+            }
         }
     }
 
