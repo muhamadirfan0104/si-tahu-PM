@@ -137,15 +137,15 @@ open class AktivitasDasar : AppCompatActivity() {
     protected fun showReceiptModal(
         title: String,
         receiptText: String,
-        printLabel: String = "Cetak Struk"
+        pdfLabel: String = "Simpan PDF"
     ) {
         showDetailModal(
             title = title,
             message = receiptText,
-            neutralLabel = "Bagikan",
-            onNeutral = { sharePlainText(title, receiptText) },
-            negativeLabel = printLabel,
-            onNegative = { PembantuCetak.printPlainText(this, title, receiptText) },
+            negativeLabel = "Bagikan",
+            onNegative = { sharePlainText(title, receiptText) },
+            neutralLabel = pdfLabel,
+            onNeutral = { PembantuCetak.printPlainText(this, title, receiptText) },
             monospace = true
         )
     }

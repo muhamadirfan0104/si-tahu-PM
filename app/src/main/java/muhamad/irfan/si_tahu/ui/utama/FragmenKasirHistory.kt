@@ -96,7 +96,7 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
                 .onSuccess { detail ->
-                    showReceiptModal("Detail Penjualan", detail, "Bagikan")
+                    showReceiptModal("Detail Penjualan", detail)
                 }
                 .onFailure {
                     showMessage(binding.root, it.message ?: "Gagal memuat detail penjualan")

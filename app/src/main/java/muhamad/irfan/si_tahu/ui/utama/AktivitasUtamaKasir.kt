@@ -161,7 +161,7 @@ class AktivitasUtamaKasir : AktivitasDasar() {
 
         selectedTabId = itemId
         binding.toolbar.title = title
-        binding.toolbar.subtitle = namaLogin
+        binding.toolbar.subtitle = if (itemId == R.id.nav_cashier_sale) "" else namaLogin
 
         fm.commit {
             setReorderingAllowed(true)

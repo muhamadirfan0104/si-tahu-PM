@@ -860,15 +860,24 @@ object RepositoriFirebaseUtama {
         firestore.runTransaction { trx ->
             val localRiwayat = mutableListOf<DraftRiwayatStok>()
 
+            // 1. Semua READ dulu
+            val produkSnapshots = cartItems.associate { item ->
+                val ref = produkRef(item.productId)
+                item.productId to trx.get(ref)
+            }
+
+            // 2. Validasi + siapkan draft
             cartItems.forEach { item ->
                 val produk = products.firstOrNull { it.id == item.productId }
                     ?: throw IllegalStateException("Produk keranjang tidak ditemukan")
-                val produkRef = produkRef(item.productId)
-                val snap = trx.get(produkRef)
+
+                val snap = produkSnapshots[item.productId]
+                    ?: throw IllegalStateException("Snapshot produk tidak ditemukan")
+
                 val stok = snap.getLong("stokSaatIni") ?: 0L
                 check(stok >= item.qty) { "Stok ${produk.name} tidak mencukupi" }
+
                 val stokSesudah = stok - item.qty.toLong()
-                trx.update(produkRef, mapOf("stokSaatIni" to stokSesudah, "diperbaruiPada" to dibuatPada))
 
                 localRiwayat += DraftRiwayatStok(
                     tanggalMutasi = tanggalPenjualan,
@@ -886,6 +895,22 @@ object RepositoriFirebaseUtama {
                     catatan = "$nomorPenjualan • ${labelMetodePembayaran(metode)}",
                     idPembuat = user?.idDokumen ?: userAuthId,
                     namaPembuat = user?.nama ?: "Kasir"
+                )
+            }
+
+            // 3. Semua WRITE setelah semua read selesai
+            cartItems.forEach { item ->
+                val snap = produkSnapshots[item.productId]
+                    ?: throw IllegalStateException("Snapshot produk tidak ditemukan")
+                val stok = snap.getLong("stokSaatIni") ?: 0L
+                val stokSesudah = stok - item.qty.toLong()
+
+                trx.update(
+                    produkRef(item.productId),
+                    mapOf(
+                        "stokSaatIni" to stokSesudah,
+                        "diperbaruiPada" to dibuatPada
+                    )
                 )
             }
 
@@ -961,23 +986,24 @@ object RepositoriFirebaseUtama {
         firestore.runTransaction { trx ->
             val localRiwayat = mutableListOf<DraftRiwayatStok>()
 
+            // 1. Semua READ dulu
+            val produkSnapshots = draftItems.associate { item ->
+                val ref = produkRef(item.productId)
+                item.productId to trx.get(ref)
+            }
+
+            // 2. Validasi + draft
             draftItems.forEach { item ->
                 val produk = products.firstOrNull { it.id == item.productId }
                     ?: throw IllegalStateException("Produk rekap tidak ditemukan")
 
-                val produkRef = produkRef(item.productId)
-                val snap = trx.get(produkRef)
+                val snap = produkSnapshots[item.productId]
+                    ?: throw IllegalStateException("Snapshot produk tidak ditemukan")
+
                 val stok = snap.getLong("stokSaatIni") ?: 0L
                 check(stok >= item.qty) { "Stok ${produk.name} tidak mencukupi" }
-                val stokSesudah = stok - item.qty.toLong()
 
-                trx.update(
-                    produkRef,
-                    mapOf(
-                        "stokSaatIni" to stokSesudah,
-                        "diperbaruiPada" to dibuatPada
-                    )
-                )
+                val stokSesudah = stok - item.qty.toLong()
 
                 localRiwayat += DraftRiwayatStok(
                     tanggalMutasi = tanggalPenjualan,
@@ -995,6 +1021,22 @@ object RepositoriFirebaseUtama {
                     catatan = "$nomorPenjualan • Rekap pasar",
                     idPembuat = user?.idDokumen ?: userAuthId,
                     namaPembuat = user?.nama ?: "Admin"
+                )
+            }
+
+            // 3. Semua WRITE
+            draftItems.forEach { item ->
+                val snap = produkSnapshots[item.productId]
+                    ?: throw IllegalStateException("Snapshot produk tidak ditemukan")
+                val stok = snap.getLong("stokSaatIni") ?: 0L
+                val stokSesudah = stok - item.qty.toLong()
+
+                trx.update(
+                    produkRef(item.productId),
+                    mapOf(
+                        "stokSaatIni" to stokSesudah,
+                        "diperbaruiPada" to dibuatPada
+                    )
                 )
             }
 
@@ -1279,14 +1321,20 @@ object RepositoriFirebaseUtama {
         val dibuatPada = nowTimestamp()
 
         firestore.runTransaction { trx ->
-            detailSnapshot.documents.forEach { detail ->
+            // 1. Semua READ dulu
+            val produkSnapshots = detailSnapshot.documents.associate { detail ->
                 val productId = detail.getString("idProduk").orEmpty()
                 if (productId.isBlank()) {
                     throw IllegalStateException("Produk pada rincian penjualan tidak valid")
                 }
+                productId to trx.get(produkRef(productId))
+            }
 
-                val produkRef = produkRef(productId)
-                val produkSnap = trx.get(produkRef)
+            // 2. Semua WRITE
+            detailSnapshot.documents.forEach { detail ->
+                val productId = detail.getString("idProduk").orEmpty()
+                val produkSnap = produkSnapshots[productId]
+                    ?: throw IllegalStateException("Produk $productId tidak ditemukan saat rollback stok")
 
                 if (!produkSnap.exists()) {
                     throw IllegalStateException("Produk $productId tidak ditemukan saat rollback stok")
@@ -1296,7 +1344,7 @@ object RepositoriFirebaseUtama {
                 val qty = detail.getLong("jumlah") ?: 0L
 
                 trx.update(
-                    produkRef,
+                    produkRef(productId),
                     mapOf(
                         "stokSaatIni" to (stok + qty),
                         "diperbaruiPada" to dibuatPada
@@ -1304,7 +1352,10 @@ object RepositoriFirebaseUtama {
                 )
             }
 
-            detailSnapshot.documents.forEach { trx.delete(it.reference) }
+            detailSnapshot.documents.forEach { detail ->
+                trx.delete(detail.reference)
+            }
+
             trx.delete(saleRef)
         }.await()
 
@@ -1440,7 +1491,7 @@ object RepositoriFirebaseUtama {
                     "totalProduksiDasar" to totalProduksiDasar,
                     "totalProduksiOlahan" to totalProduksiOlahan,
                     "diperbaruiPada" to nowTimestamp()
-                )
+                   )
             ).await()
     }
 }

@@ -222,7 +222,7 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         lifecycleScope.launch {
             runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
                 .onSuccess { detail ->
-                    showReceiptModal("Detail Penjualan", detail, "Bagikan")
+                    showReceiptModal("Detail Penjualan", detail)
                 }
                 .onFailure {
                     showMessage(it.message ?: "Gagal memuat detail penjualan")

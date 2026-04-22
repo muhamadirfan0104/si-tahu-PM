@@ -210,7 +210,7 @@ class AktivitasRekapPasar : AktivitasDasar() {
                 draftItems.clear()
                 binding.etQty.setText("")
                 refreshDraft()
-                showReceiptModal("Rekap pasar tersimpan", receipt, "Bagikan")
+                showReceiptModal("Rekap pasar tersimpan", receipt)
                 loadProducts()
             }.onFailure {
                 showMessage(it.message ?: "Gagal menyimpan rekap")

@@ -124,7 +124,7 @@ class AktivitasStockAdjustment : AktivitasDasar() {
                 )
                 RepositoriFirebaseUtama.buildAdjustmentDetailText(id)
             }.onSuccess { detail ->
-                showReceiptModal("Adjustment tersimpan", detail, "Bagikan")
+                showReceiptModal("Adjustment tersimpan", detail)
                 binding.etQty.setText("")
                 binding.etNote.setText("")
                 loadProducts()

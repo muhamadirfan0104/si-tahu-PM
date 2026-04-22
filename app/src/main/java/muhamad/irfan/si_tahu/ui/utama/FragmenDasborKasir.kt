@@ -125,7 +125,7 @@ class FragmenDasborKasir : FragmenDasar(R.layout.fragment_cashier_dashboard) {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
                 .onSuccess { detail ->
-                    showReceiptModal("Detail Penjualan", detail, "Bagikan")
+                    showReceiptModal("Detail Penjualan", detail)
                 }
                 .onFailure {
                     val activeBinding = _binding ?: return@onFailure

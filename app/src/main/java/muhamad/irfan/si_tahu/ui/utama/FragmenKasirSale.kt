@@ -33,8 +33,6 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
 
         _binding = FragmentCashierSaleBinding.bind(view)
 
-        binding.toolbar.visibility = View.GONE
-
         setupAdapter()
         setupView()
         loadProducts()
@@ -50,9 +48,9 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
 
     private fun setupAdapter() {
         productAdapter = AdapterProduk(
-            onAdd = { addToCart(it) },
-            getHarga = { defaultPrice(it) },
-            getStatus = { productStatus(it) }
+            onAdd = { product -> addToCart(product) },
+            getHarga = { product -> defaultPrice(product) },
+            getStatus = { product -> productStatus(product) }
         )
     }
 
@@ -91,7 +89,6 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
 
         binding.btnCheckout.setOnClickListener {
             if (SessionKeranjangRumahan.getItems().isEmpty()) return@setOnClickListener
-
             startActivity(Intent(requireContext(), AktivitasCheckoutRumahan::class.java))
         }
 
@@ -103,10 +100,11 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
             runCatching { RepositoriFirebaseUtama.muatProdukKasir() }
                 .onSuccess { result ->
                     products = result
-                        .filter { hasValidCashierPrice(it) }
+                        .filter { product -> hasValidCashierPrice(product) }
                         .sortedWith(productComparator())
 
-                    val categories = listOf("Semua") + products.map { it.category }
+                    val categories = listOf("Semua") + products
+                        .map { product -> product.category }
                         .distinct()
                         .sorted()
 
@@ -118,18 +116,20 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
                     renderProducts()
                     renderBottomCart()
                 }
-                .onFailure {
+                .onFailure { error ->
                     products = emptyList()
                     renderProducts()
                     renderBottomCart()
-                    showMessage(binding.root, it.message ?: "Gagal memuat produk")
+                    showMessage(binding.root, error.message ?: "Gagal memuat produk")
                 }
         }
     }
 
     private fun defaultPrice(product: Produk): Long {
-        return product.channels.firstOrNull { it.defaultCashier && it.active }?.price
-            ?: product.channels.firstOrNull { it.active }?.price
+        return product.channels.firstOrNull { channel ->
+            channel.defaultCashier && channel.active
+        }?.price
+            ?: product.channels.firstOrNull { channel -> channel.active }?.price
             ?: 0L
     }
 
@@ -145,8 +145,8 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
 
     private fun productComparator(): Comparator<Produk> {
         return compareBy<Produk>(
-            { statusRank(productStatus(it)) },
-            { it.name.lowercase() }
+            { product -> statusRank(productStatus(product)) },
+            { product -> product.name.lowercase() }
         )
     }
 
@@ -194,9 +194,9 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
 
         productAdapter.submitList(filtered)
 
-        val totalReady = products.count { productStatus(it) == STATUS_READY }
-        val totalLow = products.count { productStatus(it) == STATUS_LOW }
-        val totalEmpty = products.count { productStatus(it) == STATUS_EMPTY }
+        val totalReady = products.count { product -> productStatus(product) == STATUS_READY }
+        val totalLow = products.count { product -> productStatus(product) == STATUS_LOW }
+        val totalEmpty = products.count { product -> productStatus(product) == STATUS_EMPTY }
 
         binding.tvProductSummary.text = when {
             products.isEmpty() ->
@@ -262,8 +262,14 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
         val totalQty = SessionKeranjangRumahan.totalQty()
         val emptyCart = items.isEmpty()
 
-        binding.tvCartTitle.text = if (emptyCart) "Keranjang kosong" else "Keranjang"
-        binding.tvCartSubtitle.text = if (emptyCart) "Belum ada produk" else "$totalQty item di keranjang"
+        binding.tvCartTitle.text = "Keranjang"
+
+        binding.tvCartSubtitle.text = if (emptyCart) {
+            "Belum ada produk"
+        } else {
+            "$totalQty item"
+        }
+
         binding.tvQtyCart.text = totalQty.toString()
 
         binding.btnMinusQty.isEnabled = !emptyCart
