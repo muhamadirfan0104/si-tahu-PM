@@ -2,6 +2,7 @@ package muhamad.irfan.si_tahu.ui.penjualan
 
 import android.os.Bundle
 import android.view.View
+import android.widget.AdapterView
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
@@ -31,6 +32,21 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
         setContentView(binding.root)
         bindToolbar(binding.toolbar, "Checkout Rumahan", "Review keranjang dan pembayaran")
 
+        setupAdapter()
+        setupView()
+        loadProducts()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (SessionKeranjangRumahan.isEmpty()) {
+            finish()
+        } else {
+            renderCheckout()
+        }
+    }
+
+    private fun setupAdapter() {
         cartAdapter = AdapterKeranjang(
             onIncrease = { item ->
                 val product = products.firstOrNull { it.id == item.productId } ?: return@AdapterKeranjang
@@ -56,18 +72,6 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
                 products.firstOrNull { it.id == productId }
             }
         )
-
-        setupView()
-        loadProducts()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (SessionKeranjangRumahan.isEmpty()) {
-            finish()
-        } else {
-            renderCheckout()
-        }
     }
 
     private fun setupView() {
@@ -93,8 +97,8 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
     private fun loadProducts() {
         lifecycleScope.launch {
             runCatching { RepositoriFirebaseUtama.muatProdukKasir() }
-                .onSuccess {
-                    products = it
+                .onSuccess { result ->
+                    products = result
                     renderCheckout()
                 }
                 .onFailure {
@@ -148,6 +152,7 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
         }
 
         binding.btnSaveTransaction.isEnabled = !emptyCart
+        binding.btnSaveTransaction.alpha = if (emptyCart) 0.5f else 1f
     }
 
     private fun saveTransaction() {
@@ -185,6 +190,7 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
             }.onFailure {
                 showMessage(it.message ?: "Gagal menyimpan transaksi")
                 binding.btnSaveTransaction.isEnabled = true
+                binding.btnSaveTransaction.alpha = 1f
             }
         }
     }
@@ -192,13 +198,15 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
 
 private class CheckoutSpinnerListener(
     private val onSelected: () -> Unit
-) : android.widget.AdapterView.OnItemSelectedListener {
+) : AdapterView.OnItemSelectedListener {
     override fun onItemSelected(
-        parent: android.widget.AdapterView<*>?,
+        parent: AdapterView<*>?,
         view: View?,
         position: Int,
         id: Long
-    ) = onSelected()
+    ) {
+        onSelected()
+    }
 
-    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+    override fun onNothingSelected(parent: AdapterView<*>?) = Unit
 }

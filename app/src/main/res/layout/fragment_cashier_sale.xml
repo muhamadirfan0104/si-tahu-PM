@@ -1,20 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/screen_bg"
-    android:orientation="vertical">
+    android:background="@android:color/white">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingHorizontal="8dp" />
+        android:visibility="gone"
+        app:title="Penjualan Rumahan"
+        app:subtitle="Tampilkan hanya produk siap dijual dengan harga aktif" />
 
-    <androidx.core.widget.NestedScrollView
+    <ScrollView
+        android:id="@+id/scrollContent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_marginBottom="120dp"
         android:fillViewport="true">
 
         <LinearLayout
@@ -26,131 +29,8 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardBackgroundColor="@color/card_surface"
-                app:strokeColor="@color/line_color"
-                app:strokeWidth="1dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Ringkasan transaksi"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:textColor="@color/text_primary" />
-
-                    <TextView
-                        android:id="@+id/tvCartSummary"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:textColor="@color/text_secondary"
-                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:orientation="horizontal"
-                        android:weightSum="3">
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Total"
-                                android:textColor="@color/text_secondary"
-                                android:textAppearance="@style/TextAppearance.Material3.LabelMedium" />
-
-                            <TextView
-                                android:id="@+id/tvTotalBelanja"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                                android:textColor="@color/text_primary" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Metode"
-                                android:textColor="@color/text_secondary"
-                                android:textAppearance="@style/TextAppearance.Material3.LabelMedium" />
-
-                            <TextView
-                                android:id="@+id/tvMetodeBayar"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                                android:textColor="@color/text_primary" />
-                        </LinearLayout>
-
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:orientation="vertical">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Kembalian"
-                                android:textColor="@color/text_secondary"
-                                android:textAppearance="@style/TextAppearance.Material3.LabelMedium" />
-
-                            <TextView
-                                android:id="@+id/tvKembalian"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="4dp"
-                                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                                android:textColor="@color/text_primary" />
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/tvPaidLabel"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="Uang dibayar"
-                        android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
-                        android:textColor="@color/text_secondary" />
-
-                    <TextView
-                        android:id="@+id/tvPaidAmount"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:textColor="@color/text_primary" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                app:cardBackgroundColor="@color/card_surface"
-                app:strokeColor="@color/line_color"
-                app:strokeWidth="1dp">
+                app:cardCornerRadius="24dp"
+                app:cardUseCompatPadding="true">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -162,132 +42,157 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Produk siap jual"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:textColor="@color/text_primary" />
+                        android:textColor="@android:color/black"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp">
+                        android:layout_marginTop="16dp">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etSearch"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:hint="Cari nama / kode produk" />
+                            android:hint="Cari nama / kode produk"
+                            android:inputType="text" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <Spinner
                         android:id="@+id/spCategory"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="12dp" />
+
+                    <Spinner
+                        android:id="@+id/spStockMode"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
                         android:layout_marginTop="12dp" />
 
                     <TextView
                         android:id="@+id/tvProductSummary"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:textColor="@color/text_secondary"
-                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
+                        android:layout_marginTop="16dp"
+                        android:text="Belum ada data"
+                        android:textColor="@android:color/darker_gray"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/tvEmptyProducts"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:gravity="center"
+                        android:padding="24dp"
+                        android:text="Tidak ada produk yang cocok"
+                        android:textColor="@android:color/darker_gray"
+                        android:visibility="gone" />
 
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/rvProducts"
                         android:layout_width="match_parent"
-                        android:layout_height="320dp"
-                        android:layout_marginTop="12dp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                app:cardBackgroundColor="@color/card_surface"
-                app:strokeColor="@color/line_color"
-                app:strokeWidth="1dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:id="@+id/tvCartHeader"
-                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Keranjang transaksi"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:textColor="@color/text_primary" />
-
-                    <Spinner
-                        android:id="@+id/spPayment"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/tilCashPaid"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp">
-
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etCashPaid"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:hint="Uang dibayar"
-                            android:inputType="number" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <TextView
-                        android:id="@+id/tvCartEmpty"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:background="@drawable/bg_tone_neutral"
-                        android:gravity="center"
-                        android:padding="18dp"
-                        android:text="Belum ada item di keranjang"
-                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-                        android:textColor="@color/text_secondary" />
-
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/rvCart"
-                        android:layout_width="match_parent"
-                        android:layout_height="240dp"
-                        android:layout_marginTop="12dp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:orientation="horizontal"
-                        android:weightSum="2">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnClearCart"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="Kosongkan" />
-
-                        <Space
-                            android:layout_width="12dp"
-                            android:layout_height="1dp" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnCheckout"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="Simpan Transaksi" />
-                    </LinearLayout>
+                        android:layout_marginTop="12dp"
+                        android:nestedScrollingEnabled="false" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
-</LinearLayout>
+    </ScrollView>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardBottomCart"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        app:cardCornerRadius="24dp"
+        app:cardUseCompatPadding="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="92dp"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="12dp"
+                    android:text="🛒"
+                    android:textSize="28sp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvCartTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Keranjang kosong"
+                        android:textColor="@android:color/black"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvCartSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Belum ada produk"
+                        android:textColor="@android:color/darker_gray"
+                        android:textSize="14sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMinusQty"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:minWidth="44dp"
+                android:text="−" />
+
+            <TextView
+                android:id="@+id/tvQtyCart"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:gravity="center"
+                android:text="0"
+                android:textColor="@android:color/black"
+                android:textStyle="bold" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPlusQty"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:minWidth="44dp"
+                android:text="+" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCheckout"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginStart="12dp"
+                android:enabled="false"
+                android:text="Checkout" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

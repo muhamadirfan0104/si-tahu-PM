@@ -27,6 +27,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardBackgroundColor="@color/card_surface"
+                app:cardCornerRadius="24dp"
                 app:strokeColor="@color/line_color"
                 app:strokeWidth="1dp">
 
@@ -48,8 +49,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:textColor="@color/text_secondary"
-                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
+                        android:text="Keranjang kosong"
+                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                        android:textColor="@color/text_secondary" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -64,6 +66,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
+                        android:text="Rp0,00"
                         android:textAppearance="@style/TextAppearance.Material3.TitleLarge"
                         android:textColor="@color/text_primary" />
 
@@ -101,6 +104,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
+                        android:text="Rp0,00"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:textColor="@color/text_primary" />
 
@@ -117,6 +121,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
+                        android:text="Rp0,00"
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:textColor="@color/text_primary" />
                 </LinearLayout>
@@ -127,6 +132,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 app:cardBackgroundColor="@color/card_surface"
+                app:cardCornerRadius="24dp"
                 app:strokeColor="@color/line_color"
                 app:strokeWidth="1dp">
 
