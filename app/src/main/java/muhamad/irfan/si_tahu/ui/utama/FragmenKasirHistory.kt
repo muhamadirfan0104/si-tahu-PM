@@ -3,6 +3,7 @@ package muhamad.irfan.si_tahu.ui.utama
 import android.os.Bundle
 import android.view.View
 import android.widget.PopupMenu
+import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -25,8 +26,12 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
         onActionClick = ::showActionMenu
     )
 
+    private val pageSize = 5
+
     private var semuaRows: List<ItemBaris> = emptyList()
     private var filteredRows: List<ItemBaris> = emptyList()
+    private var currentPage = 1
+    private var totalPages = 1
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -38,7 +43,22 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
         binding.rvHistory.adapter = historyAdapter
 
         binding.etSearch.addTextChangedListener {
+            currentPage = 1
             refresh()
+        }
+
+        binding.btnPagePrev.setOnClickListener {
+            if (currentPage > 1) {
+                currentPage--
+                refresh()
+            }
+        }
+
+        binding.btnPageNext.setOnClickListener {
+            if (currentPage < totalPages) {
+                currentPage++
+                refresh()
+            }
         }
 
         buildRows()
@@ -76,12 +96,15 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
                             )
                         }
 
+                    currentPage = 1
                     refresh()
                 }
                 .onFailure {
                     semuaRows = emptyList()
                     filteredRows = emptyList()
                     historyAdapter.submitList(emptyList())
+                    binding.tvEmpty.isVisible = true
+                    binding.paginationContainer.isVisible = false
                     showMessage(binding.root, it.message ?: "Gagal memuat riwayat penjualan")
                 }
         }
@@ -92,13 +115,36 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
 
         filteredRows = semuaRows.filter {
             keyword.isBlank() ||
-                it.title.lowercase().contains(keyword) ||
-                it.subtitle.lowercase().contains(keyword) ||
-                it.badge.lowercase().contains(keyword) ||
-                it.parameterStatus.lowercase().contains(keyword)
+                    it.title.lowercase().contains(keyword) ||
+                    it.subtitle.lowercase().contains(keyword) ||
+                    it.badge.lowercase().contains(keyword) ||
+                    it.parameterStatus.lowercase().contains(keyword)
         }
 
-        historyAdapter.submitList(filteredRows)
+        totalPages = if (filteredRows.isEmpty()) 1 else ((filteredRows.size - 1) / pageSize) + 1
+        if (currentPage > totalPages) currentPage = totalPages
+        if (currentPage < 1) currentPage = 1
+
+        val fromIndex = (currentPage - 1) * pageSize
+        val toIndex = minOf(fromIndex + pageSize, filteredRows.size)
+        val pagedRows = if (filteredRows.isEmpty()) emptyList() else filteredRows.subList(fromIndex, toIndex)
+
+        historyAdapter.submitList(pagedRows)
+
+        binding.tvEmpty.isVisible = pagedRows.isEmpty()
+        binding.tvEmpty.text = if (semuaRows.isEmpty()) {
+            "Belum ada riwayat penjualan"
+        } else {
+            "Tidak ada data yang cocok"
+        }
+        binding.rvHistory.isVisible = pagedRows.isNotEmpty()
+
+        binding.paginationContainer.isVisible = filteredRows.size > pageSize
+        binding.tvPageInfo.text = "Halaman $currentPage dari $totalPages"
+        binding.btnPagePrev.isEnabled = currentPage > 1
+        binding.btnPagePrev.alpha = if (currentPage > 1) 1f else 0.45f
+        binding.btnPageNext.isEnabled = currentPage < totalPages
+        binding.btnPageNext.alpha = if (currentPage < totalPages) 1f else 0.45f
     }
 
     private fun openDetail(item: ItemBaris) {

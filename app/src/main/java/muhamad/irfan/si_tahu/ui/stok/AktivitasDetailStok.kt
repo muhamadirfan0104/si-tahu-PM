@@ -2,9 +2,11 @@ package muhamad.irfan.si_tahu.ui.stok
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
+import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.databinding.ActivityStockDetailBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
@@ -23,8 +25,13 @@ class AktivitasDetailStok : AktivitasDasar() {
         AdapterBarisUmum(onItemClick = {})
     }
 
+    private val pageSize = 5
+
     private var productId: String = ""
     private var productUnit: String = ""
+    private var allMovements: List<ItemBaris> = emptyList()
+    private var currentPage = 1
+    private var totalPages = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,6 +58,20 @@ class AktivitasDetailStok : AktivitasDasar() {
             val intent = Intent(this, AktivitasStockAdjustment::class.java)
             intent.putExtra(AktivitasStockAdjustment.EXTRA_PRODUCT_ID, productId)
             startActivity(intent)
+        }
+
+        binding.btnPagePrev.setOnClickListener {
+            if (currentPage > 1) {
+                currentPage--
+                renderMovement()
+            }
+        }
+
+        binding.btnPageNext.setOnClickListener {
+            if (currentPage < totalPages) {
+                currentPage++
+                renderMovement()
+            }
         }
 
         loadDetail()
@@ -98,9 +119,9 @@ class AktivitasDetailStok : AktivitasDasar() {
                 binding.tvStatus.text = status
                 binding.tvStatus.setBackgroundResource(
                     when (status) {
-                        "Aman" -> muhamad.irfan.si_tahu.R.drawable.bg_tone_green
-                        "Menipis" -> muhamad.irfan.si_tahu.R.drawable.bg_tone_gold
-                        else -> muhamad.irfan.si_tahu.R.drawable.bg_tone_red
+                        "Aman" -> R.drawable.bg_tone_green
+                        "Menipis" -> R.drawable.bg_tone_gold
+                        else -> R.drawable.bg_tone_red
                     }
                 )
             }
@@ -114,7 +135,7 @@ class AktivitasDetailStok : AktivitasDasar() {
             .whereEqualTo("idProduk", productId)
             .get()
             .addOnSuccessListener { snapshot ->
-                val items = snapshot.documents
+                allMovements = snapshot.documents
                     .sortedByDescending {
                         (it.getTimestamp("tanggalMutasi") ?: it.getTimestamp("dibuatPada"))
                             ?.toDate()
@@ -162,11 +183,8 @@ class AktivitasDetailStok : AktivitasDasar() {
 
                         val subtitle = buildString {
                             append(
-                                if (catatan.isNotBlank()) {
-                                    catatan
-                                } else {
-                                    sumberMutasi.ifBlank { "Perubahan stok" }
-                                }
+                                if (catatan.isNotBlank()) catatan
+                                else sumberMutasi.ifBlank { "Perubahan stok" }
                             )
                             append(" • stok ")
                             append(stokSebelum)
@@ -186,10 +204,33 @@ class AktivitasDetailStok : AktivitasDasar() {
                         )
                     }
 
-                movementAdapter.submitList(items)
+                currentPage = 1
+                renderMovement()
             }
             .addOnFailureListener { e ->
                 showMessage("Gagal memuat riwayat stok: ${e.message}")
             }
+    }
+
+    private fun renderMovement() {
+        totalPages = if (allMovements.isEmpty()) 1 else ((allMovements.size - 1) / pageSize) + 1
+        if (currentPage > totalPages) currentPage = totalPages
+        if (currentPage < 1) currentPage = 1
+
+        val fromIndex = (currentPage - 1) * pageSize
+        val toIndex = minOf(fromIndex + pageSize, allMovements.size)
+        val pagedItems = if (allMovements.isEmpty()) emptyList() else allMovements.subList(fromIndex, toIndex)
+
+        movementAdapter.submitList(pagedItems)
+
+        binding.tvEmptyMovement.visibility = if (pagedItems.isEmpty()) View.VISIBLE else View.GONE
+        binding.rvMovement.visibility = if (pagedItems.isEmpty()) View.GONE else View.VISIBLE
+
+        binding.paginationContainer.visibility = if (allMovements.size > pageSize) View.VISIBLE else View.GONE
+        binding.tvPageInfo.text = "Halaman $currentPage dari $totalPages"
+        binding.btnPagePrev.isEnabled = currentPage > 1
+        binding.btnPagePrev.alpha = if (currentPage > 1) 1f else 0.45f
+        binding.btnPageNext.isEnabled = currentPage < totalPages
+        binding.btnPageNext.alpha = if (currentPage < totalPages) 1f else 0.45f
     }
 }

@@ -27,7 +27,7 @@ class AktivitasStockAdjustment : AktivitasDasar() {
         bindToolbar(
             binding.toolbar,
             "Stock Adjustment",
-            "Sesuaikan stok fisik dengan stok sistem"
+            "Kurangi stok fisik dari stok sistem"
         )
 
         setupForm()
@@ -45,11 +45,6 @@ class AktivitasStockAdjustment : AktivitasDasar() {
                 binding.etDate.setText(selectedDate)
             }
         }
-
-        binding.spType.adapter = AdapterSpinner.stringAdapter(
-            this,
-            listOf("Tambah stok", "Kurangi stok")
-        )
 
         binding.btnSave.setOnClickListener {
             saveAdjustment()
@@ -91,7 +86,7 @@ class AktivitasStockAdjustment : AktivitasDasar() {
         }
 
         val date = binding.etDate.text?.toString().orEmpty()
-        val type = if (binding.spType.selectedItemPosition == 0) "add" else "subtract"
+        val type = "subtract"
         val qty = binding.etQty.text?.toString()?.trim()?.toIntOrNull() ?: 0
         val note = binding.etNote.text?.toString()?.trim().orEmpty()
 
@@ -102,6 +97,11 @@ class AktivitasStockAdjustment : AktivitasDasar() {
 
         if (qty <= 0) {
             showMessage("Jumlah adjustment harus lebih dari 0")
+            return
+        }
+
+        if (qty > product.stock) {
+            showMessage("Jumlah adjustment melebihi stok saat ini")
             return
         }
 

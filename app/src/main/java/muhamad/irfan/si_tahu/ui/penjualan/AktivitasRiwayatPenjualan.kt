@@ -11,16 +11,20 @@ import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
 import muhamad.irfan.si_tahu.ui.utama.AktivitasUtamaKasir
+import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
+import muhamad.irfan.si_tahu.util.PembantuPilihTanggalWaktu
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import java.util.Calendar
+import java.util.Date
 
 class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
 
-    private var semuaRows: List<ItemBaris> = emptyList()
-    private var filteredRows: List<ItemBaris> = emptyList()
+    private var semuaRows: List<RiwayatPenjualanUiRow> = emptyList()
+    private var filteredRows: List<RiwayatPenjualanUiRow> = emptyList()
 
     private var halamanSaatIni = 1
-    private val itemPerHalaman = 10
+    private val itemPerHalaman = 5
 
     private var judulLayar = "Riwayat Penjualan"
     private var subjudulLayar = "Rumahan dan pasar"
@@ -30,51 +34,57 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
     private var tampilkanTombolRekapPasar = true
     private var izinkanHapus = true
 
+    private var tanggalTunggal: String? = null
+    private var rentangMulai: String? = null
+    private var rentangSelesai: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         bacaIntent()
         configureScreen(judulLayar, subjudulLayar)
 
-        if (lockFilter) {
-            hidePrimaryFilter()
-        } else {
-            setPrimaryFilter(
-                options = listOf(FILTER_SEMUA, FILTER_RUMAHAN, FILTER_PASAR),
-                selectedIndex = selectedFilterIndex(defaultFilter)
-            ) {
-                halamanSaatIni = 1
-                refresh()
-            }
-        }
-
+        hidePrimaryFilter()
         hideSecondaryFilter()
 
-        if (tampilkanTombolTransaksiBaru) {
-            setPrimaryButton("Transaksi Baru") {
-                startActivity(
-                    AktivitasUtamaKasir.intent(
-                        context = this,
-                        tabId = R.id.nav_cashier_sale,
-                        clearTop = true
-                    )
-                )
-                finish()
-            }
-        } else {
-            hidePrimaryButton()
+        setPrimaryButton("Pilih Tanggal") {
+            bukaPilihTanggal()
         }
 
-        if (tampilkanTombolRekapPasar) {
-            setSecondaryButton("Rekap Pasar") {
-                startActivity(Intent(this, AktivitasRekapPasar::class.java))
-            }
-        } else {
-            hideSecondaryButton()
+        setSecondaryButton("Pilih Rentang") {
+            bukaPilihRentang()
+        }
+
+        binding.btnPrimary.setOnLongClickListener {
+            resetFilterTanggal()
+            true
+        }
+
+        binding.btnSecondary.setOnLongClickListener {
+            resetFilterTanggal()
+            true
+        }
+
+        if (tampilkanTombolTransaksiBaru || tampilkanTombolRekapPasar) {
+            // tombol filter tanggal tetap tampil
+        }
+
+        updateFilterTanggalUi()
+
+        if (tampilkanTombolTransaksiBaru) {
+            binding.btnPrimary.text = labelTombolTanggal()
+            binding.btnPrimary.setOnClickListener { bukaPilihTanggal() }
+
+            binding.btnSecondary.text = labelTombolRentang()
+            binding.btnSecondary.setOnClickListener { bukaPilihRentang() }
+        }
+
+        if (tampilkanTombolTransaksiBaru && tampilkanTombolRekapPasar) {
+            // riwayat kasir lama punya dua tombol aksi, sekarang kita prioritaskan filter tanggal
         }
 
         if (!tampilkanTombolTransaksiBaru && !tampilkanTombolRekapPasar) {
-            hideButtons()
+            // admin tetap pakai tombol filter tanggal
         }
     }
 
@@ -109,40 +119,47 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         izinkanHapus = intent.getBooleanExtra(EXTRA_ALLOW_DELETE, true)
     }
 
-    private fun selectedFilterIndex(filter: String): Int {
-        return when (filter) {
-            FILTER_RUMAHAN -> 1
-            FILTER_PASAR -> 2
-            else -> 0
-        }
-    }
-
     private fun buildRows() {
         lifecycleScope.launch {
             runCatching { RepositoriFirebaseUtama.muatRiwayatPenjualan() }
                 .onSuccess { sales ->
                     semuaRows = sales
                         .sortedByDescending { it.tanggalIso }
+                        .filter { sale ->
+                            when (defaultFilter) {
+                                FILTER_RUMAHAN -> sale.badge.equals(FILTER_RUMAHAN, true)
+                                FILTER_PASAR -> sale.badge.equals(FILTER_PASAR, true)
+                                else -> true
+                            }
+                        }
                         .map {
                             val statusLabel = if (it.statusPenjualan.equals("BATAL", true)) {
                                 "Batal"
                             } else {
                                 "Selesai"
                             }
-                            ItemBaris(
-                                id = it.id,
-                                title = it.title,
-                                subtitle = it.subtitle,
-                                amount = it.amount,
-                                badge = it.badge,
-                                tone = when (it.badge) {
-                                    FILTER_RUMAHAN -> WarnaBaris.GREEN
-                                    FILTER_PASAR -> WarnaBaris.BLUE
-                                    else -> WarnaBaris.GOLD
-                                },
-                                parameterStatus = statusLabel,
-                                parameterTone = if (statusLabel == "Batal") WarnaBaris.RED else WarnaBaris.GREEN,
-                                actionLabel = "⋮"
+
+                            RiwayatPenjualanUiRow(
+                                tanggalIso = it.tanggalIso,
+                                item = ItemBaris(
+                                    id = it.id,
+                                    title = it.title,
+                                    subtitle = it.subtitle,
+                                    amount = it.amount,
+                                    badge = it.badge,
+                                    tone = when (it.badge) {
+                                        FILTER_RUMAHAN -> WarnaBaris.GREEN
+                                        FILTER_PASAR -> WarnaBaris.BLUE
+                                        else -> WarnaBaris.GOLD
+                                    },
+                                    parameterStatus = statusLabel,
+                                    parameterTone = if (statusLabel == "Batal") {
+                                        WarnaBaris.RED
+                                    } else {
+                                        WarnaBaris.GREEN
+                                    },
+                                    actionLabel = "⋮"
+                                )
                             )
                         }
 
@@ -162,22 +179,19 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
 
     private fun refresh() {
         val keyword = searchText()
-        val filter = if (lockFilter) {
-            defaultFilter
-        } else {
-            primarySelection().ifBlank { defaultFilter }
-        }
 
-        filteredRows = semuaRows.filter {
-            val cocokFilter = filter == FILTER_SEMUA || it.badge == filter
+        filteredRows = semuaRows.filter { row ->
+            val item = row.item
+
+            val cocokTanggal = cocokFilterTanggal(Formatter.parseDate(row.tanggalIso))
             val cocokKeyword =
                 keyword.isBlank() ||
-                        it.title.lowercase().contains(keyword) ||
-                        it.subtitle.lowercase().contains(keyword) ||
-                        it.badge.lowercase().contains(keyword) ||
-                        it.parameterStatus.lowercase().contains(keyword)
+                        item.title.lowercase().contains(keyword) ||
+                        item.subtitle.lowercase().contains(keyword) ||
+                        item.badge.lowercase().contains(keyword) ||
+                        item.parameterStatus.lowercase().contains(keyword)
 
-            cocokFilter && cocokKeyword
+            cocokTanggal && cocokKeyword
         }
 
         val totalPages =
@@ -192,7 +206,7 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         val currentPageRows = if (filteredRows.isEmpty()) {
             emptyList()
         } else {
-            filteredRows.subList(fromIndex, untilIndex)
+            filteredRows.subList(fromIndex, untilIndex).map { it.item }
         }
 
         submitRows(
@@ -226,6 +240,121 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         }
     }
 
+    private fun bukaPilihTanggal() {
+        PembantuPilihTanggalWaktu.showDatePicker(this, tanggalTunggal) { hasil ->
+            tanggalTunggal = hasil
+            rentangMulai = null
+            rentangSelesai = null
+            halamanSaatIni = 1
+            updateFilterTanggalUi()
+            refresh()
+        }
+    }
+
+    private fun bukaPilihRentang() {
+        PembantuPilihTanggalWaktu.showDatePicker(this, rentangMulai) { mulai ->
+            PembantuPilihTanggalWaktu.showDatePicker(this, rentangSelesai ?: mulai) { selesai ->
+                val tanggalMulai = Formatter.parseDate(mulai)
+                val tanggalSelesai = Formatter.parseDate(selesai)
+
+                if (tanggalMulai.after(tanggalSelesai)) {
+                    rentangMulai = selesai
+                    rentangSelesai = mulai
+                } else {
+                    rentangMulai = mulai
+                    rentangSelesai = selesai
+                }
+
+                tanggalTunggal = null
+                halamanSaatIni = 1
+                updateFilterTanggalUi()
+                refresh()
+            }
+        }
+    }
+
+    private fun resetFilterTanggal() {
+        tanggalTunggal = null
+        rentangMulai = null
+        rentangSelesai = null
+        halamanSaatIni = 1
+        updateFilterTanggalUi()
+        refresh()
+        showMessage("Filter tanggal direset")
+    }
+
+    private fun cocokFilterTanggal(tanggalData: Date): Boolean {
+        tanggalTunggal?.let { single ->
+            val target = Formatter.parseDate(single)
+            return isSameDay(tanggalData, target)
+        }
+
+        if (!rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank()) {
+            val mulai = startOfDay(Formatter.parseDate(rentangMulai))
+            val selesai = endOfDay(Formatter.parseDate(rentangSelesai))
+            return !tanggalData.before(mulai) && !tanggalData.after(selesai)
+        }
+
+        return true
+    }
+
+    private fun updateFilterTanggalUi() {
+        binding.buttonRow.visibility = View.VISIBLE
+        binding.btnPrimary.text = labelTombolTanggal()
+        binding.btnSecondary.text = labelTombolRentang()
+        binding.toolbar.subtitle = subtitleAktif()
+    }
+
+    private fun labelTombolTanggal(): String {
+        return tanggalTunggal?.let { Formatter.readableShortDate(it) } ?: "Pilih Tanggal"
+    }
+
+    private fun labelTombolRentang(): String {
+        return if (!rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank()) {
+            "${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
+        } else {
+            "Pilih Rentang"
+        }
+    }
+
+    private fun subtitleAktif(): String {
+        return when {
+            !tanggalTunggal.isNullOrBlank() ->
+                "$subjudulLayar • ${Formatter.readableDate(tanggalTunggal)}"
+            !rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank() ->
+                "$subjudulLayar • ${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
+            else ->
+                "$subjudulLayar • semua tanggal"
+        }
+    }
+
+    private fun isSameDay(first: Date, second: Date): Boolean {
+        val cal1 = Calendar.getInstance().apply { time = first }
+        val cal2 = Calendar.getInstance().apply { time = second }
+        return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+                cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
+    }
+
+    private fun startOfDay(date: Date): Date {
+        return Calendar.getInstance().apply {
+            time = date
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.time
+    }
+
+    private fun endOfDay(date: Date): Date {
+        return Calendar.getInstance().apply {
+            time = date
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }.time
+    }
+
     override fun onRowClick(item: ItemBaris) {
         lifecycleScope.launch {
             runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
@@ -252,6 +381,7 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
             setOnMenuItemClickListener {
                 when (it.title.toString()) {
                     "Lihat detail" -> onRowClick(item)
+
                     "Bagikan" -> lifecycleScope.launch {
                         runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
                             .onSuccess { detail ->
@@ -277,7 +407,13 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
             confirmLabel = "Batalkan"
         ) { alasan ->
             lifecycleScope.launch {
-                runCatching { RepositoriFirebaseUtama.batalkanPenjualan(item.id, alasan, currentUserId()) }
+                runCatching {
+                    RepositoriFirebaseUtama.batalkanPenjualan(
+                        item.id,
+                        alasan,
+                        currentUserId()
+                    )
+                }
                     .onSuccess {
                         buildRows()
                         showMessage("Penjualan berhasil dibatalkan")
@@ -354,3 +490,8 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         }
     }
 }
+
+data class RiwayatPenjualanUiRow(
+    val tanggalIso: String,
+    val item: ItemBaris
+)

@@ -2,6 +2,7 @@ package muhamad.irfan.si_tahu.ui.penjualan
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -20,7 +21,11 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
     private lateinit var binding: ActivityCashierSaleCatalogBinding
     private lateinit var productAdapter: AdapterProduk
 
+    private val pageSize = 5
+
     private var products: List<Produk> = emptyList()
+    private var currentPage = 1
+    private var totalPages = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,7 +36,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         bindToolbar(
             binding.toolbar,
             "Penjualan Rumahan",
-            "Tampilkan hanya produk siap dijual dengan harga kasir yang valid"
+            "Tampilkan produk siap dijual atau habis dengan harga kasir yang valid"
         )
 
         productAdapter = AdapterProduk(
@@ -62,22 +67,37 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                 this,
                 listOf(
                     MODE_READY,
-                    MODE_ALL,
-                    MODE_LOW,
                     MODE_EMPTY
                 )
             )
 
         binding.spCategory.onItemSelectedListener = SimpleSpinnerListener {
+            currentPage = 1
             renderProducts()
         }
 
         binding.spStockMode.onItemSelectedListener = SimpleSpinnerListener {
+            currentPage = 1
             renderProducts()
         }
 
         binding.etSearch.addTextChangedListener {
+            currentPage = 1
             renderProducts()
+        }
+
+        binding.btnPagePrev.setOnClickListener {
+            if (currentPage > 1) {
+                currentPage--
+                renderProducts()
+            }
+        }
+
+        binding.btnPageNext.setOnClickListener {
+            if (currentPage < totalPages) {
+                currentPage++
+                renderProducts()
+            }
         }
 
         binding.layoutCartAction.setOnClickListener {
@@ -113,12 +133,14 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                         AdapterSpinner.stringAdapter(this@AktivitasPenjualanRumahan, categories)
 
                     binding.spStockMode.setSelection(0)
+                    currentPage = 1
 
                     renderProducts()
                     renderBottomAction()
                 }
                 .onFailure {
                     products = emptyList()
+                    currentPage = 1
                     renderProducts()
                     renderBottomAction()
                     showMessage(it.message ?: "Gagal memuat produk")
@@ -138,7 +160,6 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
 
     private fun productStatus(product: Produk): String = when {
         product.stock <= 0 -> STATUS_EMPTY
-        product.stock <= product.minStock -> STATUS_LOW
         else -> STATUS_READY
     }
 
@@ -152,9 +173,8 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
     private fun statusRank(status: String): Int {
         return when (status) {
             STATUS_READY -> 0
-            STATUS_LOW -> 1
-            STATUS_EMPTY -> 2
-            else -> 3
+            STATUS_EMPTY -> 1
+            else -> 2
         }
     }
 
@@ -181,9 +201,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
 
                 val cocokMode = when (mode) {
                     MODE_READY -> status == STATUS_READY
-                    MODE_LOW -> status == STATUS_LOW
                     MODE_EMPTY -> status == STATUS_EMPTY
-                    MODE_ALL -> true
                     else -> status == STATUS_READY
                 }
 
@@ -191,20 +209,37 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
             }
             .sortedWith(productComparator())
 
-        productAdapter.submitList(filtered)
+        totalPages = if (filtered.isEmpty()) 1 else ((filtered.size - 1) / pageSize) + 1
+        if (currentPage > totalPages) currentPage = totalPages
+        if (currentPage < 1) currentPage = 1
+
+        val fromIndex = (currentPage - 1) * pageSize
+        val toIndex = minOf(fromIndex + pageSize, filtered.size)
+        val pagedProducts =
+            if (filtered.isEmpty()) emptyList() else filtered.subList(fromIndex, toIndex)
+
+        productAdapter.submitList(pagedProducts)
 
         val totalReady = products.count { productStatus(it) == STATUS_READY }
-        val totalLow = products.count { productStatus(it) == STATUS_LOW }
         val totalEmpty = products.count { productStatus(it) == STATUS_EMPTY }
 
         binding.tvProductSummary.text = when {
             products.isEmpty() ->
                 "Belum ada produk kasir dengan harga aktif di atas 0"
             filtered.isEmpty() ->
-                "Tidak ada produk yang cocok • siap $totalReady • menipis $totalLow • habis $totalEmpty"
+                "Tidak ada produk yang cocok • siap dijual $totalReady • habis $totalEmpty"
             else ->
-                "${filtered.size} produk tampil • siap $totalReady • menipis $totalLow • habis $totalEmpty"
+                "${filtered.size} produk total • tampil ${pagedProducts.size} di halaman $currentPage • siap dijual $totalReady • habis $totalEmpty"
         }
+
+        binding.tvEmptyProducts.isVisible = pagedProducts.isEmpty()
+        binding.rvProducts.isVisible = pagedProducts.isNotEmpty()
+        binding.paginationContainer.isVisible = filtered.size > pageSize
+        binding.tvPageInfo.text = "Halaman $currentPage dari $totalPages"
+        binding.btnPagePrev.isEnabled = currentPage > 1
+        binding.btnPagePrev.alpha = if (currentPage > 1) 1f else 0.45f
+        binding.btnPageNext.isEnabled = currentPage < totalPages
+        binding.btnPageNext.alpha = if (currentPage < totalPages) 1f else 0.45f
     }
 
     private fun addToCart(product: Produk) {
@@ -287,12 +322,9 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
 
     companion object {
         private const val MODE_READY = "Siap Dijual"
-        private const val MODE_ALL = "Semua Status"
-        private const val MODE_LOW = "Menipis"
         private const val MODE_EMPTY = "Habis"
 
-        private const val STATUS_READY = "Aman"
-        private const val STATUS_LOW = "Menipis"
+        private const val STATUS_READY = "Siap Dijual"
         private const val STATUS_EMPTY = "Habis"
     }
 }
@@ -305,7 +337,9 @@ private class SimpleSpinnerListener(
         view: android.view.View?,
         position: Int,
         id: Long
-    ) = onSelected()
+    ) {
+        onSelected()
+    }
 
     override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
 }

@@ -30,6 +30,7 @@
                 <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content">
+
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etDate"
                         android:layout_width="match_parent"
@@ -43,21 +44,16 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp" />
 
-                <Spinner
-                    android:id="@+id/spType"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp" />
-
                 <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp">
+
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etQty"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Jumlah"
+                        android:hint="Jumlah pengurangan"
                         android:inputType="number" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -65,13 +61,15 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp">
+
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etNote"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="Catatan"
+                        android:hint="Alasan pengurangan stok"
                         android:minLines="3" />
                 </com.google.android.material.textfield.TextInputLayout>
+
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
@@ -83,10 +81,10 @@
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="20dp"
         android:layout_marginBottom="24dp"
-        android:text="Simpan"
-        app:icon="@android:drawable/ic_menu_save"
+        android:text="Simpan Adjustment"
+        android:textColor="#1D3557"
         app:backgroundTint="#A8C2F0"
-        app:iconTint="#1D3557"
-        android:textColor="#1D3557" />
+        app:icon="@android:drawable/ic_menu_save"
+        app:iconTint="#1D3557" />
 
 </FrameLayout>

@@ -29,7 +29,7 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
 
     private val firestore by lazy { FirebaseFirestore.getInstance() }
     private val statusOptions = listOf("Semua Stok", "Aman", "Menipis", "Habis")
-    private val pageSize = 10
+    private val pageSize = 5
 
     private var semuaProduk: List<ProdukStokUi> = emptyList()
     private var currentPage = 1

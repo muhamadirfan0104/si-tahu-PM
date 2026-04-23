@@ -27,39 +27,18 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
     private var _binding: FragmentCashierSaleBinding? = null
     private val binding get() = _binding!!
 
-    private lateinit var productAdapter: AdapterProduk
-    private lateinit var cartAdapter: AdapterKeranjang
     private lateinit var cartBottomSheetBehavior: BottomSheetBehavior<View>
 
-    private var products: List<Produk> = emptyList()
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        if (!requireLoginOrRedirect()) return
-
-        _binding = FragmentCashierSaleBinding.bind(view)
-
-        setupAdapter()
-        setupView()
-        loadProducts()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (_binding != null) {
-            renderProducts()
-            renderBottomCart()
-        }
-    }
-
-    private fun setupAdapter() {
-        productAdapter = AdapterProduk(
-            onAdd = { product -> addToCart(product) },
-            getHarga = { product -> defaultPrice(product) },
-            getStatus = { product -> productStatus(product) }
+    private val productAdapter by lazy {
+        AdapterProduk(
+            onAdd = ::addToCart,
+            getHarga = ::defaultPrice,
+            getStatus = ::productStatus
         )
+    }
 
-        cartAdapter = AdapterKeranjang(
+    private val cartAdapter by lazy {
+        AdapterKeranjang(
             onIncrease = { item -> changeCartItemQty(item.productId, 1) },
             onDecrease = { item -> changeCartItemQty(item.productId, -1) },
             onRemove = { item ->
@@ -70,6 +49,30 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
                 products.firstOrNull { it.id == productId }
             }
         )
+    }
+
+    private val pageSize = 5
+
+    private var products: List<Produk> = emptyList()
+    private var currentPage = 1
+    private var totalPages = 1
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        if (!requireLoginOrRedirect()) return
+
+        _binding = FragmentCashierSaleBinding.bind(view)
+
+        setupView()
+        loadProducts()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (_binding != null) {
+            renderBottomCart()
+            renderProducts()
+        }
     }
 
     private fun setupView() {
@@ -86,19 +89,36 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
         binding.spStockMode.adapter =
             AdapterSpinner.stringAdapter(
                 requireContext(),
-                listOf(MODE_READY, MODE_ALL, MODE_LOW, MODE_EMPTY)
+                listOf(MODE_READY, MODE_EMPTY)
             )
 
         binding.spCategory.onItemSelectedListener = FragmentSpinnerListener {
+            currentPage = 1
             renderProducts()
         }
 
         binding.spStockMode.onItemSelectedListener = FragmentSpinnerListener {
+            currentPage = 1
             renderProducts()
         }
 
         binding.etSearch.addTextChangedListener {
+            currentPage = 1
             renderProducts()
+        }
+
+        binding.btnPagePrev.setOnClickListener {
+            if (currentPage > 1) {
+                currentPage--
+                renderProducts()
+            }
+        }
+
+        binding.btnPageNext.setOnClickListener {
+            if (currentPage < totalPages) {
+                currentPage++
+                renderProducts()
+            }
         }
 
         binding.btnCheckout.setOnClickListener {
@@ -148,12 +168,14 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
                         AdapterSpinner.stringAdapter(requireContext(), categories)
 
                     binding.spStockMode.setSelection(0)
+                    currentPage = 1
 
                     renderProducts()
                     renderBottomCart()
                 }
                 .onFailure { error ->
                     products = emptyList()
+                    currentPage = 1
                     renderProducts()
                     renderBottomCart()
                     showMessage(binding.root, error.message ?: "Gagal memuat produk")
@@ -175,7 +197,6 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
 
     private fun productStatus(product: Produk): String = when {
         product.stock <= 0 -> STATUS_EMPTY
-        product.stock <= product.minStock -> STATUS_LOW
         else -> STATUS_READY
     }
 
@@ -189,9 +210,8 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
     private fun statusRank(status: String): Int {
         return when (status) {
             STATUS_READY -> 0
-            STATUS_LOW -> 1
-            STATUS_EMPTY -> 2
-            else -> 3
+            STATUS_EMPTY -> 1
+            else -> 2
         }
     }
 
@@ -210,17 +230,15 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
 
                 val cocokKeyword =
                     keyword.isBlank() ||
-                        product.name.lowercase().contains(keyword) ||
-                        product.code.lowercase().contains(keyword)
+                            product.name.lowercase().contains(keyword) ||
+                            product.code.lowercase().contains(keyword)
 
                 val cocokKategori =
                     category == "Semua" || product.category == category
 
                 val cocokMode = when (mode) {
                     MODE_READY -> status == STATUS_READY
-                    MODE_LOW -> status == STATUS_LOW
                     MODE_EMPTY -> status == STATUS_EMPTY
-                    MODE_ALL -> true
                     else -> status == STATUS_READY
                 }
 
@@ -228,23 +246,37 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
             }
             .sortedWith(productComparator())
 
-        productAdapter.submitList(filtered)
+        totalPages = if (filtered.isEmpty()) 1 else ((filtered.size - 1) / pageSize) + 1
+        if (currentPage > totalPages) currentPage = totalPages
+        if (currentPage < 1) currentPage = 1
+
+        val fromIndex = (currentPage - 1) * pageSize
+        val toIndex = minOf(fromIndex + pageSize, filtered.size)
+        val pagedProducts =
+            if (filtered.isEmpty()) emptyList() else filtered.subList(fromIndex, toIndex)
+
+        productAdapter.submitList(pagedProducts)
 
         val totalReady = products.count { product -> productStatus(product) == STATUS_READY }
-        val totalLow = products.count { product -> productStatus(product) == STATUS_LOW }
         val totalEmpty = products.count { product -> productStatus(product) == STATUS_EMPTY }
 
         binding.tvProductSummary.text = when {
             products.isEmpty() ->
                 "Belum ada produk kasir dengan harga aktif di atas 0"
             filtered.isEmpty() ->
-                "Tidak ada produk yang cocok • siap $totalReady • menipis $totalLow • habis $totalEmpty"
+                "Tidak ada produk yang cocok • siap dijual $totalReady • habis $totalEmpty"
             else ->
-                "${filtered.size} produk tampil • siap $totalReady • menipis $totalLow • habis $totalEmpty"
+                "${filtered.size} produk total • tampil ${pagedProducts.size} di halaman $currentPage • siap dijual $totalReady • habis $totalEmpty"
         }
 
-        binding.tvEmptyProducts.isVisible = filtered.isEmpty()
-        binding.rvProducts.isVisible = filtered.isNotEmpty()
+        binding.tvEmptyProducts.isVisible = pagedProducts.isEmpty()
+        binding.rvProducts.isVisible = pagedProducts.isNotEmpty()
+        binding.paginationContainer.isVisible = filtered.size > pageSize
+        binding.tvPageInfo.text = "Halaman $currentPage dari $totalPages"
+        binding.btnPagePrev.isEnabled = currentPage > 1
+        binding.btnPagePrev.alpha = if (currentPage > 1) 1f else 0.45f
+        binding.btnPageNext.isEnabled = currentPage < totalPages
+        binding.btnPageNext.alpha = if (currentPage < totalPages) 1f else 0.45f
     }
 
     private fun addToCart(product: Produk) {
@@ -335,12 +367,9 @@ class FragmenKasirSale : FragmenDasar(R.layout.fragment_cashier_sale) {
 
     companion object {
         private const val MODE_READY = "Siap Dijual"
-        private const val MODE_ALL = "Semua"
-        private const val MODE_LOW = "Menipis"
         private const val MODE_EMPTY = "Habis"
 
-        private const val STATUS_READY = "Aman"
-        private const val STATUS_LOW = "Menipis"
+        private const val STATUS_READY = "Siap Dijual"
         private const val STATUS_EMPTY = "Habis"
     }
 }

@@ -19,7 +19,7 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
 
     private val firestore by lazy { FirebaseFirestore.getInstance() }
     private val categories = listOf("Semua", "DASAR", "OLAHAN")
-    private val pageSize = 10
+    private val pageSize = 5
 
     private var products: List<DataBarisProduk> = emptyList()
     private var priceStatusMap: Map<String, StatusHargaProduk> = emptyMap()
@@ -62,19 +62,19 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                 val loadedProducts = snapshot.documents
                     .filter { it.getBoolean("dihapus") != true }
                     .map { doc ->
-                    DataBarisProduk(
-                        id = doc.id,
-                        kodeProduk = doc.getString("kodeProduk").orEmpty(),
-                        namaProduk = doc.getString("namaProduk").orEmpty(),
-                        jenisProduk = doc.getString("jenisProduk").orEmpty(),
-                        satuan = doc.getString("satuan").orEmpty(),
-                        stokSaatIni = doc.getLong("stokSaatIni") ?: 0L,
-                        stokMinimum = doc.getLong("stokMinimum") ?: 0L,
-                        tampilDiKasir = doc.getBoolean("tampilDiKasir") ?: false,
-                        aktifDijual = doc.getBoolean("aktifDijual") ?: false,
-                        dihapus = doc.getBoolean("dihapus") ?: false
-                    )
-                }
+                        DataBarisProduk(
+                            id = doc.id,
+                            kodeProduk = doc.getString("kodeProduk").orEmpty(),
+                            namaProduk = doc.getString("namaProduk").orEmpty(),
+                            jenisProduk = doc.getString("jenisProduk").orEmpty(),
+                            satuan = doc.getString("satuan").orEmpty(),
+                            stokSaatIni = doc.getLong("stokSaatIni") ?: 0L,
+                            stokMinimum = doc.getLong("stokMinimum") ?: 0L,
+                            tampilDiKasir = doc.getBoolean("tampilDiKasir") ?: false,
+                            aktifDijual = doc.getBoolean("aktifDijual") ?: false,
+                            dihapus = doc.getBoolean("dihapus") ?: false
+                        )
+                    }
 
                 if (loadedProducts.isEmpty()) {
                     products = emptyList()
