@@ -20,7 +20,6 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         super.onCreate(savedInstanceState)
         binding = ActivityListScreenBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
         rowAdapter = AdapterBarisUmum(
             onItemClick = ::onRowClick,
             onActionClick = ::onRowAction,
@@ -28,6 +27,7 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
             onDeleteClick = ::onRowDelete
         )
 
+        rowAdapter.submitList(emptyList())
         binding.rvList.layoutManager = LinearLayoutManager(this)
         binding.rvList.adapter = rowAdapter
 
@@ -39,6 +39,9 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         binding.fabAdd.isVisible = false
         binding.paginationContainer.isVisible = false
         binding.tvEmpty.isVisible = false
+        binding.btnOpenFilters.isVisible = false
+        binding.tvFilterBadge.isVisible = false
+        binding.cardProductSelector.isVisible = false
     }
 
     protected fun configureScreen(
@@ -56,10 +59,29 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         selectedIndex: Int = 0,
         onChange: () -> Unit
     ) {
+        binding.cardPrimaryFilter.isVisible = true
         binding.spPrimaryFilter.isVisible = true
         binding.spPrimaryFilter.adapter = AdapterSpinner.stringAdapter(this, options)
         binding.spPrimaryFilter.setSelection(selectedIndex)
         binding.spPrimaryFilter.onItemSelectedListener = PendengarPilihItemSederhana(onChange)
+    }
+
+    protected fun setProductSelector(
+        label: String,
+        productName: String,
+        productInfo: String,
+        listener: View.OnClickListener
+    ) {
+        binding.cardProductSelector.isVisible = true
+        binding.tvProductSelectorLabel.text = label
+        binding.tvSelectedProductName.text = productName.ifBlank { "Pilih produk" }
+        binding.tvSelectedProductInfo.text = productInfo.ifBlank { "Cari dan pilih produk yang ingin diatur" }
+        binding.tvProductSelectorLeading.text = productName.firstOrNull()?.uppercaseChar()?.toString() ?: "P"
+        binding.cardProductSelector.setOnClickListener(listener)
+    }
+
+    protected fun hideProductSelector() {
+        binding.cardProductSelector.isVisible = false
     }
 
     protected fun setSecondaryFilter(
@@ -73,11 +95,31 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         binding.spSecondaryFilter.onItemSelectedListener = PendengarPilihItemSederhana(onChange)
     }
 
+    protected fun showFilterButton(onClick: View.OnClickListener) {
+        binding.btnOpenFilters.isVisible = true
+        binding.btnOpenFilters.setOnClickListener(onClick)
+    }
+
+    protected fun hideFilterButton() {
+        binding.btnOpenFilters.isVisible = false
+        binding.tvFilterBadge.isVisible = false
+        binding.cardProductSelector.isVisible = false
+    }
+
+    protected fun setFilterBadge(count: Int) {
+        binding.tvFilterBadge.isVisible = count > 0
+        binding.tvFilterBadge.text = if (count > 9) "9+" else count.toString()
+    }
+
     protected fun hideSearch() {
         binding.searchContainer.isVisible = false
+        binding.btnOpenFilters.isVisible = false
+        binding.tvFilterBadge.isVisible = false
+        binding.cardProductSelector.isVisible = false
     }
 
     protected fun hidePrimaryFilter() {
+        binding.cardPrimaryFilter.isVisible = false
         binding.spPrimaryFilter.isVisible = false
     }
 

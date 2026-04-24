@@ -3,6 +3,7 @@ package muhamad.irfan.si_tahu.ui.utama
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.children
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
@@ -17,10 +18,11 @@ import muhamad.irfan.si_tahu.ui.stok.AktivitasMonitoringStok
 import muhamad.irfan.si_tahu.ui.stok.AktivitasRiwayatSemuaStok
 import muhamad.irfan.si_tahu.ui.stok.AktivitasStockAdjustment
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
-import muhamad.irfan.si_tahu.util.AdapterSpinner
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.PembantuFloatingMenu
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.utilitas.PembantuFilterRiwayat
+import muhamad.irfan.si_tahu.util.Formatter
 
 class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
 
@@ -37,6 +39,7 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
     private var hasLoadedOnce = false
     private var isLoading = false
     private var isActionMenuOpen = false
+    private var statusFilterAktif = statusOptions.first()
 
     private val adapter by lazy {
         AdapterBarisUmum(
@@ -75,7 +78,7 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
     private fun setupView() = with(binding) {
         rvStock.layoutManager = LinearLayoutManager(requireContext())
         rvStock.adapter = adapter
-        spStatus.adapter = AdapterSpinner.stringAdapter(requireContext(), statusOptions)
+        tvFilterBadge.isVisible = false
     }
 
     private fun setupActions() = with(binding) {
@@ -84,9 +87,9 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
             refreshList()
         }
 
-        spStatus.onItemSelectedListener = PendengarPilihItemSederhana {
-            currentPage = 1
-            refreshList()
+
+        btnOpenFilters.setOnClickListener {
+            bukaFilter()
         }
 
         fabToggleStockMenu.setOnClickListener {
@@ -297,12 +300,10 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
     private fun refreshList() {
         val currentBinding = _binding ?: return
         val keyword = currentBinding.etSearch.text?.toString()?.trim().orEmpty().lowercase()
-        val selectedStatus = statusOptions.getOrNull(currentBinding.spStatus.selectedItemPosition)
-            ?: statusOptions.first()
 
         val filtered = semuaProduk.filter { produk ->
             val cocokNama = keyword.isBlank() || produk.namaProduk.lowercase().contains(keyword)
-            val cocokStatus = when (selectedStatus) {
+            val cocokStatus = when (statusFilterAktif) {
                 "Aman" -> produk.statusStok() == "Aman"
                 "Menipis" -> produk.statusStok() == "Menipis"
                 "Habis" -> produk.statusStok() == "Habis"
@@ -317,8 +318,8 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
 
         currentBinding.tvStockTitle.text = "Stok produk"
         currentBinding.tvStockTotal.text = "$totalProduk produk"
-        currentBinding.tvStockLow.text = "Menipis: $stokMenipis"
-        currentBinding.tvStockOut.text = "Habis: $stokHabis"
+        currentBinding.tvStockLow.text = "Menipis: ${Formatter.ribuan(stokMenipis.toLong())}"
+        currentBinding.tvStockOut.text = "Habis: ${Formatter.ribuan(stokHabis.toLong())}"
         currentBinding.tvStockSubtitle.text = "Ketuk produk untuk melihat riwayat stok per produk"
 
         totalPages = if (filtered.isEmpty()) 1 else ((filtered.size - 1) / pageSize) + 1
@@ -334,9 +335,9 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
                 ItemBaris(
                     id = produk.id,
                     title = produk.namaProduk,
-                    subtitle = "${produk.jenisProduk} • Minimum ${produk.stokMinimum} ${produk.satuan}",
+                    subtitle = "${produk.jenisProduk} • Minimum ${Formatter.ribuan(produk.stokMinimum)} ${produk.satuan}",
                     badge = if (produk.aktifDijual) "Aktif" else "Nonaktif",
-                    amount = "${produk.stokSaatIni} ${produk.satuan}",
+                    amount = "${Formatter.ribuan(produk.stokSaatIni)} ${produk.satuan}",
                     priceStatus = produk.statusStok(),
                     parameterStatus = "Tap untuk riwayat",
                     tone = when (produk.statusStok()) {
@@ -367,6 +368,49 @@ class FragmenStok : FragmenDasar(R.layout.fragment_stock_list) {
         currentBinding.btnNextPage.isEnabled = currentPage < totalPages
         currentBinding.btnPrevPage.alpha = if (currentPage > 1) 1f else 0.45f
         currentBinding.btnNextPage.alpha = if (currentPage < totalPages) 1f else 0.45f
+        updateFilterUi()
+    }
+
+    private fun bukaFilter() {
+        val hostActivity = activity as? AppCompatActivity ?: return
+        PembantuFilterRiwayat.show(
+            activity = hostActivity,
+            kategori = statusOptions,
+            kategoriTerpilih = statusFilterAktif,
+            tanggalLabel = null,
+            jumlahFilterAktif = jumlahFilterAktif(),
+            onKategoriDipilih = {
+                statusFilterAktif = it
+                currentPage = 1
+                refreshList()
+            },
+            onPilihTanggal = {},
+            onHapusTanggal = {},
+            onReset = {
+                resetFilter()
+            },
+            kategoriLabel = "Status stok",
+            tampilkanTanggal = false
+        )
+    }
+
+    private fun resetFilter() {
+        statusFilterAktif = statusOptions.first()
+        currentPage = 1
+        refreshList()
+        val currentBinding = _binding ?: return
+        showMessage(currentBinding.root, "Filter stok direset")
+    }
+
+    private fun updateFilterUi() {
+        val currentBinding = _binding ?: return
+        val count = jumlahFilterAktif()
+        currentBinding.tvFilterBadge.isVisible = count > 0
+        currentBinding.tvFilterBadge.text = if (count > 9) "9+" else count.toString()
+    }
+
+    private fun jumlahFilterAktif(): Int {
+        return if (statusFilterAktif != statusOptions.first()) 1 else 0
     }
 
     private fun setLoadingState(showLoading: Boolean) {

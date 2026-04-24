@@ -54,7 +54,7 @@ class FragmenDasborKasir : FragmenDasar(R.layout.fragment_cashier_dashboard) {
             runCatching { RepositoriFirebaseUtama.muatRingkasanKasir() }
                 .onSuccess { summary ->
                     currentBinding.tvTodaySales.text = Formatter.currency(summary.totalHariIni)
-                    currentBinding.tvTodayCount.text = summary.jumlahTransaksiHariIni.toString()
+                    currentBinding.tvTodayCount.text = Formatter.ribuan(summary.jumlahTransaksiHariIni.toLong())
 
                     topAdapter.submitList(
                         if (summary.topProducts.isEmpty()) {

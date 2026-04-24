@@ -186,7 +186,7 @@ object RepositoriLokal {
                 type = if (sale.source == "KASIR") "Penjualan" else "Rekap Pasar",
                 subtitle = sale.items.joinToString(", ") {
                     val product = getProduct(it.productId)
-                    (product?.name ?: "Produk") + " x" + it.qty
+                    (product?.name ?: "Produk") + " x" + Formatter.ribuan(it.qty.toLong())
                 },
                 valueText = Formatter.currency(sale.total),
                 source = sale.source,
@@ -198,8 +198,8 @@ object RepositoriLokal {
                 id = item.id,
                 date = item.date,
                 type = "Produksi",
-                subtitle = (getProduct(item.productId)?.name ?: "Produk") + " • " + item.batches + " masak",
-                valueText = item.result.toString() + " pcs",
+                subtitle = (getProduct(item.productId)?.name ?: "Produk") + " • " + formatBatch(item.batches) + " masak",
+                valueText = Formatter.ribuan(item.result.toLong()) + " pcs",
                 source = "PRODUKSI"
             )
         }
@@ -209,7 +209,7 @@ object RepositoriLokal {
                 date = item.date,
                 type = "Produk Olahan",
                 subtitle = (getProduct(item.fromProductId)?.name ?: "Bahan") + " -> " + (getProduct(item.toProductId)?.name ?: "Hasil"),
-                valueText = item.outputQty.toString() + " pcs",
+                valueText = Formatter.ribuan(item.outputQty.toLong()) + " pcs",
                 source = "KONVERSI"
             )
         }
@@ -225,7 +225,7 @@ object RepositoriLokal {
         }
         database.stockAdjustments.forEach { item ->
             val product = getProduct(item.productId)
-            val qtyLabel = if (item.type == "add") "+${item.qty}" else "-${item.qty}"
+            val qtyLabel = if (item.type == "add") "+${Formatter.ribuan(item.qty.toLong())}" else "-${Formatter.ribuan(item.qty.toLong())}"
             rows += BarisTransaksi(
                 id = item.id,
                 date = item.date,
@@ -254,12 +254,12 @@ object RepositoriLokal {
         }
         database.sales.forEach { sale ->
             sale.items.filter { it.productId == productId }.forEach { item ->
-                rows += PergerakanStok(sale.id + productId, sale.date, "Penjualan keluar", sale.source + " • " + sale.id, "-${item.qty} ${product.unit}", if (sale.source == "KASIR") "gold" else "blue")
+                rows += PergerakanStok(sale.id + productId, sale.date, "Penjualan keluar", sale.source + " • " + sale.id, "-${Formatter.ribuan(item.qty.toLong())} ${product.unit}", if (sale.source == "KASIR") "gold" else "blue")
             }
         }
         database.stockAdjustments.filter { it.productId == productId }.forEach {
             val sign = if (it.type == "add") "+" else "-"
-            rows += PergerakanStok(it.id, it.date, "Adjustment ${if (it.type == "add") "masuk" else "keluar"}", it.note, "$sign${it.qty} ${product.unit}", if (it.type == "add") "green" else "orange")
+            rows += PergerakanStok(it.id, it.date, "Adjustment ${if (it.type == "add") "masuk" else "keluar"}", it.note, "$sign${Formatter.ribuan(it.qty.toLong())} ${product.unit}", if (it.type == "add") "green" else "orange")
         }
         return rows.sortedByDescending { Formatter.parseDate(it.date) }.take(8)
     }
@@ -277,7 +277,7 @@ object RepositoriLokal {
 
     fun formatBatch(value: Double): String {
         return if (value % 1.0 == 0.0) {
-            value.toInt().toString()
+            Formatter.ribuan(value.toLong())
         } else {
             value.toString().replace(".", ",")
         }
@@ -395,7 +395,7 @@ object RepositoriLokal {
         database.productionLogs.add(0, item)
         persist()
         addActivity(
-            "Produksi ${product.name} ${formatBatch(batches)}x masak bertambah ${result} ${product.unit}.",
+            "Produksi ${product.name} ${formatBatch(batches)}x masak bertambah ${Formatter.ribuan(result.toLong())} ${product.unit}.",
             "green"
         )
         return item
@@ -450,7 +450,7 @@ object RepositoriLokal {
         )
         database.stockAdjustments.add(0, item)
         persist()
-        addActivity("Adjustment stok ${product.name} ${if (type == "add") "+" else "-"}$qty ${product.unit}.", if (type == "add") "green" else "orange")
+        addActivity("Adjustment stok ${product.name} ${if (type == "add") "+" else "-"}${Formatter.ribuan(qty.toLong())} ${product.unit}.", if (type == "add") "green" else "orange")
         return item
     }
 
@@ -757,7 +757,7 @@ object RepositoriLokal {
                 val product = getProduct(item.productId)
                 val subtotal = item.qty.toLong() * item.price
                 appendLine("${index + 1}. ${product?.name ?: "Produk"}")
-                appendLine("   ${item.qty} x ${Formatter.currency(item.price)}")
+                appendLine("   ${Formatter.ribuan(item.qty.toLong())} x ${Formatter.currency(item.price)}")
                 appendLine("   ${detailLine("Subtotal", Formatter.currency(subtotal))}")
             }
             appendLine(separator())
@@ -779,8 +779,8 @@ object RepositoriLokal {
             appendLine(detailLine("ID Produksi", item.id))
             appendLine(detailLine("Tanggal", Formatter.readableDateTime(item.date)))
             appendLine(detailLine("Produk", product?.name ?: item.productId))
-            appendLine(detailLine("Jumlah Masak", item.batches.toString()))
-            appendLine(detailLine("Hasil", item.result.toString() + " " + (product?.unit ?: "pcs")))
+            appendLine(detailLine("Jumlah Masak", formatBatch(item.batches)))
+            appendLine(detailLine("Hasil", Formatter.ribuan(item.result.toLong()) + " " + (product?.unit ?: "pcs")))
             appendLine(detailLine("Catatan", item.note.ifBlank { "-" }))
             appendLine(detailLine("Dicatat Oleh", user?.name ?: item.createdBy))
         }
@@ -797,9 +797,9 @@ object RepositoriLokal {
             appendLine(detailLine("ID Produk Olahan", item.id))
             appendLine(detailLine("Tanggal", Formatter.readableDateTime(item.date)))
             appendLine(detailLine("Produk Bahan", from?.name ?: item.fromProductId))
-            appendLine(detailLine("Jumlah Bahan", item.inputQty.toString() + " " + (from?.unit ?: "pcs")))
+            appendLine(detailLine("Jumlah Bahan", Formatter.ribuan(item.inputQty.toLong()) + " " + (from?.unit ?: "pcs")))
             appendLine(detailLine("Produk Hasil", to?.name ?: item.toProductId))
-            appendLine(detailLine("Jumlah Hasil", item.outputQty.toString() + " " + (to?.unit ?: "pcs")))
+            appendLine(detailLine("Jumlah Hasil", Formatter.ribuan(item.outputQty.toLong()) + " " + (to?.unit ?: "pcs")))
             appendLine(detailLine("Catatan", item.note.ifBlank { "-" }))
             appendLine(detailLine("Dicatat Oleh", user?.name ?: item.createdBy))
         }
@@ -832,7 +832,7 @@ object RepositoriLokal {
             appendLine(detailLine("Tanggal", Formatter.readableDateTime(item.date)))
             appendLine(detailLine("Produk", product?.name ?: item.productId))
             appendLine(detailLine("Jenis", direction))
-            appendLine(detailLine("Jumlah", item.qty.toString() + " " + (product?.unit ?: "pcs")))
+            appendLine(detailLine("Jumlah", Formatter.ribuan(item.qty.toLong()) + " " + (product?.unit ?: "pcs")))
             appendLine(detailLine("Catatan", item.note.ifBlank { "-" }))
             appendLine(detailLine("Dicatat Oleh", user?.name ?: item.createdBy))
         }

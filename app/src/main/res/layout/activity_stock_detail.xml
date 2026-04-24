@@ -75,6 +75,16 @@
                         android:textColor="@android:color/white"
                         android:textSize="13sp" />
 
+
+                    <TextView
+                        android:id="@+id/tvBatchSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Batch stok: -"
+                        android:textColor="@android:color/white"
+                        android:textSize="13sp" />
+
                     <TextView
                         android:id="@+id/tvStatus"
                         android:layout_width="wrap_content"
@@ -95,6 +105,16 @@
                 android:layout_height="52dp"
                 android:layout_marginTop="16dp"
                 android:text="Lakukan Stock Adjustment" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDisposeExpiredStock"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="10dp"
+                android:text="Buang Stok Kadaluarsa"
+                android:visibility="gone"
+                app:backgroundTint="@color/orange_primary"
+                android:textColor="@android:color/white" />
 
             <TextView
                 android:layout_width="wrap_content"

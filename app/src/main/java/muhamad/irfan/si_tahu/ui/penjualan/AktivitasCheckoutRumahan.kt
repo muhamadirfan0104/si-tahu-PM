@@ -125,7 +125,7 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
         binding.tvCheckoutSummary.text = if (emptyCart) {
             "Keranjang kosong"
         } else {
-            "$qty item • ${items.size} baris"
+            "${Formatter.ribuan(qty.toLong())} item • ${Formatter.ribuan(items.size.toLong())} baris"
         }
 
         binding.tvTotalBelanja.text = Formatter.currency(total)

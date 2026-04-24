@@ -10,6 +10,9 @@ import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.utilitas.PembantuPilihProduk
+import muhamad.irfan.si_tahu.utilitas.ProdukPilihanUi
+import muhamad.irfan.si_tahu.util.Formatter
 
 class AktivitasDaftarParameter : AktivitasDaftarDasar() {
 
@@ -17,7 +20,7 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
 
     private var products: List<OpsiProdukParameter> = emptyList()
     private var parameters: List<DataBarisParameter> = emptyList()
-    private var initialSelectionIndex: Int = 0
+    private var selectedProductIdAktif: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,24 +58,29 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
                     .map { doc ->
                     OpsiProdukParameter(
                         id = doc.id,
-                        namaProduk = doc.getString("namaProduk").orEmpty()
+                        namaProduk = doc.getString("namaProduk").orEmpty(),
+                        jenisProduk = doc.getString("jenisProduk").orEmpty().ifBlank { "DASAR" },
+                        stokSaatIni = doc.getLong("stokSaatIni") ?: 0L,
+                        satuan = doc.getString("satuan").orEmpty(),
+                        aktifDijual = doc.getBoolean("aktifDijual") ?: true
                     )
                 }.sortedBy { it.namaProduk.lowercase() }
 
                 if (products.isEmpty()) {
                     hideFabAdd()
                     hidePrimaryFilter()
+                    hideProductSelector()
                     submitRows(listOf(infoBelumAdaProdukDasar()))
                     return@addOnSuccessListener
                 }
 
                 val initialProductId = intent.getStringExtra(EkstraAplikasi.EXTRA_PRODUCT_ID)
-                initialSelectionIndex =
-                    products.indexOfFirst { it.id == initialProductId }.takeIf { it >= 0 } ?: 0
+                selectedProductIdAktif = products.firstOrNull { it.id == selectedProductIdAktif }?.id
+                    ?: products.firstOrNull { it.id == initialProductId }?.id
+                    ?: products.firstOrNull()?.id
 
-                setPrimaryFilter(products.map { it.namaProduk }, initialSelectionIndex) {
-                    loadParameters()
-                }
+                hidePrimaryFilter()
+                updateProductSelector()
                 setFabAdd {
                     selectedProductId()?.let { productId ->
                         startActivity(
@@ -87,14 +95,41 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
             .addOnFailureListener { e ->
                 showMessage("Gagal memuat produk dasar: ${e.message}")
                 hideFabAdd()
+                hideProductSelector()
                 submitRows(listOf(infoBelumAdaProdukDasar()))
             }
     }
 
     private fun selectedProductId(): String? {
-        val selectedName = primarySelection()
-        return products.firstOrNull { it.namaProduk == selectedName }?.id
-            ?: products.firstOrNull()?.id
+        return selectedProductIdAktif ?: products.firstOrNull()?.id
+    }
+
+    private fun selectedProduct(): OpsiProdukParameter? {
+        return products.firstOrNull { it.id == selectedProductId() }
+    }
+
+    private fun updateProductSelector() {
+        val product = selectedProduct()
+        setProductSelector(
+            label = "Produk parameter produksi",
+            productName = product?.namaProduk.orEmpty().ifBlank { "Pilih produk" },
+            productInfo = product?.ringkasanUntukSelector().orEmpty().ifBlank { "Pilih produk dasar yang ingin diatur parameternya" },
+            listener = View.OnClickListener { showProductPicker() }
+        )
+    }
+
+    private fun showProductPicker() {
+        PembantuPilihProduk.show(
+            activity = this,
+            title = "Pilih Produk Parameter",
+            produk = products.map { it.toProdukPilihanUi() },
+            selectedId = selectedProductId(),
+            kategoriOptions = listOf("Semua", "Dasar")
+        ) { selected ->
+            selectedProductIdAktif = selected.id
+            updateProductSelector()
+            loadParameters()
+        }
     }
 
     private fun loadParameters() {
@@ -132,7 +167,8 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
     }
 
     private fun refresh() {
-        val product = products.firstOrNull { it.id == selectedProductId() }
+        val product = selectedProduct()
+        updateProductSelector()
 
         if (products.isEmpty()) {
             submitRows(listOf(infoBelumAdaProdukDasar()))
@@ -161,7 +197,7 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
                 title = item.namaProduk.ifBlank { product?.namaProduk ?: item.idProduk },
                 subtitle = item.catatan.ifBlank { "${item.id.uppercase()} • Standar hasil produksi" },
                 badge = if (item.aktif) "Aktif" else "Nonaktif",
-                amount = "${item.hasilPerProduksi} ${item.satuanHasil}",
+                amount = "${Formatter.ribuan(item.hasilPerProduksi)} ${item.satuanHasil}",
                 priceStatus = "Hasil per produksi",
                 parameterStatus = if (item.catatan.isNotBlank()) "Ada catatan" else "Tanpa catatan",
                 actionLabel = "⋮",
@@ -373,8 +409,31 @@ class AktivitasDaftarParameter : AktivitasDaftarDasar() {
 
 private data class OpsiProdukParameter(
     val id: String,
-    val namaProduk: String
-)
+    val namaProduk: String,
+    val jenisProduk: String,
+    val stokSaatIni: Long,
+    val satuan: String,
+    val aktifDijual: Boolean
+) {
+    fun ringkasanUntukSelector(): String {
+        val jenis = jenisProduk.ifBlank { "DASAR" }
+        val status = if (aktifDijual) "Aktif" else "Nonaktif"
+        val stok = "${Formatter.ribuan(stokSaatIni)} ${satuan.ifBlank { "pcs" }}"
+        return "$jenis • $status • Stok $stok"
+    }
+
+    fun toProdukPilihanUi(): ProdukPilihanUi {
+        return ProdukPilihanUi(
+            id = id,
+            namaProduk = namaProduk,
+            jenisProduk = jenisProduk.ifBlank { "DASAR" },
+            stokSaatIni = stokSaatIni,
+            satuan = satuan,
+            aktifDijual = aktifDijual,
+            infoTambahan = "Parameter produksi"
+        )
+    }
+}
 
 private data class DataBarisParameter(
     val id: String,

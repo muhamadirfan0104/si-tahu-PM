@@ -10,10 +10,15 @@ import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.utilitas.PembantuFilterRiwayat
 
 class AktivitasDaftarPengguna : AktivitasDaftarDasar() {
 
     private val firestore by lazy { FirebaseFirestore.getInstance() }
+    private val roleOptions = listOf("Semua", "ADMIN", "KASIR")
+    private val statusOptions = listOf("Semua", "Aktif", "Nonaktif")
+    private var roleAktif = roleOptions.first()
+    private var statusAktif = statusOptions.first()
     private var users: List<DataBarisPengguna> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,18 +30,15 @@ class AktivitasDaftarPengguna : AktivitasDaftarDasar() {
             searchHint = "Cari nama, email, atau telepon..."
         )
 
-        setPrimaryFilter(listOf("Semua", "ADMIN", "KASIR")) {
-            refresh()
-        }
-
-        setSecondaryFilter(listOf("Semua", "Aktif", "Nonaktif")) {
-            refresh()
-        }
-
+        hidePrimaryFilter()
+        hideSecondaryFilter()
         hideButtons()
+        showFilterButton(View.OnClickListener { bukaFilter() })
+
         setFabAdd {
             startActivity(Intent(this, AktivitasFormPengguna::class.java))
         }
+        updateFilterUi()
     }
 
     override fun onResume() {
@@ -73,8 +75,8 @@ class AktivitasDaftarPengguna : AktivitasDaftarDasar() {
 
     private fun refresh() {
         val query = searchText()
-        val roleFilter = primarySelection()
-        val statusFilter = secondarySelection()
+        val roleFilter = roleAktif
+        val statusFilter = statusAktif
 
         val filtered = users.filter { item ->
             val matchQuery = listOf(
@@ -138,6 +140,49 @@ class AktivitasDaftarPengguna : AktivitasDaftarDasar() {
                 )
             }
         )
+        updateFilterUi()
+    }
+
+    private fun bukaFilter() {
+        PembantuFilterRiwayat.show(
+            activity = this,
+            kategori = roleOptions,
+            kategoriTerpilih = roleAktif,
+            tanggalLabel = null,
+            jumlahFilterAktif = jumlahFilterAktif(),
+            onKategoriDipilih = { pilihan ->
+                roleAktif = pilihan
+                refresh()
+            },
+            onPilihTanggal = {},
+            onHapusTanggal = {},
+            onReset = {
+                roleAktif = roleOptions.first()
+                statusAktif = statusOptions.first()
+                refresh()
+                showMessage("Filter pengguna direset")
+            },
+            kategoriLabel = "Peran",
+            secondaryLabel = "Status Akun",
+            secondaryOptions = statusOptions,
+            secondaryTerpilih = statusAktif,
+            onSecondaryDipilih = { pilihan ->
+                statusAktif = pilihan
+                refresh()
+            },
+            tampilkanTanggal = false
+        )
+    }
+
+    private fun jumlahFilterAktif(): Int {
+        var total = 0
+        if (roleAktif != roleOptions.first()) total++
+        if (statusAktif != statusOptions.first()) total++
+        return total
+    }
+
+    private fun updateFilterUi() {
+        setFilterBadge(jumlahFilterAktif())
     }
 
     override fun onRowClick(item: ItemBaris) {

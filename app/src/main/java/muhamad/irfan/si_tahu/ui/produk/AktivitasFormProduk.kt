@@ -10,6 +10,7 @@ import muhamad.irfan.si_tahu.databinding.ActivityProductFormBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.util.AdapterSpinner
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
+import muhamad.irfan.si_tahu.util.InputAngka
 
 class AktivitasFormProduk : AktivitasDasar() {
 
@@ -32,6 +33,9 @@ class AktivitasFormProduk : AktivitasDasar() {
         bindToolbar(binding.toolbar, "Form Produk", "Tambah atau edit produk")
         binding.spCategory.adapter = AdapterSpinner.stringAdapter(this, categories)
         binding.spPhotoTone.visibility = View.GONE
+        InputAngka.pasang(binding.etStock)
+        InputAngka.pasang(binding.etMinStock)
+        InputAngka.pasang(binding.etShelfLifeDays)
 
         editingProductId = intent.getStringExtra(EkstraAplikasi.EXTRA_PRODUCT_ID)
 
@@ -47,6 +51,7 @@ class AktivitasFormProduk : AktivitasDasar() {
     private fun setupInitialState() {
         if (editingProductId.isNullOrBlank()) {
             bindSellingState(aktifDijual = true, tampilDiKasir = true)
+            InputAngka.setNilai(binding.etShelfLifeDays, 2L)
         } else {
             loadProduct(editingProductId!!)
         }
@@ -116,8 +121,9 @@ class AktivitasFormProduk : AktivitasDasar() {
                 binding.spCategory.setSelection(categoryIndex)
 
                 binding.etUnit.setText(doc.getString("satuan").orEmpty())
-                binding.etStock.setText((doc.getLong("stokSaatIni") ?: 0L).toString())
-                binding.etMinStock.setText((doc.getLong("stokMinimum") ?: 0L).toString())
+                InputAngka.setNilai(binding.etStock, doc.getLong("stokSaatIni") ?: 0L)
+                InputAngka.setNilai(binding.etMinStock, doc.getLong("stokMinimum") ?: 0L)
+                InputAngka.setNilai(binding.etShelfLifeDays, doc.getLong("masaSimpanHari") ?: 2L)
 
                 bindSellingState(
                     aktifDijual = doc.getBoolean("aktifDijual") ?: true,
@@ -137,8 +143,9 @@ class AktivitasFormProduk : AktivitasDasar() {
         val namaProduk = binding.etName.text?.toString()?.trim().orEmpty()
         val jenisProduk = categories[binding.spCategory.selectedItemPosition]
         val satuan = binding.etUnit.text?.toString()?.trim().orEmpty()
-        val stokSaatIni = binding.etStock.text?.toString()?.trim()?.toLongOrNull() ?: 0L
-        val stokMinimum = binding.etMinStock.text?.toString()?.trim()?.toLongOrNull() ?: 0L
+        val stokSaatIni = InputAngka.ambilLong(binding.etStock)
+        val stokMinimum = InputAngka.ambilLong(binding.etMinStock)
+        val masaSimpanHari = InputAngka.ambilLong(binding.etShelfLifeDays).coerceAtLeast(1L)
         val aktifDijual = binding.cbActive.isChecked
         val tampilDiKasir = binding.cbShowCashier.isChecked
 
@@ -165,6 +172,7 @@ class AktivitasFormProduk : AktivitasDasar() {
                 "satuan" to satuan,
                 "stokSaatIni" to stokSaatIni,
                 "stokMinimum" to stokMinimum,
+                "masaSimpanHari" to masaSimpanHari,
                 "tampilDiKasir" to if (aktifDijual) tampilDiKasir else false,
                 "aktifDijual" to aktifDijual,
                 "urlFoto" to "",

@@ -3,10 +3,13 @@ package muhamad.irfan.si_tahu.ui.stok
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.R
+import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.databinding.ActivityStockDetailBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
@@ -22,7 +25,15 @@ class AktivitasDetailStok : AktivitasDasar() {
     private val firestore by lazy { FirebaseFirestore.getInstance() }
 
     private val movementAdapter by lazy {
-        AdapterBarisUmum(onItemClick = {})
+        AdapterBarisUmum(
+            onItemClick = { item ->
+                lifecycleScope.launch {
+                    runCatching { RepositoriFirebaseUtama.buildStockMutationDetailText(item.id) }
+                        .onSuccess { detail -> showReceiptModal("Detail Riwayat Stok", detail) }
+                        .onFailure { showMessage(it.message ?: "Gagal memuat detail riwayat stok") }
+                }
+            }
+        )
     }
 
     private val pageSize = 5
@@ -32,6 +43,7 @@ class AktivitasDetailStok : AktivitasDasar() {
     private var allMovements: List<ItemBaris> = emptyList()
     private var currentPage = 1
     private var totalPages = 1
+    private var expiredStockForAction = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,7 +53,7 @@ class AktivitasDetailStok : AktivitasDasar() {
         bindToolbar(
             binding.toolbar,
             "Detail Stok",
-            "Lihat posisi stok dan riwayat pergerakan"
+            "Pisahkan stok jual, stok fisik, dan stok perlu tindakan"
         )
 
         productId = intent.getStringExtra(AktivitasMonitoringStok.EXTRA_PRODUCT_ID).orEmpty()
@@ -57,6 +69,13 @@ class AktivitasDetailStok : AktivitasDasar() {
         binding.btnAdjustStock.setOnClickListener {
             val intent = Intent(this, AktivitasStockAdjustment::class.java)
             intent.putExtra(AktivitasStockAdjustment.EXTRA_PRODUCT_ID, productId)
+            startActivity(intent)
+        }
+
+        binding.btnDisposeExpiredStock.setOnClickListener {
+            val intent = Intent(this, AktivitasStockAdjustment::class.java)
+            intent.putExtra(AktivitasStockAdjustment.EXTRA_PRODUCT_ID, productId)
+            intent.putExtra(AktivitasStockAdjustment.EXTRA_EXPIRED_MODE, true)
             startActivity(intent)
         }
 
@@ -106,28 +125,97 @@ class AktivitasDetailStok : AktivitasDasar() {
 
                 productUnit = satuan
 
-                val status = when {
-                    stokSaatIni <= 0L -> "Habis"
-                    stokSaatIni <= stokMinimum -> "Menipis"
-                    else -> "Aman"
-                }
-
                 binding.tvProductName.text = namaProduk
                 binding.tvProductMeta.text = "$jenisProduk • ${if (aktifDijual) "Aktif" else "Nonaktif"}"
-                binding.tvStockNow.text = "Stok saat ini: $stokSaatIni $satuan"
-                binding.tvMinStock.text = "Stok minimum: $stokMinimum $satuan"
-                binding.tvStatus.text = status
-                binding.tvStatus.setBackgroundResource(
-                    when (status) {
-                        "Aman" -> R.drawable.bg_tone_green
-                        "Menipis" -> R.drawable.bg_tone_gold
-                        else -> R.drawable.bg_tone_red
-                    }
-                )
+                binding.tvMinStock.text = "Stok minimum: ${Formatter.ribuan(stokMinimum)} $satuan"
+                loadBatchSummary(satuan, stokSaatIni, stokMinimum)
             }
             .addOnFailureListener { e ->
                 showMessage("Gagal memuat detail stok: ${e.message}")
             }
+    }
+
+    private fun loadBatchSummary(satuan: String, stokFisik: Long, stokMinimum: Long) {
+        firestore.collection("BatchStok")
+            .whereEqualTo("idProduk", productId)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                val aktif = snapshot.documents.filter { (it.getLong("qtySisa") ?: 0L) > 0L }
+                val today = Formatter.currentDateOnly()
+                val tomorrow = nextDayKey(today)
+                var aman = 0L
+                var hampir = 0L
+                var kadaluarsa = 0L
+                var nearestExpiry = ""
+
+                aktif.forEach { doc ->
+                    val qty = doc.getLong("qtySisa") ?: 0L
+                    val expiry = doc.getString("kunciTanggalKadaluarsa").orEmpty()
+                    when {
+                        expiry.isBlank() -> aman += qty
+                        expiry < today -> kadaluarsa += qty
+                        expiry <= tomorrow -> {
+                            hampir += qty
+                            if (nearestExpiry.isBlank() || expiry < nearestExpiry) nearestExpiry = expiry
+                        }
+                        else -> {
+                            aman += qty
+                            if (nearestExpiry.isBlank() || expiry < nearestExpiry) nearestExpiry = expiry
+                        }
+                    }
+                }
+
+                val totalBatchQty = aman + hampir + kadaluarsa
+                val stokLamaTanpaBatch = (stokFisik - totalBatchQty).coerceAtLeast(0L)
+                aman += stokLamaTanpaBatch
+
+                val stokLayakJual = aman + hampir
+                expiredStockForAction = kadaluarsa
+                binding.btnDisposeExpiredStock.visibility = if (kadaluarsa > 0L) View.VISIBLE else View.GONE
+
+                binding.tvStockNow.text = "Stok layak jual: ${Formatter.ribuan(stokLayakJual)} $satuan"
+                binding.tvBatchSummary.text = buildString {
+                    append("Aman: ${Formatter.ribuan(aman)} $satuan")
+                    append("\nHampir kadaluarsa: ${Formatter.ribuan(hampir)} $satuan")
+                    append("\nKadaluarsa / perlu tindakan: ${Formatter.ribuan(kadaluarsa)} $satuan")
+                    append("\nTotal fisik: ${Formatter.ribuan(stokFisik)} $satuan")
+                    if (stokLamaTanpaBatch > 0L) append("\nStok lama tanpa batch: ${Formatter.ribuan(stokLamaTanpaBatch)} $satuan")
+                    if (nearestExpiry.isNotBlank()) append("\nED terdekat: ${Formatter.readableShortDate(nearestExpiry)}")
+                    if (kadaluarsa > 0L) append("\nTindakan: buang/adjust stok kadaluarsa agar tidak menggantung.")
+                }
+
+                val status = when {
+                    stokLayakJual <= 0L && kadaluarsa > 0L -> "Perlu Tindakan"
+                    stokLayakJual <= 0L -> "Habis"
+                    kadaluarsa > 0L -> "Perlu Tindakan"
+                    hampir > 0L -> "Hampir Kadaluarsa"
+                    stokLayakJual <= stokMinimum -> "Menipis"
+                    else -> "Aman"
+                }
+
+                binding.tvStatus.text = status
+                binding.tvStatus.setBackgroundResource(
+                    when (status) {
+                        "Aman" -> R.drawable.bg_tone_green
+                        "Menipis", "Hampir Kadaluarsa" -> R.drawable.bg_tone_gold
+                        "Perlu Tindakan" -> R.drawable.bg_tone_orange
+                        else -> R.drawable.bg_tone_red
+                    }
+                )
+            }
+            .addOnFailureListener {
+                binding.tvStockNow.text = "Stok fisik: ${Formatter.ribuan(stokFisik)} $satuan"
+                binding.tvBatchSummary.text = "Batch stok: gagal dimuat"
+                binding.btnDisposeExpiredStock.visibility = View.GONE
+            }
+    }
+
+    private fun nextDayKey(dateKey: String): String {
+        val cal = java.util.Calendar.getInstance().apply {
+            time = Formatter.parseDate("${dateKey}T00:00:00")
+            add(java.util.Calendar.DAY_OF_MONTH, 1)
+        }
+        return java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
     }
 
     private fun loadMovement() {
@@ -159,6 +247,7 @@ class AktivitasDetailStok : AktivitasDasar() {
                         ).format(waktuMutasi.toDate())
 
                         val title = when {
+                            jenisMutasi.contains("ADJUSTMENT_KADALUARSA") -> "Adjustment Kadaluarsa"
                             jenisMutasi.contains("PRODUKSI_DASAR_MASUK") -> "Produksi Dasar"
                             jenisMutasi.contains("KONVERSI_MASUK") -> "Produk Olahan Masuk"
                             jenisMutasi.contains("KONVERSI_KELUAR") -> "Produk Olahan Keluar"
@@ -169,6 +258,7 @@ class AktivitasDetailStok : AktivitasDasar() {
                         }
 
                         val tone = when {
+                            jenisMutasi.contains("ADJUSTMENT_KADALUARSA") -> WarnaBaris.ORANGE
                             qtyMasuk > 0L && qtyKeluar <= 0L -> WarnaBaris.GREEN
                             qtyKeluar > 0L && qtyMasuk <= 0L -> WarnaBaris.RED
                             jenisMutasi.contains("ADJUSTMENT") -> WarnaBaris.BLUE
@@ -176,20 +266,17 @@ class AktivitasDetailStok : AktivitasDasar() {
                         }
 
                         val amountText = when {
-                            qtyMasuk > 0L -> "+$qtyMasuk ${productUnit.ifBlank { "pcs" }}"
-                            qtyKeluar > 0L -> "-$qtyKeluar ${productUnit.ifBlank { "pcs" }}"
+                            qtyMasuk > 0L -> "+${Formatter.ribuan(qtyMasuk)} ${productUnit.ifBlank { "pcs" }}"
+                            qtyKeluar > 0L -> "-${Formatter.ribuan(qtyKeluar)} ${productUnit.ifBlank { "pcs" }}"
                             else -> "0 ${productUnit.ifBlank { "pcs" }}"
                         }
 
                         val subtitle = buildString {
-                            append(
-                                if (catatan.isNotBlank()) catatan
-                                else sumberMutasi.ifBlank { "Perubahan stok" }
-                            )
+                            append(if (catatan.isNotBlank()) catatan else sumberMutasi.ifBlank { "Perubahan stok" })
                             append(" • stok ")
-                            append(stokSebelum)
+                            append(Formatter.ribuan(stokSebelum))
                             append(" → ")
-                            append(stokSesudah)
+                            append(Formatter.ribuan(stokSesudah))
                         }
 
                         ItemBaris(

@@ -32,7 +32,14 @@ data class Produk(
     var showInCashier: Boolean,
     var photoTone: String,
     var channels: MutableList<HargaKanal>,
-    var deleted: Boolean = false
+    var deleted: Boolean = false,
+    var shelfLifeDays: Int = 2,
+    var producedToday: Boolean = false,
+    var safeStock: Int = stock,
+    var nearExpiredStock: Int = 0,
+    var expiredStock: Int = 0,
+    var nearestExpiryDate: String = "",
+    var stockBatchStatus: String = "Stok Sisa"
 )
 
 data class ParameterProduksi(

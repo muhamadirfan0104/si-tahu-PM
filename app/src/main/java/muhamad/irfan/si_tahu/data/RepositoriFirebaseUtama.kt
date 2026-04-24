@@ -1,15 +1,18 @@
 package muhamad.irfan.si_tahu.data
 
 import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Transaction
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.tasks.await
 import muhamad.irfan.si_tahu.util.Formatter
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
@@ -119,6 +122,26 @@ object RepositoriFirebaseUtama {
         val namaPembuat: String
     )
 
+
+    private data class RingkasanBatchStok(
+        val safeStock: Long,
+        val nearExpiredStock: Long,
+        val expiredStock: Long,
+        val producedToday: Boolean,
+        val nearestExpiryDate: String,
+        val statusLabel: String
+    )
+
+    private data class AlokasiBatch(
+        val ref: DocumentReference,
+        val idBatch: String,
+        val qtyDiambil: Long,
+        val qtySebelum: Long,
+        val qtySesudah: Long,
+        val tanggalProduksi: String,
+        val tanggalKadaluarsa: String
+    )
+
     private fun nowTimestamp(): Timestamp = Timestamp.now()
 
     private fun parseTimestamp(dateTime: String): Timestamp {
@@ -135,15 +158,195 @@ object RepositoriFirebaseUtama {
 
     private fun dayKeyFromString(dateTime: String): String = Formatter.toDateOnly(dateTime)
 
+
+    private fun tanggalKeySaatIni(): String = Formatter.currentDateOnly()
+
+    private fun tambahHariKey(dateKey: String, days: Int): String {
+        val cal = Calendar.getInstance().apply {
+            time = Formatter.parseDate("${dateKey}T00:00:00")
+            add(Calendar.DAY_OF_MONTH, days.coerceAtLeast(1))
+        }
+        return formatTanggal.format(cal.time)
+    }
+
+    private fun besokKey(): String = tambahHariKey(tanggalKeySaatIni(), 1)
+
+    private fun statusBatchKadaluarsa(expiryKey: String): String {
+        val today = tanggalKeySaatIni()
+        val tomorrow = besokKey()
+        return when {
+            expiryKey.isBlank() -> "AMAN"
+            expiryKey < today -> "KADALUARSA"
+            expiryKey <= tomorrow -> "HAMPIR_KADALUARSA"
+            else -> "AMAN"
+        }
+    }
+
+    private fun tanggalKadaluarsaTimestamp(expiryKey: String): Timestamp {
+        return Timestamp(Formatter.parseDate("${expiryKey}T23:59:59"))
+    }
+
+    private suspend fun ringkasanBatchStok(productId: String, stokProduk: Long): RingkasanBatchStok {
+        val snapshot = firestore.collection("BatchStok")
+            .whereEqualTo("idProduk", productId)
+            .get()
+            .await()
+
+        val docs = snapshot.documents.filter { (it.getLong("qtySisa") ?: 0L) > 0L }
+        if (docs.isEmpty()) {
+            return if (stokProduk > 0L) {
+                RingkasanBatchStok(
+                    safeStock = stokProduk,
+                    nearExpiredStock = 0L,
+                    expiredStock = 0L,
+                    producedToday = false,
+                    nearestExpiryDate = "",
+                    statusLabel = "Stok Lama"
+                )
+            } else {
+                RingkasanBatchStok(0L, 0L, 0L, false, "", "Habis")
+            }
+        }
+
+        val today = tanggalKeySaatIni()
+        var safe = 0L
+        var near = 0L
+        var expired = 0L
+        var producedToday = false
+        var nearest = ""
+
+        val totalBatchQty = docs.sumOf { it.getLong("qtySisa") ?: 0L }
+        val legacyQty = (stokProduk - totalBatchQty).coerceAtLeast(0L)
+        if (legacyQty > 0L) safe += legacyQty
+
+        docs.forEach { doc ->
+            val qty = doc.getLong("qtySisa") ?: 0L
+            val prodKey = doc.getString("kunciTanggalProduksi").orEmpty()
+                .ifBlank { dayKeyFromTimestamp(doc.getTimestamp("tanggalProduksi")) }
+            val expiryKey = doc.getString("kunciTanggalKadaluarsa").orEmpty()
+                .ifBlank { dayKeyFromTimestamp(doc.getTimestamp("tanggalKadaluarsa")) }
+
+            if (prodKey == today) producedToday = true
+
+            when (statusBatchKadaluarsa(expiryKey)) {
+                "KADALUARSA" -> expired += qty
+                "HAMPIR_KADALUARSA" -> {
+                    near += qty
+                    if (nearest.isBlank() || expiryKey < nearest) nearest = expiryKey
+                }
+                else -> {
+                    safe += qty
+                    if (nearest.isBlank() || expiryKey < nearest) nearest = expiryKey
+                }
+            }
+        }
+
+        val status = when {
+            safe + near <= 0L && expired > 0L -> "Kadaluarsa"
+            near > 0L -> "Hampir Kadaluarsa"
+            producedToday -> "Produksi Hari Ini"
+            safe > 0L -> "Stok Sisa"
+            else -> "Habis"
+        }
+
+        return RingkasanBatchStok(safe, near, expired, producedToday, nearest, status)
+    }
+
+    private suspend fun muatBatchStokFefoRefs(productIds: Collection<String>): Map<String, List<DocumentReference>> {
+        return productIds.distinct().associateWith { productId ->
+            firestore.collection("BatchStok")
+                .whereEqualTo("idProduk", productId)
+                .get()
+                .await()
+                .documents
+                .filter { doc ->
+                    val qtySisa = doc.getLong("qtySisa") ?: 0L
+                    val expiryKey = doc.getString("kunciTanggalKadaluarsa").orEmpty()
+                        .ifBlank { dayKeyFromTimestamp(doc.getTimestamp("tanggalKadaluarsa")) }
+                    qtySisa > 0L && statusBatchKadaluarsa(expiryKey) != "KADALUARSA"
+                }
+                .sortedWith(
+                    compareBy<DocumentSnapshot> {
+                        it.getString("kunciTanggalKadaluarsa").orEmpty()
+                            .ifBlank { dayKeyFromTimestamp(it.getTimestamp("tanggalKadaluarsa")) }
+                    }.thenBy {
+                        it.getString("kunciTanggalProduksi").orEmpty()
+                            .ifBlank { dayKeyFromTimestamp(it.getTimestamp("tanggalProduksi")) }
+                    }
+                )
+                .map { it.reference }
+        }
+    }
+
+    private fun siapkanAlokasiBatchFefo(
+        trx: Transaction,
+        productId: String,
+        productName: String,
+        qtyDiminta: Long,
+        batchRefsByProduct: Map<String, List<DocumentReference>>
+    ): List<AlokasiBatch> {
+        val refs = batchRefsByProduct[productId].orEmpty()
+        if (refs.isEmpty()) return emptyList()
+
+        var sisaDiminta = qtyDiminta
+        val alokasi = mutableListOf<AlokasiBatch>()
+
+        refs.forEach { ref ->
+            if (sisaDiminta <= 0L) return@forEach
+            val snap = trx.get(ref)
+            val qtySisa = snap.getLong("qtySisa") ?: 0L
+            if (qtySisa <= 0L) return@forEach
+
+            val ambil = minOf(qtySisa, sisaDiminta)
+            val prodKey = snap.getString("kunciTanggalProduksi").orEmpty()
+                .ifBlank { dayKeyFromTimestamp(snap.getTimestamp("tanggalProduksi")) }
+            val expiryKey = snap.getString("kunciTanggalKadaluarsa").orEmpty()
+                .ifBlank { dayKeyFromTimestamp(snap.getTimestamp("tanggalKadaluarsa")) }
+
+            alokasi += AlokasiBatch(
+                ref = ref,
+                idBatch = snap.id,
+                qtyDiambil = ambil,
+                qtySebelum = qtySisa,
+                qtySesudah = qtySisa - ambil,
+                tanggalProduksi = prodKey,
+                tanggalKadaluarsa = expiryKey
+            )
+            sisaDiminta -= ambil
+        }
+
+        return alokasi
+    }
+
+    private fun terapkanAlokasiBatchFefo(
+        trx: Transaction,
+        allocations: Collection<AlokasiBatch>,
+        updatedAt: Timestamp
+    ) {
+        allocations.forEach { alokasi ->
+            trx.update(
+                alokasi.ref,
+                mapOf(
+                    "qtySisa" to alokasi.qtySesudah,
+                    "statusBatch" to if (alokasi.qtySesudah <= 0L) "HABIS" else "AKTIF",
+                    "diperbaruiPada" to updatedAt
+                )
+            )
+        }
+    }
+
     private fun newId(prefix: String): String {
         val suffix = UUID.randomUUID().toString().replace("-", "").take(8)
         return "${prefix}_${suffix}"
     }
 
-    private fun statusProduk(produk: Produk): String = when {
-        produk.stock <= 0 -> "Habis"
-        produk.stock <= produk.minStock -> "Menipis"
-        else -> "Aman"
+    private fun statusProduk(produk: Produk): String {
+        val stokLayak = produk.safeStock + produk.nearExpiredStock
+        return when {
+            stokLayak <= 0 -> "Habis"
+            stokLayak <= produk.minStock -> "Menipis"
+            else -> "Aman"
+        }
     }
 
     private fun labelSumberPenjualan(raw: String?): String {
@@ -272,19 +475,28 @@ object RepositoriFirebaseUtama {
 
         snapshot.documents.map { doc ->
             async {
+                val stokSaatIni = doc.getLong("stokSaatIni") ?: 0L
+                val ringkasanBatch = ringkasanBatchStok(doc.id, stokSaatIni)
                 Produk(
                     id = doc.id,
                     code = doc.getString("kodeProduk").orEmpty().ifBlank { doc.id },
                     name = doc.getString("namaProduk").orEmpty(),
                     category = doc.getString("jenisProduk").orEmpty().ifBlank { "DASAR" },
                     unit = doc.getString("satuan").orEmpty().ifBlank { "pcs" },
-                    stock = (doc.getLong("stokSaatIni") ?: 0L).toInt(),
+                    stock = stokSaatIni.toInt(),
                     minStock = (doc.getLong("stokMinimum") ?: 0L).toInt(),
                     active = doc.getBoolean("aktifDijual") ?: true,
                     showInCashier = doc.getBoolean("tampilDiKasir") ?: true,
                     photoTone = "",
                     channels = muatChannelsProduk(doc.reference.path),
-                    deleted = false
+                    deleted = false,
+                    shelfLifeDays = (doc.getLong("masaSimpanHari") ?: 2L).toInt().coerceAtLeast(1),
+                    producedToday = ringkasanBatch.producedToday,
+                    safeStock = ringkasanBatch.safeStock.toInt(),
+                    nearExpiredStock = ringkasanBatch.nearExpiredStock.toInt(),
+                    expiredStock = ringkasanBatch.expiredStock.toInt(),
+                    nearestExpiryDate = ringkasanBatch.nearestExpiryDate,
+                    stockBatchStatus = ringkasanBatch.statusLabel
                 )
             }
         }.awaitAll()
@@ -360,6 +572,7 @@ object RepositoriFirebaseUtama {
         val totalHasil = kotlin.math.round(hasilPerProduksi * batches).toInt()
         val user = cariPengguna(userAuthId)
         val catatanRef = firestore.collection("CatatanProduksi").document(newId("prod"))
+        val batchStokRef = firestore.collection("BatchStok").document(newId("bst"))
         val tanggalProduksi = parseTimestamp(dateTime)
         val kunciTanggal = dayKeyFromString(dateTime)
         val dibuatPada = nowTimestamp()
@@ -377,6 +590,8 @@ object RepositoriFirebaseUtama {
             val namaProduk = produkSnap.getString("namaProduk") ?: "Produk"
             val kodeProduk = produkSnap.getString("kodeProduk") ?: productId
             val satuanHasil = produkSnap.getString("satuan") ?: "pcs"
+            val masaSimpanHari = ((produkSnap.getLong("masaSimpanHari") ?: 2L).toInt()).coerceAtLeast(1)
+            val kunciKadaluarsa = tambahHariKey(kunciTanggal, masaSimpanHari)
             val stokSaatIni = produkSnap.getLong("stokSaatIni") ?: 0L
             val stokSesudah = stokSaatIni + totalHasil.toLong()
 
@@ -407,6 +622,28 @@ object RepositoriFirebaseUtama {
                     "dibuatOlehId" to (user?.idDokumen ?: userAuthId),
                     "dibuatOlehNama" to (user?.nama ?: "Pengguna"),
                     "dibuatPada" to dibuatPada
+                )
+            )
+
+            trx.set(
+                batchStokRef,
+                mapOf(
+                    "idProduk" to productId,
+                    "kodeProduk" to kodeProduk,
+                    "namaProduk" to namaProduk,
+                    "jenisProduk" to jenisProduk,
+                    "satuan" to satuanHasil,
+                    "tanggalProduksi" to tanggalProduksi,
+                    "kunciTanggalProduksi" to kunciTanggal,
+                    "tanggalKadaluarsa" to tanggalKadaluarsaTimestamp(kunciKadaluarsa),
+                    "kunciTanggalKadaluarsa" to kunciKadaluarsa,
+                    "masaSimpanHari" to masaSimpanHari,
+                    "qtyAwal" to totalHasil.toLong(),
+                    "qtySisa" to totalHasil.toLong(),
+                    "sumberProduksiId" to catatanRef.id,
+                    "statusBatch" to "AKTIF",
+                    "dibuatPada" to dibuatPada,
+                    "diperbaruiPada" to dibuatPada
                 )
             )
 
@@ -453,9 +690,11 @@ object RepositoriFirebaseUtama {
         val toRef = produkRef(toProductId)
         val user = cariPengguna(userAuthId)
         val catatanRef = firestore.collection("CatatanProduksi").document(newId("prod"))
+        val batchStokRef = firestore.collection("BatchStok").document(newId("bst"))
         val tanggalProduksi = parseTimestamp(dateTime)
         val kunciTanggal = dayKeyFromString(dateTime)
         val dibuatPada = nowTimestamp()
+        val batchRefsByProduct = muatBatchStokFefoRefs(listOf(fromProductId))
         var riwayatDrafts: List<DraftRiwayatStok> = emptyList()
 
         firestore.runTransaction { trx ->
@@ -472,6 +711,7 @@ object RepositoriFirebaseUtama {
 
             val stokAsal = fromSnap.getLong("stokSaatIni") ?: 0L
             check(stokAsal >= inputQty) { "Stok bahan tidak mencukupi" }
+            val alokasiBahan = siapkanAlokasiBatchFefo(trx, fromProductId, fromSnap.getString("namaProduk") ?: "Bahan", inputQty.toLong(), batchRefsByProduct)
             val stokAsalSesudah = stokAsal - inputQty.toLong()
             val stokHasil = toSnap.getLong("stokSaatIni") ?: 0L
             val stokHasilSesudah = stokHasil + outputQty.toLong()
@@ -482,9 +722,12 @@ object RepositoriFirebaseUtama {
             val toNama = toSnap.getString("namaProduk") ?: "Hasil"
             val toKode = toSnap.getString("kodeProduk") ?: toProductId
             val toSatuan = toSnap.getString("satuan") ?: "pcs"
+            val masaSimpanHari = ((toSnap.getLong("masaSimpanHari") ?: 2L).toInt()).coerceAtLeast(1)
+            val kunciKadaluarsa = tambahHariKey(kunciTanggal, masaSimpanHari)
 
             trx.update(fromRef, mapOf("stokSaatIni" to stokAsalSesudah, "diperbaruiPada" to dibuatPada))
             trx.update(toRef, mapOf("stokSaatIni" to stokHasilSesudah, "diperbaruiPada" to dibuatPada))
+            terapkanAlokasiBatchFefo(trx, alokasiBahan, dibuatPada)
             trx.set(
                 catatanRef,
                 mapOf(
@@ -504,6 +747,28 @@ object RepositoriFirebaseUtama {
                     "dibuatOlehId" to (user?.idDokumen ?: userAuthId),
                     "dibuatOlehNama" to (user?.nama ?: "Pengguna"),
                     "dibuatPada" to dibuatPada
+                )
+            )
+
+            trx.set(
+                batchStokRef,
+                mapOf(
+                    "idProduk" to toProductId,
+                    "kodeProduk" to toKode,
+                    "namaProduk" to toNama,
+                    "jenisProduk" to "OLAHAN",
+                    "satuan" to toSatuan,
+                    "tanggalProduksi" to tanggalProduksi,
+                    "kunciTanggalProduksi" to kunciTanggal,
+                    "tanggalKadaluarsa" to tanggalKadaluarsaTimestamp(kunciKadaluarsa),
+                    "kunciTanggalKadaluarsa" to kunciKadaluarsa,
+                    "masaSimpanHari" to masaSimpanHari,
+                    "qtyAwal" to outputQty.toLong(),
+                    "qtySisa" to outputQty.toLong(),
+                    "sumberProduksiId" to catatanRef.id,
+                    "statusBatch" to "AKTIF",
+                    "dibuatPada" to dibuatPada,
+                    "diperbaruiPada" to dibuatPada
                 )
             )
 
@@ -620,7 +885,7 @@ object RepositoriFirebaseUtama {
                     badge = "Produksi Dasar",
                     title = namaHasil,
                     subtitle = "${Formatter.readableDateTime(tanggalIso)} • ${formatBatch(jumlahBatch)} Masak",
-                    amount = "+$jumlahHasil $satuan",
+                    amount = "+${Formatter.ribuan(jumlahHasil.toLong())} $satuan",
                     tanggalIso = tanggalIso
                 )
             }
@@ -645,9 +910,9 @@ object RepositoriFirebaseUtama {
         Tanggal Produksi: ${Formatter.readableDateTime(tanggalProduksi)}
         Waktu Input: ${Formatter.readableDateTime(tanggalInput)}
         Produk Asal: ${doc.getString("namaProdukAsal").orEmpty().ifBlank { "-" }}
-        Jumlah Bahan: ${doc.getLong("jumlahBahan") ?: 0} ${doc.getString("satuanBahan").orEmpty().ifBlank { "pcs" }}
+        Jumlah Bahan: ${Formatter.ribuan(doc.getLong("jumlahBahan") ?: 0L)} ${doc.getString("satuanBahan").orEmpty().ifBlank { "pcs" }}
         Produk Hasil: ${doc.getString("namaProdukHasil").orEmpty().ifBlank { "-" }}
-        Jumlah Hasil: ${doc.getLong("jumlahHasil") ?: 0} ${doc.getString("satuanHasil").orEmpty().ifBlank { "pcs" }}
+        Jumlah Hasil: ${Formatter.ribuan(doc.getLong("jumlahHasil") ?: 0L)} ${doc.getString("satuanHasil").orEmpty().ifBlank { "pcs" }}
         Catatan: $catatan
         Diinput Oleh: $namaInput
         ID Input: $idInput
@@ -660,7 +925,7 @@ object RepositoriFirebaseUtama {
         Waktu Input: ${Formatter.readableDateTime(tanggalInput)}
         Produk Hasil: ${doc.getString("namaProdukHasil").orEmpty().ifBlank { "-" }}
         Masak: ${formatBatch(doc.numberAsDouble("jumlahBahan"))}
-        Hasil Produksi: ${doc.getLong("jumlahHasil") ?: 0} ${doc.getString("satuanHasil").orEmpty().ifBlank { "pcs" }}
+        Hasil Produksi: ${Formatter.ribuan(doc.getLong("jumlahHasil") ?: 0L)} ${doc.getString("satuanHasil").orEmpty().ifBlank { "pcs" }}
         Parameter: ${doc.getString("idParameterProduksi").orEmpty().ifBlank { "Default" }}
         Catatan: $catatan
         Diinput Oleh: $namaInput
@@ -787,10 +1052,255 @@ object RepositoriFirebaseUtama {
             Tanggal: ${Formatter.readableDateTime(tanggal)}
             Produk: ${doc.getString("namaProduk").orEmpty()}
             Jenis: ${doc.getString("jenisPenyesuaian").orEmpty()}
-            Jumlah: ${doc.getLong("jumlah") ?: 0}
+            Jumlah: ${Formatter.ribuan(doc.getLong("jumlah") ?: 0L)}
             Alasan: ${doc.getString("alasanPenyesuaian").orEmpty().ifBlank { "-" }}
             Catatan: ${doc.getString("catatan").orEmpty().ifBlank { "-" }}
             Dibuat Oleh: ${doc.getString("namaPembuat").orEmpty().ifBlank { "-" }}
+        """.trimIndent()
+    }
+
+
+    suspend fun muatTotalStokKadaluarsa(productId: String): Long {
+        val today = tanggalKeySaatIni()
+        return firestore.collection("BatchStok")
+            .whereEqualTo("idProduk", productId)
+            .get()
+            .await()
+            .documents
+            .filter { doc ->
+                val qty = doc.getLong("qtySisa") ?: 0L
+                val expiryKey = doc.getString("kunciTanggalKadaluarsa").orEmpty()
+                    .ifBlank { dayKeyFromTimestamp(doc.getTimestamp("tanggalKadaluarsa")) }
+                qty > 0L && expiryKey.isNotBlank() && expiryKey < today
+            }
+            .sumOf { it.getLong("qtySisa") ?: 0L }
+    }
+
+    suspend fun simpanAdjustmentKadaluarsa(
+        dateOnly: String,
+        productId: String,
+        qty: Int,
+        note: String,
+        userAuthId: String
+    ): String {
+        require(qty > 0) { "Jumlah stok kadaluarsa harus lebih dari 0" }
+
+        val today = tanggalKeySaatIni()
+        val ref = firestore.collection("PenyesuaianStok").document(newId("adj"))
+        val produkRef = produkRef(productId)
+        val user = cariPengguna(userAuthId)
+        val dibuatPada = nowTimestamp()
+        val kunciTanggal = dateOnly.ifBlank { Formatter.currentDateOnly() }
+        val tanggalPenyesuaian = Timestamp(Formatter.parseDate("${kunciTanggal}T00:00:00"))
+
+        val expiredBatchRefs = firestore.collection("BatchStok")
+            .whereEqualTo("idProduk", productId)
+            .get()
+            .await()
+            .documents
+            .filter { doc ->
+                val qtySisa = doc.getLong("qtySisa") ?: 0L
+                val expiryKey = doc.getString("kunciTanggalKadaluarsa").orEmpty()
+                    .ifBlank { dayKeyFromTimestamp(doc.getTimestamp("tanggalKadaluarsa")) }
+                qtySisa > 0L && expiryKey.isNotBlank() && expiryKey < today
+            }
+            .sortedWith(
+                compareBy<DocumentSnapshot> {
+                    it.getString("kunciTanggalKadaluarsa").orEmpty()
+                        .ifBlank { dayKeyFromTimestamp(it.getTimestamp("tanggalKadaluarsa")) }
+                }.thenBy {
+                    it.getString("kunciTanggalProduksi").orEmpty()
+                        .ifBlank { dayKeyFromTimestamp(it.getTimestamp("tanggalProduksi")) }
+                }
+            )
+            .map { it.reference }
+
+        check(expiredBatchRefs.isNotEmpty()) { "Tidak ada stok kadaluarsa untuk produk ini" }
+
+        var riwayatDrafts: List<DraftRiwayatStok> = emptyList()
+        var detailBatchTerbuang: List<Map<String, Any>> = emptyList()
+
+        firestore.runTransaction { trx ->
+            val produkSnap = trx.get(produkRef)
+            check(produkSnap.exists()) { "Produk tidak ditemukan" }
+
+            val batchSnaps = expiredBatchRefs.map { trx.get(it) }
+            var sisaBuang = qty.toLong()
+            val alokasi = mutableListOf<AlokasiBatch>()
+
+            batchSnaps.forEach { snap ->
+                if (sisaBuang <= 0L) return@forEach
+                val qtySisa = snap.getLong("qtySisa") ?: 0L
+                if (qtySisa <= 0L) return@forEach
+                val expiryKey = snap.getString("kunciTanggalKadaluarsa").orEmpty()
+                    .ifBlank { dayKeyFromTimestamp(snap.getTimestamp("tanggalKadaluarsa")) }
+                if (expiryKey >= today) return@forEach
+                val ambil = minOf(qtySisa, sisaBuang)
+                val prodKey = snap.getString("kunciTanggalProduksi").orEmpty()
+                    .ifBlank { dayKeyFromTimestamp(snap.getTimestamp("tanggalProduksi")) }
+                alokasi += AlokasiBatch(
+                    ref = snap.reference,
+                    idBatch = snap.id,
+                    qtyDiambil = ambil,
+                    qtySebelum = qtySisa,
+                    qtySesudah = qtySisa - ambil,
+                    tanggalProduksi = prodKey,
+                    tanggalKadaluarsa = expiryKey
+                )
+                sisaBuang -= ambil
+            }
+
+            check(sisaBuang <= 0L) { "Jumlah melebihi stok kadaluarsa yang tersedia" }
+
+            val stok = produkSnap.getLong("stokSaatIni") ?: 0L
+            val nextStok = stok - qty.toLong()
+            check(nextStok >= 0L) { "Stok produk tidak cukup" }
+
+            val kodeProduk = produkSnap.getString("kodeProduk") ?: productId
+            val namaProduk = produkSnap.getString("namaProduk") ?: "Produk"
+
+            alokasi.forEach { a ->
+                trx.update(
+                    a.ref,
+                    mapOf(
+                        "qtySisa" to a.qtySesudah,
+                        "statusBatch" to if (a.qtySesudah <= 0L) "DIBUANG" else "KADALUARSA",
+                        "ditindakPada" to dibuatPada,
+                        "diperbaruiPada" to dibuatPada
+                    )
+                )
+            }
+
+            detailBatchTerbuang = alokasi.map {
+                mapOf(
+                    "idBatch" to it.idBatch,
+                    "qtyDibuang" to it.qtyDiambil,
+                    "tanggalProduksi" to it.tanggalProduksi,
+                    "tanggalKadaluarsa" to it.tanggalKadaluarsa
+                )
+            }
+
+            trx.update(produkRef, mapOf("stokSaatIni" to nextStok, "diperbaruiPada" to dibuatPada))
+            trx.set(
+                ref,
+                mapOf(
+                    "tanggalPenyesuaian" to tanggalPenyesuaian,
+                    "kunciTanggal" to kunciTanggal,
+                    "idProduk" to productId,
+                    "kodeProduk" to kodeProduk,
+                    "namaProduk" to namaProduk,
+                    "jenisPenyesuaian" to "KADALUARSA",
+                    "jumlah" to qty,
+                    "alasanPenyesuaian" to note.ifBlank { "Buang stok kadaluarsa" },
+                    "catatan" to note.ifBlank { "Buang stok kadaluarsa" },
+                    "batchKadaluarsaDetail" to detailBatchTerbuang,
+                    "idPembuat" to (user?.idDokumen ?: userAuthId),
+                    "namaPembuat" to (user?.nama ?: "Pengguna"),
+                    "dibuatPada" to dibuatPada
+                )
+            )
+
+            riwayatDrafts = listOf(
+                DraftRiwayatStok(
+                    tanggalMutasi = tanggalPenyesuaian,
+                    kunciTanggal = kunciTanggal,
+                    idProduk = productId,
+                    kodeProduk = kodeProduk,
+                    namaProduk = namaProduk,
+                    jenisMutasi = "ADJUSTMENT_KADALUARSA",
+                    sumberMutasi = "PenyesuaianStok",
+                    referensiId = ref.id,
+                    qtyMasuk = 0L,
+                    qtyKeluar = qty.toLong(),
+                    stokSebelum = stok,
+                    stokSesudah = nextStok,
+                    catatan = note.ifBlank { "Buang stok kadaluarsa" },
+                    idPembuat = user?.idDokumen ?: userAuthId,
+                    namaPembuat = user?.nama ?: "Pengguna"
+                )
+            )
+        }.await()
+
+        catatRiwayatStok(riwayatDrafts)
+        return ref.id
+    }
+
+
+    suspend fun buildStockMutationDetailText(id: String): String {
+        val doc = firestore.collection("RiwayatStok").document(id).get().await()
+        if (!doc.exists()) return "Detail mutasi stok tidak ditemukan"
+
+        val referensiId = doc.getString("referensiId").orEmpty()
+        val sumberMutasi = doc.getString("sumberMutasi").orEmpty()
+        val jenisMutasi = doc.getString("jenisMutasi").orEmpty()
+
+        if (referensiId.isNotBlank()) {
+            return when {
+                sumberMutasi.equals("CatatanProduksi", ignoreCase = true) ||
+                        jenisMutasi.contains("PRODUKSI", ignoreCase = true) ||
+                        jenisMutasi.contains("KONVERSI", ignoreCase = true) -> {
+                    buildProductionDetailText(referensiId)
+                }
+
+                sumberMutasi.equals("Penjualan", ignoreCase = true) ||
+                        jenisMutasi.contains("PENJUALAN", ignoreCase = true) -> {
+                    buildReceiptText(referensiId)
+                }
+
+                sumberMutasi.equals("PenyesuaianStok", ignoreCase = true) ||
+                        jenisMutasi.contains("ADJUSTMENT", ignoreCase = true) -> {
+                    buildAdjustmentDetailText(referensiId)
+                }
+
+                else -> {
+                    // fallback ke detail mutasi generik
+                    buildStockMutationFallbackDetail(doc)
+                }
+            }
+        }
+
+        return buildStockMutationFallbackDetail(doc)
+    }
+
+    private fun buildStockMutationFallbackDetail(doc: DocumentSnapshot): String {
+        val tanggal = isoFromTimestamp(doc.getTimestamp("tanggalMutasi") ?: doc.getTimestamp("dibuatPada"))
+        val namaProduk = doc.getString("namaProduk").orEmpty().ifBlank { "-" }
+        val kodeProduk = doc.getString("kodeProduk").orEmpty().ifBlank { "-" }
+        val jenisMutasi = doc.getString("jenisMutasi").orEmpty().ifBlank { "-" }
+        val sumberMutasi = doc.getString("sumberMutasi").orEmpty().ifBlank { "-" }
+        val referensiId = doc.getString("referensiId").orEmpty().ifBlank { "-" }
+        val qtyMasuk = doc.getLong("qtyMasuk") ?: 0L
+        val qtyKeluar = doc.getLong("qtyKeluar") ?: 0L
+        val stokSebelum = doc.getLong("stokSebelum") ?: 0L
+        val stokSesudah = doc.getLong("stokSesudah") ?: 0L
+        val catatan = doc.getString("catatan").orEmpty().ifBlank { "-" }
+        val pembuat = doc.getString("namaPembuat").orEmpty()
+            .ifBlank { doc.getString("dibuatOlehNama").orEmpty().ifBlank { "-" } }
+
+        val jenisLabel = when {
+            jenisMutasi.contains("PRODUKSI_DASAR", ignoreCase = true) -> "Produksi Dasar"
+            jenisMutasi.contains("KONVERSI_MASUK", ignoreCase = true) -> "Produk Olahan Masuk"
+            jenisMutasi.contains("KONVERSI_KELUAR", ignoreCase = true) -> "Produk Olahan Keluar"
+            jenisMutasi.contains("ADJUSTMENT_TAMBAH", ignoreCase = true) -> "Adjustment Tambah"
+            jenisMutasi.contains("ADJUSTMENT_KURANG", ignoreCase = true) -> "Adjustment Kurang"
+            jenisMutasi.contains("PENJUALAN", ignoreCase = true) -> "Penjualan"
+            else -> jenisMutasi
+        }
+
+        return """
+            ID Mutasi: ${doc.id}
+            Tanggal: ${Formatter.readableDateTime(tanggal)}
+            Produk: $namaProduk
+            Kode Produk: $kodeProduk
+            Jenis Mutasi: $jenisLabel
+            Sumber: $sumberMutasi
+            Referensi ID: $referensiId
+            Qty Masuk: ${Formatter.ribuan(qtyMasuk)}
+            Qty Keluar: ${Formatter.ribuan(qtyKeluar)}
+            Stok Sebelum: ${Formatter.ribuan(stokSebelum)}
+            Stok Sesudah: ${Formatter.ribuan(stokSesudah)}
+            Catatan: $catatan
+            Dibuat Oleh: $pembuat
         """.trimIndent()
     }
 
@@ -828,9 +1338,9 @@ object RepositoriFirebaseUtama {
                 id = doc.id,
                 title = title,
                 subtitle = doc.getString("catatan").orEmpty().ifBlank {
-                    "$sumberMutasi • stok $stokSebelum → $stokSesudah"
+                    "$sumberMutasi • stok ${Formatter.ribuan(stokSebelum)} → ${Formatter.ribuan(stokSesudah)}"
                 },
-                qtyText = if (qtyMasuk > 0L) "+$qtyMasuk" else "-$qtyKeluar",
+                qtyText = if (qtyMasuk > 0L) "+${Formatter.ribuan(qtyMasuk)}" else "-${Formatter.ribuan(qtyKeluar)}",
                 tone = tone,
                 tanggalIso = tanggal
             )
@@ -864,10 +1374,12 @@ object RepositoriFirebaseUtama {
         val kunciTanggal = Formatter.currentDateOnly()
         val tanggalPenjualan = dibuatPada
         val nomorPenjualan = "PJL-${kunciTanggal.replace("-", "")}-${saleRef.id.takeLast(4).uppercase()}"
+        val batchRefsByProduct = muatBatchStokFefoRefs(cartItems.map { it.productId })
         var riwayatDrafts: List<DraftRiwayatStok> = emptyList()
 
         firestore.runTransaction { trx ->
             val localRiwayat = mutableListOf<DraftRiwayatStok>()
+            val localAlokasiBatch = mutableMapOf<String, List<AlokasiBatch>>()
 
             // 1. Semua READ dulu
             val produkSnapshots = cartItems.associate { item ->
@@ -885,6 +1397,18 @@ object RepositoriFirebaseUtama {
 
                 val stok = snap.getLong("stokSaatIni") ?: 0L
                 check(stok >= item.qty) { "Stok ${produk.name} tidak mencukupi" }
+                val stokLayakJual = produk.safeStock + produk.nearExpiredStock
+                check(stokLayakJual >= item.qty) {
+                    "Stok layak jual ${produk.name} tidak mencukupi. Stok kadaluarsa tidak bisa dijual."
+                }
+                val alokasiBatch = siapkanAlokasiBatchFefo(
+                    trx = trx,
+                    productId = produk.id,
+                    productName = produk.name,
+                    qtyDiminta = item.qty.toLong(),
+                    batchRefsByProduct = batchRefsByProduct
+                )
+                localAlokasiBatch[produk.id] = alokasiBatch
 
                 val stokSesudah = stok - item.qty.toLong()
 
@@ -908,6 +1432,8 @@ object RepositoriFirebaseUtama {
             }
 
             // 3. Semua WRITE setelah semua read selesai
+            terapkanAlokasiBatchFefo(trx, localAlokasiBatch.values.flatten(), dibuatPada)
+
             cartItems.forEach { item ->
                 val snap = produkSnapshots[item.productId]
                     ?: throw IllegalStateException("Snapshot produk tidak ditemukan")
@@ -964,6 +1490,18 @@ object RepositoriFirebaseUtama {
                         "subtotal" to item.qty.toLong() * item.price
                     )
                 )
+
+                localAlokasiBatch[produk.id].orEmpty().forEachIndexed { batchIndex, alokasi ->
+                    trx.set(
+                        rincianRef.collection("batch").document("btch_${batchIndex + 1}"),
+                        mapOf(
+                            "idBatch" to alokasi.idBatch,
+                            "qtyDiambil" to alokasi.qtyDiambil,
+                            "tanggalProduksi" to alokasi.tanggalProduksi,
+                            "tanggalKadaluarsa" to alokasi.tanggalKadaluarsa
+                        )
+                    )
+                }
             }
 
             riwayatDrafts = localRiwayat
@@ -993,10 +1531,12 @@ object RepositoriFirebaseUtama {
         val tanggalPenjualan = Timestamp(Formatter.parseDate("${kunciTanggal}T${jamPenjualan}:00"))
         val total = draftItems.sumOf { it.qty.toLong() * it.price }
         val nomorPenjualan = "PJL-${kunciTanggal.replace("-", "")}-${saleRef.id.takeLast(4).uppercase()}"
+        val batchRefsByProduct = muatBatchStokFefoRefs(draftItems.map { it.productId })
         var riwayatDrafts: List<DraftRiwayatStok> = emptyList()
 
         firestore.runTransaction { trx ->
             val localRiwayat = mutableListOf<DraftRiwayatStok>()
+            val localAlokasiBatch = mutableMapOf<String, List<AlokasiBatch>>()
 
             // 1. Semua READ dulu
             val produkSnapshots = draftItems.associate { item ->
@@ -1014,6 +1554,18 @@ object RepositoriFirebaseUtama {
 
                 val stok = snap.getLong("stokSaatIni") ?: 0L
                 check(stok >= item.qty) { "Stok ${produk.name} tidak mencukupi" }
+                val stokLayakJual = produk.safeStock + produk.nearExpiredStock
+                check(stokLayakJual >= item.qty) {
+                    "Stok layak jual ${produk.name} tidak mencukupi. Stok kadaluarsa tidak bisa dijual."
+                }
+                val alokasiBatch = siapkanAlokasiBatchFefo(
+                    trx = trx,
+                    productId = produk.id,
+                    productName = produk.name,
+                    qtyDiminta = item.qty.toLong(),
+                    batchRefsByProduct = batchRefsByProduct
+                )
+                localAlokasiBatch[produk.id] = alokasiBatch
 
                 val stokSesudah = stok - item.qty.toLong()
 
@@ -1037,6 +1589,8 @@ object RepositoriFirebaseUtama {
             }
 
             // 3. Semua WRITE
+            terapkanAlokasiBatchFefo(trx, localAlokasiBatch.values.flatten(), dibuatPada)
+
             draftItems.forEach { item ->
                 val snap = produkSnapshots[item.productId]
                     ?: throw IllegalStateException("Snapshot produk tidak ditemukan")
@@ -1093,6 +1647,18 @@ object RepositoriFirebaseUtama {
                         "subtotal" to item.qty.toLong() * item.price
                     )
                 )
+
+                localAlokasiBatch[produk.id].orEmpty().forEachIndexed { batchIndex, alokasi ->
+                    trx.set(
+                        rincianRef.collection("batch").document("btch_${batchIndex + 1}"),
+                        mapOf(
+                            "idBatch" to alokasi.idBatch,
+                            "qtyDiambil" to alokasi.qtyDiambil,
+                            "tanggalProduksi" to alokasi.tanggalProduksi,
+                            "tanggalKadaluarsa" to alokasi.tanggalKadaluarsa
+                        )
+                    )
+                }
             }
 
             riwayatDrafts = localRiwayat
@@ -1193,7 +1759,7 @@ object RepositoriFirebaseUtama {
             ItemBarisPenjualan(
                 id = saleDoc.id,
                 title = saleDoc.getString("nomorPenjualan").orEmpty().ifBlank { saleDoc.id },
-                subtitle = "${Formatter.readableDateTime(tanggalIso)} • $qtyTotal pcs • Rumahan",
+                subtitle = "${Formatter.readableDateTime(tanggalIso)} • ${Formatter.ribuan(qtyTotal.toLong())} pcs • Rumahan",
                 badge = "Rumahan",
                 amount = Formatter.currency(saleDoc.getLong("totalBelanja") ?: 0L),
                 tanggalIso = tanggalIso,
@@ -1211,7 +1777,7 @@ object RepositoriFirebaseUtama {
                 ItemDashboard(
                     id = it.id,
                     title = it.nama,
-                    subtitle = "${it.qty} pcs terjual hari ini",
+                    subtitle = "${Formatter.ribuan(it.qty.toLong())} pcs terjual hari ini",
                     amount = Formatter.currency(it.nominal),
                     badge = "Top",
                     tanggalIso = todayKey
@@ -1243,7 +1809,7 @@ object RepositoriFirebaseUtama {
                 ItemBarisPenjualan(
                     id = doc.id,
                     title = doc.getString("nomorPenjualan").orEmpty().ifBlank { doc.id },
-                    subtitle = "${Formatter.readableDateTime(tanggalIso)} • ${detailSnapshot.documents.sumOf { (it.getLong("jumlah") ?: 0L).toInt() }} pcs",
+                    subtitle = "${Formatter.readableDateTime(tanggalIso)} • ${Formatter.ribuan(detailSnapshot.documents.sumOf { (it.getLong("jumlah") ?: 0L).toInt() }.toLong())} pcs",
                     badge = labelSumberPenjualan(doc.getString("sumberTransaksi")),
                     amount = Formatter.currency(doc.getLong("totalBelanja") ?: 0L),
                     tanggalIso = tanggalIso,

@@ -14,6 +14,8 @@ import muhamad.irfan.si_tahu.ui.parameter.AktivitasDaftarParameter
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.utilitas.PembantuFilterRiwayat
+import muhamad.irfan.si_tahu.util.Formatter
 
 class AktivitasDaftarProduk : AktivitasDaftarDasar() {
 
@@ -27,21 +29,21 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
 
     private var currentPage = 1
     private var totalPages = 1
+    private var kategoriAktif = categories.first()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         configureScreen("Daftar Produk", "Kelola produk dasar dan olahan")
-        setPrimaryFilter(categories) {
-            currentPage = 1
-            refresh()
-        }
+        hidePrimaryFilter()
         hideSecondaryFilter()
         hideButtons()
+        showFilterButton(View.OnClickListener { bukaFilter() })
 
         setFabAdd {
             startActivity(Intent(this, AktivitasFormProduk::class.java))
         }
+        updateFilterUi()
     }
 
     override fun onResume() {
@@ -165,7 +167,7 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
 
     private fun refresh() {
         val query = searchText()
-        val category = primarySelection()
+        val category = kategoriAktif
 
         val filteredProducts = products.filter { item ->
             !item.dihapus &&
@@ -221,7 +223,7 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
                 title = item.namaProduk,
                 subtitle = "${item.kodeProduk} • ${item.jenisProduk} • ${item.satuan}",
                 badge = if (item.aktifDijual) "Aktif" else "Nonaktif",
-                amount = "Stok ${item.stokSaatIni}",
+                amount = "Stok ${Formatter.ribuan(item.stokSaatIni)}",
                 priceStatus = hargaLabel,
                 parameterStatus = parameterLabel,
                 actionLabel = "⋮",
@@ -256,6 +258,40 @@ class AktivitasDaftarProduk : AktivitasDaftarDasar() {
         } else {
             hidePagination()
         }
+    }
+
+
+    private fun bukaFilter() {
+        PembantuFilterRiwayat.show(
+            activity = this,
+            kategori = categories,
+            kategoriTerpilih = kategoriAktif,
+            tanggalLabel = null,
+            jumlahFilterAktif = jumlahFilterAktif(),
+            onKategoriDipilih = { pilihan ->
+                kategoriAktif = pilihan
+                currentPage = 1
+                refresh()
+            },
+            onPilihTanggal = {},
+            onHapusTanggal = {},
+            onReset = {
+                kategoriAktif = categories.first()
+                currentPage = 1
+                refresh()
+                showMessage("Filter produk direset")
+            },
+            kategoriLabel = "Jenis Produk",
+            tampilkanTanggal = false
+        )
+    }
+
+    private fun jumlahFilterAktif(): Int {
+        return if (kategoriAktif != categories.first()) 1 else 0
+    }
+
+    private fun updateFilterUi() {
+        setFilterBadge(jumlahFilterAktif())
     }
 
     override fun onRowClick(item: ItemBaris) {

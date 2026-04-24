@@ -6,17 +6,18 @@ import android.os.Bundle
 import android.view.View
 import android.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.datepicker.MaterialDatePicker
 import kotlinx.coroutines.launch
-import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
-import muhamad.irfan.si_tahu.ui.utama.AktivitasUtamaKasir
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
-import muhamad.irfan.si_tahu.util.PembantuPilihTanggalWaktu
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.utilitas.PembantuFilterRiwayat
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 
 class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
 
@@ -34,6 +35,7 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
     private var tampilkanTombolRekapPasar = true
     private var izinkanHapus = true
 
+    private var kategoriAktif = UI_FILTER_SEMUA
     private var tanggalTunggal: String? = null
     private var rentangMulai: String? = null
     private var rentangSelesai: String? = null
@@ -42,50 +44,18 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         super.onCreate(savedInstanceState)
 
         bacaIntent()
-        configureScreen(judulLayar, subjudulLayar)
+        configureScreen(
+            title = "",
+            subtitle = null,
+            searchHint = "Cari transaksi..."
+        )
 
         hidePrimaryFilter()
         hideSecondaryFilter()
-
-        setPrimaryButton("Pilih Tanggal") {
-            bukaPilihTanggal()
-        }
-
-        setSecondaryButton("Pilih Rentang") {
-            bukaPilihRentang()
-        }
-
-        binding.btnPrimary.setOnLongClickListener {
-            resetFilterTanggal()
-            true
-        }
-
-        binding.btnSecondary.setOnLongClickListener {
-            resetFilterTanggal()
-            true
-        }
-
-        if (tampilkanTombolTransaksiBaru || tampilkanTombolRekapPasar) {
-            // tombol filter tanggal tetap tampil
-        }
-
-        updateFilterTanggalUi()
-
-        if (tampilkanTombolTransaksiBaru) {
-            binding.btnPrimary.text = labelTombolTanggal()
-            binding.btnPrimary.setOnClickListener { bukaPilihTanggal() }
-
-            binding.btnSecondary.text = labelTombolRentang()
-            binding.btnSecondary.setOnClickListener { bukaPilihRentang() }
-        }
-
-        if (tampilkanTombolTransaksiBaru && tampilkanTombolRekapPasar) {
-            // riwayat kasir lama punya dua tombol aksi, sekarang kita prioritaskan filter tanggal
-        }
-
-        if (!tampilkanTombolTransaksiBaru && !tampilkanTombolRekapPasar) {
-            // admin tetap pakai tombol filter tanggal
-        }
+        hideButtons()
+        binding.cardDateFilter.visibility = View.GONE
+        showFilterButton(View.OnClickListener { bukaBottomSheetFilter() })
+        updateFilterUi()
     }
 
     override fun onResume() {
@@ -117,6 +87,12 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         tampilkanTombolRekapPasar =
             intent.getBooleanExtra(EXTRA_SHOW_RECAP_BUTTON, true)
         izinkanHapus = intent.getBooleanExtra(EXTRA_ALLOW_DELETE, true)
+
+        kategoriAktif = when (defaultFilter) {
+            FILTER_RUMAHAN -> UI_FILTER_KASIR
+            FILTER_PASAR -> UI_FILTER_REKAP
+            else -> UI_FILTER_SEMUA
+        }
     }
 
     private fun buildRows() {
@@ -125,13 +101,6 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                 .onSuccess { sales ->
                     semuaRows = sales
                         .sortedByDescending { it.tanggalIso }
-                        .filter { sale ->
-                            when (defaultFilter) {
-                                FILTER_RUMAHAN -> sale.badge.equals(FILTER_RUMAHAN, true)
-                                FILTER_PASAR -> sale.badge.equals(FILTER_PASAR, true)
-                                else -> true
-                            }
-                        }
                         .map {
                             val statusLabel = if (it.statusPenjualan.equals("BATAL", true)) {
                                 "Batal"
@@ -147,9 +116,9 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                                     subtitle = it.subtitle,
                                     amount = it.amount,
                                     badge = it.badge,
-                                    tone = when (it.badge) {
-                                        FILTER_RUMAHAN -> WarnaBaris.GREEN
-                                        FILTER_PASAR -> WarnaBaris.BLUE
+                                    tone = when {
+                                        it.badge.equals(FILTER_RUMAHAN, true) -> WarnaBaris.GREEN
+                                        it.badge.equals(FILTER_PASAR, true) -> WarnaBaris.BLUE
                                         else -> WarnaBaris.GOLD
                                     },
                                     parameterStatus = statusLabel,
@@ -190,8 +159,13 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                         item.subtitle.lowercase().contains(keyword) ||
                         item.badge.lowercase().contains(keyword) ||
                         item.parameterStatus.lowercase().contains(keyword)
+            val cocokKategori = when (kategoriAktif) {
+                UI_FILTER_KASIR -> item.badge.equals(FILTER_RUMAHAN, true)
+                UI_FILTER_REKAP -> item.badge.equals(FILTER_PASAR, true)
+                else -> true
+            }
 
-            cocokTanggal && cocokKeyword
+            cocokTanggal && cocokKeyword && cocokKategori
         }
 
         val totalPages =
@@ -238,49 +212,96 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                 }
             )
         }
+
+        updateFilterUi()
     }
 
-    private fun bukaPilihTanggal() {
-        PembantuPilihTanggalWaktu.showDatePicker(this, tanggalTunggal) { hasil ->
-            tanggalTunggal = hasil
-            rentangMulai = null
-            rentangSelesai = null
+    private fun bukaBottomSheetFilter() {
+        PembantuFilterRiwayat.show(
+            activity = this,
+            kategori = kategoriOpsi(),
+            kategoriTerpilih = kategoriAktif,
+            tanggalLabel = labelDateRangeUntukField(),
+            jumlahFilterAktif = jumlahFilterAktif(),
+            onKategoriDipilih = {
+                kategoriAktif = it
+                halamanSaatIni = 1
+                refresh()
+            },
+            onPilihTanggal = { bukaDateRangePicker() },
+            onHapusTanggal = {
+                clearDateFilter(showToast = true)
+            },
+            onReset = {
+                resetSemuaFilter()
+            }
+        )
+    }
+
+    private fun kategoriOpsi(): List<String> {
+        return if (lockFilter) {
+            listOf(kategoriAktif)
+        } else {
+            listOf(UI_FILTER_SEMUA, UI_FILTER_KASIR, UI_FILTER_REKAP)
+        }
+    }
+
+    private fun bukaDateRangePicker() {
+        val picker = MaterialDatePicker.Builder.dateRangePicker()
+            .setTitleText("Pilih rentang")
+            .build()
+
+        picker.addOnPositiveButtonClickListener { selection ->
+            val start = selection.first ?: return@addOnPositiveButtonClickListener
+            val end = selection.second ?: start
+            val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val mulai = formatter.format(Date(start))
+            val selesai = formatter.format(Date(end))
+
+            if (isSameDay(Formatter.parseDate(mulai), Formatter.parseDate(selesai))) {
+                tanggalTunggal = mulai
+                rentangMulai = null
+                rentangSelesai = null
+            } else if (Formatter.parseDate(mulai).after(Formatter.parseDate(selesai))) {
+                tanggalTunggal = null
+                rentangMulai = selesai
+                rentangSelesai = mulai
+            } else {
+                tanggalTunggal = null
+                rentangMulai = mulai
+                rentangSelesai = selesai
+            }
+
             halamanSaatIni = 1
-            updateFilterTanggalUi()
             refresh()
         }
+
+        picker.show(supportFragmentManager, "filter_range_penjualan")
     }
 
-    private fun bukaPilihRentang() {
-        PembantuPilihTanggalWaktu.showDatePicker(this, rentangMulai) { mulai ->
-            PembantuPilihTanggalWaktu.showDatePicker(this, rentangSelesai ?: mulai) { selesai ->
-                val tanggalMulai = Formatter.parseDate(mulai)
-                val tanggalSelesai = Formatter.parseDate(selesai)
-
-                if (tanggalMulai.after(tanggalSelesai)) {
-                    rentangMulai = selesai
-                    rentangSelesai = mulai
-                } else {
-                    rentangMulai = mulai
-                    rentangSelesai = selesai
-                }
-
-                tanggalTunggal = null
-                halamanSaatIni = 1
-                updateFilterTanggalUi()
-                refresh()
+    private fun resetSemuaFilter() {
+        if (!lockFilter) {
+            kategoriAktif = when (defaultFilter) {
+                FILTER_RUMAHAN -> UI_FILTER_KASIR
+                FILTER_PASAR -> UI_FILTER_REKAP
+                else -> UI_FILTER_SEMUA
             }
         }
+        clearDateFilter(showToast = false)
+        halamanSaatIni = 1
+        refresh()
+        showMessage("Semua filter direset")
     }
 
-    private fun resetFilterTanggal() {
+    private fun clearDateFilter(showToast: Boolean) {
         tanggalTunggal = null
         rentangMulai = null
         rentangSelesai = null
         halamanSaatIni = 1
-        updateFilterTanggalUi()
         refresh()
-        showMessage("Filter tanggal direset")
+        if (showToast) {
+            showMessage("Filter tanggal dihapus")
+        }
     }
 
     private fun cocokFilterTanggal(tanggalData: Date): Boolean {
@@ -298,34 +319,33 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         return true
     }
 
-    private fun updateFilterTanggalUi() {
-        binding.buttonRow.visibility = View.VISIBLE
-        binding.btnPrimary.text = labelTombolTanggal()
-        binding.btnSecondary.text = labelTombolRentang()
-        binding.toolbar.subtitle = subtitleAktif()
+    private fun updateFilterUi() {
+        setFilterBadge(jumlahFilterAktif())
+        binding.btnResetFilter.visibility = View.GONE
+        binding.toolbar.subtitle = null
     }
 
-    private fun labelTombolTanggal(): String {
-        return tanggalTunggal?.let { Formatter.readableShortDate(it) } ?: "Pilih Tanggal"
-    }
-
-    private fun labelTombolRentang(): String {
-        return if (!rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank()) {
-            "${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
-        } else {
-            "Pilih Rentang"
-        }
-    }
-
-    private fun subtitleAktif(): String {
+    private fun labelDateRangeUntukField(): String? {
         return when {
             !tanggalTunggal.isNullOrBlank() ->
-                "$subjudulLayar • ${Formatter.readableDate(tanggalTunggal)}"
+                Formatter.readableDate(tanggalTunggal)
             !rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank() ->
-                "$subjudulLayar • ${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
+                "${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
             else ->
-                "$subjudulLayar • semua tanggal"
+                null
         }
+    }
+
+    private fun jumlahFilterAktif(): Int {
+        var total = 0
+        if (kategoriAktif != UI_FILTER_SEMUA && !(lockFilter && kategoriOpsi().size == 1)) total++
+        if (punyaFilterTanggal()) total++
+        return total
+    }
+
+    private fun punyaFilterTanggal(): Boolean {
+        return !tanggalTunggal.isNullOrBlank() ||
+                (!rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank())
     }
 
     private fun isSameDay(first: Date, second: Date): Boolean {
@@ -455,6 +475,10 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         private const val FILTER_SEMUA = "Semua"
         private const val FILTER_RUMAHAN = "Rumahan"
         private const val FILTER_PASAR = "Pasar"
+
+        private const val UI_FILTER_SEMUA = "Semua"
+        private const val UI_FILTER_KASIR = "Kasir"
+        private const val UI_FILTER_REKAP = "Rekap"
 
         fun intentRiwayatRumahanAdmin(context: Context): Intent {
             return Intent(context, AktivitasRiwayatPenjualan::class.java)

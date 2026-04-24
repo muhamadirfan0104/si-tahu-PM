@@ -111,7 +111,7 @@ class FragmenDasborAdmin : FragmenDasar(R.layout.fragment_admin_dashboard) {
                             title = product.name,
                             subtitle = "${product.code} • ${product.category}",
                             badge = status,
-                            amount = "Stok ${product.stock} • Min ${product.minStock}",
+                            amount = "Stok ${Formatter.ribuan(product.stock.toLong())} • Min ${Formatter.ribuan(product.minStock.toLong())}",
                             tone = when (status) {
                                 "Aman" -> WarnaBaris.GREEN
                                 "Menipis" -> WarnaBaris.GOLD

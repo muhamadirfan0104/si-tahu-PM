@@ -11,6 +11,8 @@ import muhamad.irfan.si_tahu.util.EkstraAplikasi
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.utilitas.PembantuPilihProduk
+import muhamad.irfan.si_tahu.utilitas.ProdukPilihanUi
 
 class AktivitasDaftarHarga : AktivitasDaftarDasar() {
 
@@ -18,7 +20,7 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
 
     private var products: List<OpsiProdukHarga> = emptyList()
     private var channels: List<DataBarisHarga> = emptyList()
-    private var initialSelectionIndex: Int = 0
+    private var selectedProductIdAktif: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,24 +53,29 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
                     .map { doc ->
                     OpsiProdukHarga(
                         id = doc.id,
-                        name = doc.getString("namaProduk").orEmpty()
+                        name = doc.getString("namaProduk").orEmpty(),
+                        jenisProduk = doc.getString("jenisProduk").orEmpty(),
+                        stokSaatIni = doc.getLong("stokSaatIni") ?: 0L,
+                        satuan = doc.getString("satuan").orEmpty(),
+                        aktifDijual = doc.getBoolean("aktifDijual") ?: true
                     )
-                }.sortedBy { it.name }
+                }.sortedBy { it.name.lowercase() }
 
                 if (products.isEmpty()) {
                     hideFabAdd()
                     hidePrimaryFilter()
+                    hideProductSelector()
                     submitRows(listOf(infoBelumAdaProduk()))
                     return@addOnSuccessListener
                 }
 
                 val initialProductId = intent.getStringExtra(EkstraAplikasi.EXTRA_PRODUCT_ID)
-                initialSelectionIndex =
-                    products.indexOfFirst { it.id == initialProductId }.takeIf { it >= 0 } ?: 0
+                selectedProductIdAktif = products.firstOrNull { it.id == selectedProductIdAktif }?.id
+                    ?: products.firstOrNull { it.id == initialProductId }?.id
+                    ?: products.firstOrNull()?.id
 
-                setPrimaryFilter(products.map { it.name }, initialSelectionIndex) {
-                    loadChannels()
-                }
+                hidePrimaryFilter()
+                updateProductSelector()
                 setFabAdd {
                     selectedProductId()?.let { productId ->
                         startActivity(
@@ -83,13 +90,40 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
             .addOnFailureListener { e ->
                 showMessage("Gagal memuat produk: ${e.message}")
                 hideFabAdd()
+                hideProductSelector()
                 submitRows(listOf(infoBelumAdaProduk()))
             }
     }
 
     private fun selectedProductId(): String? {
-        val selectedName = primarySelection()
-        return products.firstOrNull { it.name == selectedName }?.id ?: products.firstOrNull()?.id
+        return selectedProductIdAktif ?: products.firstOrNull()?.id
+    }
+
+    private fun selectedProduct(): OpsiProdukHarga? {
+        return products.firstOrNull { it.id == selectedProductId() }
+    }
+
+    private fun updateProductSelector() {
+        val product = selectedProduct()
+        setProductSelector(
+            label = "Produk harga kanal",
+            productName = product?.name.orEmpty().ifBlank { "Pilih produk" },
+            productInfo = product?.ringkasanUntukSelector().orEmpty().ifBlank { "Pilih produk yang ingin diatur harga kanalnya" },
+            listener = View.OnClickListener { showProductPicker() }
+        )
+    }
+
+    private fun showProductPicker() {
+        PembantuPilihProduk.show(
+            activity = this,
+            title = "Pilih Produk Harga Kanal",
+            produk = products.map { it.toProdukPilihanUi() },
+            selectedId = selectedProductId()
+        ) { selected ->
+            selectedProductIdAktif = selected.id
+            updateProductSelector()
+            loadChannels()
+        }
     }
 
     private fun loadChannels() {
@@ -127,7 +161,8 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
     }
 
     private fun refresh() {
-        val product = products.firstOrNull { it.id == selectedProductId() }
+        val product = selectedProduct()
+        updateProductSelector()
 
         if (products.isEmpty()) {
             submitRows(listOf(infoBelumAdaProduk()))
@@ -539,8 +574,31 @@ class AktivitasDaftarHarga : AktivitasDaftarDasar() {
 
 private data class OpsiProdukHarga(
     val id: String,
-    val name: String
-)
+    val name: String,
+    val jenisProduk: String,
+    val stokSaatIni: Long,
+    val satuan: String,
+    val aktifDijual: Boolean
+) {
+    fun ringkasanUntukSelector(): String {
+        val jenis = jenisProduk.ifBlank { "Produk" }
+        val status = if (aktifDijual) "Aktif" else "Nonaktif"
+        val stok = "${Formatter.ribuan(stokSaatIni)} ${satuan.ifBlank { "pcs" }}"
+        return "$jenis • $status • Stok $stok"
+    }
+
+    fun toProdukPilihanUi(): ProdukPilihanUi {
+        return ProdukPilihanUi(
+            id = id,
+            namaProduk = name,
+            jenisProduk = jenisProduk,
+            stokSaatIni = stokSaatIni,
+            satuan = satuan,
+            aktifDijual = aktifDijual,
+            infoTambahan = "Harga kanal"
+        )
+    }
+}
 
 private data class DataBarisHarga(
     val id: String,

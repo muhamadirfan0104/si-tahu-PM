@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F7F4ED">
+    android:background="@color/screen_bg">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -13,16 +13,19 @@
         <com.google.android.material.appbar.AppBarLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#FCFBF7"
+            android:background="@color/screen_bg_light"
             app:elevation="0dp">
 
             <com.google.android.material.appbar.MaterialToolbar
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:background="@color/screen_bg_light"
                 android:minHeight="?attr/actionBarSize"
-                android:paddingHorizontal="8dp"
-                app:titleTextColor="#293226" />
+                android:paddingHorizontal="4dp"
+                app:navigationIconTint="@color/text_primary"
+                app:subtitleTextColor="@color/muted"
+                app:titleTextColor="@color/text_primary" />
 
             <View
                 android:layout_width="match_parent"
@@ -35,42 +38,91 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:paddingStart="16dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="12dp">
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/searchContainer"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:boxBackgroundColor="@android:color/white"
-                app:boxCornerRadiusBottomEnd="22dp"
-                app:boxCornerRadiusBottomStart="22dp"
-                app:boxCornerRadiusTopEnd="22dp"
-                app:boxCornerRadiusTopStart="22dp"
-                app:boxStrokeColor="#B8B1A5"
-                app:boxStrokeWidth="1.5dp"
-                app:hintTextColor="#8A8577"
-                app:startIconDrawable="@android:drawable/ic_menu_search"
-                app:startIconTint="#A79F93">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etSearch"
-                    android:layout_width="match_parent"
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/searchContainer"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:hint="Cari data..."
-                    android:textColor="#293226"
-                    android:textColorHint="#8A8577" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:layout_weight="1"
+                    app:boxBackgroundColor="@color/card_surface"
+                    app:boxCornerRadiusBottomEnd="18dp"
+                    app:boxCornerRadiusBottomStart="18dp"
+                    app:boxCornerRadiusTopEnd="18dp"
+                    app:boxCornerRadiusTopStart="18dp"
+                    app:boxStrokeColor="@color/line_color"
+                    app:boxStrokeWidth="1dp"
+                    app:boxStrokeWidthFocused="1dp"
+                    app:hintEnabled="false"
+                    app:startIconDrawable="@android:drawable/ic_menu_search"
+                    app:startIconTint="@color/muted">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etSearch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@android:color/transparent"
+                        android:fontFamily="sans-serif"
+                        android:hint="Cari data..."
+                        android:imeOptions="actionSearch"
+                        android:maxLines="1"
+                        android:paddingVertical="12dp"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/muted"
+                        android:textCursorDrawable="@null" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <FrameLayout
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="12dp">
+
+                    <ImageButton
+                        android:id="@+id/btnOpenFilters"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:contentDescription="Filter"
+                        android:padding="10dp"
+                        android:src="@drawable/ic_filter_tune"
+                        android:tint="@color/green_primary"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tvFilterBadge"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_gravity="top|end"
+                        android:background="@drawable/bg_filter_badge"
+                        android:gravity="center"
+                        android:text="1"
+                        android:textColor="@android:color/white"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+                </FrameLayout>
+            </LinearLayout>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardPrimaryFilter"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="22dp"
+                android:layout_marginTop="12dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/card_surface"
+                app:cardCornerRadius="18dp"
                 app:cardElevation="0dp"
-                app:strokeColor="#EAE5D9"
+                app:strokeColor="@color/line_color"
                 app:strokeWidth="1dp">
 
                 <Spinner
@@ -81,15 +133,98 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardProductSelector"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/card_surface"
+                app:cardCornerRadius="22dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/line_color"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="14dp">
+
+                    <TextView
+                        android:id="@+id/tvProductSelectorLeading"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:background="@drawable/bg_tone_green"
+                        android:gravity="center"
+                        android:text="P"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tvProductSelectorLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Produk dipilih"
+                            android:textColor="@color/muted"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/tvSelectedProductName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="Pilih produk"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSelectedProductInfo"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="Cari dan pilih produk yang ingin diatur"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:text="›"
+                        android:textColor="@color/green_primary"
+                        android:textSize="30sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardSecondaryFilter"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:visibility="gone"
-                app:cardBackgroundColor="@android:color/white"
-                app:cardCornerRadius="22dp"
+                app:cardBackgroundColor="@color/card_surface"
+                app:cardCornerRadius="18dp"
                 app:cardElevation="0dp"
-                app:strokeColor="#EAE5D9"
+                app:strokeColor="@color/line_color"
                 app:strokeWidth="1dp">
 
                 <Spinner
@@ -99,11 +234,70 @@
                     android:paddingHorizontal="16dp" />
             </com.google.android.material.card.MaterialCardView>
 
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardDateFilter"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/card_surface"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/line_color"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="12dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/tvDateFilterTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Filter periode"
+                            android:textColor="@color/text_primary"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnResetFilter"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="Reset"
+                            android:textAllCaps="false"
+                            android:textColor="@color/orange_primary"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvDateFilterSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Semua tanggal"
+                        android:textColor="@color/muted"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <LinearLayout
                 android:id="@+id/buttonRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="10dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:visibility="gone">
@@ -111,11 +305,12 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnPrimary"
                     android:layout_width="0dp"
-                    android:layout_height="54dp"
+                    android:layout_height="52dp"
                     android:layout_weight="1"
                     android:text="Aksi 1"
-                    android:textColor="@android:color/white"
-                    app:backgroundTint="#5F7D49"
+                    android:textAllCaps="false"
+                    android:textColor="@color/text_primary"
+                    app:backgroundTint="@color/green_primary"
                     app:cornerRadius="18dp"
                     app:elevation="0dp" />
 
@@ -127,9 +322,13 @@
                     android:id="@+id/btnSecondary"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="0dp"
-                    android:layout_height="54dp"
+                    android:layout_height="52dp"
                     android:layout_weight="1"
-                    android:text="Aksi 2" />
+                    android:text="Aksi 2"
+                    android:textAllCaps="false"
+                    android:textColor="@color/text_primary"
+                    app:cornerRadius="18dp"
+                    app:strokeColor="@color/line_color" />
             </LinearLayout>
 
             <TextView
@@ -139,7 +338,7 @@
                 android:layout_marginTop="40dp"
                 android:gravity="center"
                 android:text="Belum ada data"
-                android:textColor="#8A8577"
+                android:textColor="@color/muted"
                 android:textSize="15sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
@@ -157,7 +356,7 @@
                 android:id="@+id/paginationContainer"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="8dp"
                 android:gravity="center"
                 android:orientation="horizontal"
                 android:visibility="gone">
@@ -170,7 +369,7 @@
                     android:minWidth="0dp"
                     android:text="Sebelumnya"
                     android:textAllCaps="false"
-                    android:textColor="#5F7D49" />
+                    android:textColor="@color/green_primary" />
 
                 <TextView
                     android:id="@+id/tvPageInfo"
@@ -178,7 +377,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginHorizontal="10dp"
                     android:text="Halaman 1 dari 1"
-                    android:textColor="#6F695D"
+                    android:textColor="@color/muted"
                     android:textSize="12sp"
                     android:textStyle="bold" />
 
@@ -190,7 +389,7 @@
                     android:minWidth="0dp"
                     android:text="Berikutnya"
                     android:textAllCaps="false"
-                    android:textColor="#5F7D49" />
+                    android:textColor="@color/green_primary" />
             </LinearLayout>
         </LinearLayout>
 
@@ -198,17 +397,17 @@
             android:id="@+id/bottomDivider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="#EAE5D9"
+            android:background="@color/line_color"
             android:visibility="gone" />
 
         <com.google.android.material.bottomnavigation.BottomNavigationView
             android:id="@+id/bottomNavigation"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@android:color/white"
+            android:background="@color/card_surface"
             android:visibility="gone"
             app:elevation="0dp"
-            app:itemRippleColor="#E7EFDC"
+            app:itemRippleColor="@color/green_soft"
             app:itemIconTint="@color/nav_item_selector"
             app:itemTextColor="@color/nav_item_selector"
             app:labelVisibilityMode="labeled" />
@@ -221,7 +420,7 @@
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="18dp"
         android:layout_marginBottom="22dp"
-        app:backgroundTint="#5F7D49"
+        app:backgroundTint="@color/green_primary"
         app:borderWidth="0dp"
         app:elevation="6dp"
         app:srcCompat="@android:drawable/ic_input_add"

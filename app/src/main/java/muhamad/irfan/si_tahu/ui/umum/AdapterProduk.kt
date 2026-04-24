@@ -44,18 +44,30 @@ class AdapterProduk(
         fun bind(item: Produk) {
             val status = getStatus(item)
             val harga = getHarga(item)
-            val bisaDitambah = item.stock > 0 && harga > 0L
+            val stokLayakJual = item.safeStock + item.nearExpiredStock
+            val bisaDitambah = stokLayakJual > 0 && harga > 0L && status != "Habis" && status != "Kadaluarsa"
 
             binding.tvTitle.text = item.name
-            binding.tvSubtitle.text = "Stok ${item.stock} ${item.unit} • Minimum ${item.minStock}"
+            binding.tvSubtitle.text = buildString {
+                append("Stok layak jual ${Formatter.ribuan(stokLayakJual.toLong())} ${item.unit}")
+                if (item.expiredStock > 0) {
+                    append(" • Kadaluarsa ${Formatter.ribuan(item.expiredStock.toLong())}")
+                }
+                if (item.nearestExpiryDate.isNotBlank()) {
+                    append(" • ED ${Formatter.readableShortDate(item.nearestExpiryDate)}")
+                }
+            }
             binding.tvPrice.text = Formatter.currency(harga)
             binding.tvCategory.text = item.category
             binding.tvStatus.text = status
 
             val tone = when (status) {
-                "Aman" -> R.drawable.bg_tone_green
-                "Menipis" -> R.drawable.bg_tone_gold
-                else -> R.drawable.bg_tone_orange
+                "Produksi Hari Ini" -> R.drawable.bg_tone_green
+                "Stok Sisa" -> R.drawable.bg_tone_gold
+                "Hampir Kadaluarsa" -> R.drawable.bg_tone_orange
+                "Kadaluarsa" -> R.drawable.bg_tone_red
+                "Habis" -> R.drawable.bg_tone_red
+                else -> R.drawable.bg_tone_neutral
             }
 
             binding.tvStatus.setBackgroundResource(tone)

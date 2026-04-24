@@ -4,20 +4,22 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.core.widget.addTextChangedListener
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
+import muhamad.irfan.si_tahu.data.Produk
+import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.databinding.ActivityListScreenBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
-import muhamad.irfan.si_tahu.ui.utama.PendengarPilihItemSederhana
-import muhamad.irfan.si_tahu.util.AdapterSpinner
+import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.utilitas.PembantuFilterRiwayat
 
 class AktivitasMonitoringStok : AktivitasDasar() {
 
     private lateinit var binding: ActivityListScreenBinding
-    private val firestore by lazy { FirebaseFirestore.getInstance() }
 
     private val adapter by lazy {
         AdapterBarisUmum(
@@ -29,12 +31,13 @@ class AktivitasMonitoringStok : AktivitasDasar() {
         )
     }
 
-    private val statusOptions = listOf("Semua Stok", "Aman", "Menipis", "Habis")
+    private val statusOptions = listOf("Semua Stok", "Aman", "Menipis", "Habis", "Perlu Tindakan")
     private val pageSize = 5
 
-    private var semuaProduk: List<ProdukStokItem> = emptyList()
+    private var semuaProduk: List<Produk> = emptyList()
     private var currentPage = 1
     private var totalPages = 1
+    private var statusAktif = statusOptions.first()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,7 +47,7 @@ class AktivitasMonitoringStok : AktivitasDasar() {
         bindToolbar(
             binding.toolbar,
             "Monitoring Stok",
-            "Pantau stok real-time dan status minimum"
+            "Stok jual, stok fisik, dan stok kadaluarsa"
         )
 
         setupView()
@@ -61,12 +64,12 @@ class AktivitasMonitoringStok : AktivitasDasar() {
         rvList.layoutManager = LinearLayoutManager(this@AktivitasMonitoringStok)
         rvList.adapter = adapter
 
-        spPrimaryFilter.adapter = AdapterSpinner.stringAdapter(
-            this@AktivitasMonitoringStok,
-            statusOptions
-        )
-
+        cardPrimaryFilter.visibility = View.GONE
+        spPrimaryFilter.visibility = View.GONE
         cardSecondaryFilter.visibility = View.GONE
+        cardDateFilter.visibility = View.GONE
+        btnOpenFilters.visibility = View.VISIBLE
+        tvFilterBadge.visibility = View.GONE
         buttonRow.visibility = View.VISIBLE
         fabAdd.visibility = View.GONE
         tvEmpty.visibility = View.GONE
@@ -74,6 +77,7 @@ class AktivitasMonitoringStok : AktivitasDasar() {
 
         btnPrimary.text = "Adjustment"
         btnSecondary.text = "Refresh"
+        updateFilterUi()
     }
 
     private fun setupActions() = with(binding) {
@@ -81,19 +85,14 @@ class AktivitasMonitoringStok : AktivitasDasar() {
             startActivity(Intent(this@AktivitasMonitoringStok, AktivitasStockAdjustment::class.java))
         }
 
-        btnSecondary.setOnClickListener {
-            loadProducts()
-        }
+        btnSecondary.setOnClickListener { loadProducts() }
 
         etSearch.addTextChangedListener {
             currentPage = 1
             renderList()
         }
 
-        spPrimaryFilter.onItemSelectedListener = PendengarPilihItemSederhana {
-            currentPage = 1
-            renderList()
-        }
+        btnOpenFilters.setOnClickListener { bukaFilter() }
 
         btnPagePrev.setOnClickListener {
             if (currentPage > 1) {
@@ -112,49 +111,37 @@ class AktivitasMonitoringStok : AktivitasDasar() {
 
     private fun loadProducts() {
         setEmptyStateVisible(false)
-
-        firestore.collection("Produk")
-            .get()
-            .addOnSuccessListener { snapshot ->
-                semuaProduk = snapshot.documents
-                    .filter { it.getBoolean("dihapus") != true }
-                    .map { doc ->
-                        ProdukStokItem(
-                            id = doc.id,
-                            namaProduk = doc.getString("namaProduk").orEmpty(),
-                            jenisProduk = doc.getString("jenisProduk").orEmpty(),
-                            satuan = doc.getString("satuan").orEmpty(),
-                            stokSaatIni = doc.getLong("stokSaatIni") ?: 0L,
-                            stokMinimum = doc.getLong("stokMinimum") ?: 0L,
-                            aktifDijual = doc.getBoolean("aktifDijual") ?: true
-                        )
-                    }
-                    .sortedBy { it.namaProduk.lowercase() }
-
-                currentPage = 1
-                renderList()
-            }
-            .addOnFailureListener { e ->
-                showMessage("Gagal memuat stok: ${e.message}")
-            }
+        lifecycleScope.launch {
+            runCatching { RepositoriFirebaseUtama.muatSemuaProduk() }
+                .onSuccess { result ->
+                    semuaProduk = result
+                        .filter { !it.deleted }
+                        .sortedBy { it.name.lowercase() }
+                    currentPage = 1
+                    renderList()
+                }
+                .onFailure { e ->
+                    showMessage(e.message ?: "Gagal memuat stok")
+                    semuaProduk = emptyList()
+                    renderList()
+                }
+        }
     }
 
     private fun renderList() {
         val keyword = binding.etSearch.text?.toString()?.trim().orEmpty().lowercase()
-        val selectedStatus = statusOptions.getOrNull(binding.spPrimaryFilter.selectedItemPosition)
-            ?: statusOptions.first()
+        val selectedStatus = statusAktif
 
         val filtered = semuaProduk.filter { produk ->
-            val cocokNama = keyword.isBlank() || produk.namaProduk.lowercase().contains(keyword)
-            val status = produk.statusStok()
-
+            val cocokNama = keyword.isBlank() || produk.name.lowercase().contains(keyword)
+            val status = statusStok(produk)
             val cocokStatus = when (selectedStatus) {
                 "Aman" -> status == "Aman"
                 "Menipis" -> status == "Menipis"
                 "Habis" -> status == "Habis"
+                "Perlu Tindakan" -> produk.expiredStock > 0
                 else -> true
             }
-
             cocokNama && cocokStatus
         }
 
@@ -167,35 +154,34 @@ class AktivitasMonitoringStok : AktivitasDasar() {
         val pagedItems = if (filtered.isEmpty()) emptyList() else filtered.subList(fromIndex, toIndex)
 
         val listItems = pagedItems.map { produk ->
+            val layakJual = produk.safeStock + produk.nearExpiredStock
+            val status = statusStok(produk)
+            val subtitle = buildString {
+                append(produk.category)
+                append(" • Layak jual ${Formatter.ribuan(layakJual.toLong())} ${produk.unit}")
+                append(" • Fisik ${Formatter.ribuan(produk.stock.toLong())} ${produk.unit}")
+                if (produk.nearExpiredStock > 0) append(" • Hampir ED ${Formatter.ribuan(produk.nearExpiredStock.toLong())}")
+                if (produk.expiredStock > 0) append(" • Kadaluarsa ${Formatter.ribuan(produk.expiredStock.toLong())}")
+            }
+
             ItemBaris(
                 id = produk.id,
-                title = produk.namaProduk,
-                subtitle = "${produk.jenisProduk} • Minimum ${produk.stokMinimum} ${produk.satuan}",
-                badge = if (produk.aktifDijual) "Aktif" else "Nonaktif",
-                amount = "${produk.stokSaatIni} ${produk.satuan}",
-                priceStatus = produk.statusStok(),
-                parameterStatus = "",
-                tone = when (produk.statusStok()) {
-                    "Aman" -> WarnaBaris.GREEN
-                    "Menipis" -> WarnaBaris.GOLD
-                    else -> WarnaBaris.RED
-                },
-                priceTone = when (produk.statusStok()) {
-                    "Aman" -> WarnaBaris.GREEN
-                    "Menipis" -> WarnaBaris.GOLD
-                    else -> WarnaBaris.RED
-                }
+                title = produk.name,
+                subtitle = subtitle,
+                badge = if (produk.expiredStock > 0) "Perlu Tindakan" else if (produk.active) "Aktif" else "Nonaktif",
+                amount = "${Formatter.ribuan(layakJual.toLong())} ${produk.unit}",
+                priceStatus = status,
+                parameterStatus = if (produk.expiredStock > 0) "Buang stok kadaluarsa" else produk.stockBatchStatus,
+                tone = toneUntukStatus(status, produk.expiredStock),
+                priceTone = toneUntukStatus(status, produk.expiredStock),
+                parameterTone = if (produk.expiredStock > 0) WarnaBaris.ORANGE else WarnaBaris.BLUE
             )
         }
 
         adapter.submitList(listItems)
 
         if (listItems.isEmpty()) {
-            val emptyText = if (semuaProduk.isEmpty()) {
-                "Belum ada data produk"
-            } else {
-                "Tidak ada data yang cocok"
-            }
+            val emptyText = if (semuaProduk.isEmpty()) "Belum ada data produk" else "Tidak ada data yang cocok"
             setEmptyStateVisible(true, emptyText)
         } else {
             setEmptyStateVisible(false)
@@ -207,35 +193,66 @@ class AktivitasMonitoringStok : AktivitasDasar() {
         binding.btnPagePrev.alpha = if (currentPage > 1) 1f else 0.45f
         binding.btnPageNext.isEnabled = currentPage < totalPages
         binding.btnPageNext.alpha = if (currentPage < totalPages) 1f else 0.45f
+        updateFilterUi()
+    }
+
+    private fun statusStok(produk: Produk): String {
+        val layakJual = produk.safeStock + produk.nearExpiredStock
+        return when {
+            layakJual <= 0 -> "Habis"
+            layakJual <= produk.minStock -> "Menipis"
+            else -> "Aman"
+        }
+    }
+
+    private fun toneUntukStatus(status: String, expiredStock: Int): WarnaBaris {
+        return when {
+            expiredStock > 0 -> WarnaBaris.ORANGE
+            status == "Aman" -> WarnaBaris.GREEN
+            status == "Menipis" -> WarnaBaris.GOLD
+            else -> WarnaBaris.RED
+        }
+    }
+
+    private fun bukaFilter() {
+        PembantuFilterRiwayat.show(
+            activity = this,
+            kategori = statusOptions,
+            kategoriTerpilih = statusAktif,
+            tanggalLabel = null,
+            jumlahFilterAktif = jumlahFilterAktif(),
+            onKategoriDipilih = { pilihan ->
+                statusAktif = pilihan
+                currentPage = 1
+                renderList()
+            },
+            onPilihTanggal = {},
+            onHapusTanggal = {},
+            onReset = {
+                statusAktif = statusOptions.first()
+                currentPage = 1
+                renderList()
+                showMessage("Filter stok direset")
+            },
+            kategoriLabel = "Status Stok",
+            tampilkanTanggal = false
+        )
+    }
+
+    private fun jumlahFilterAktif(): Int = if (statusAktif != statusOptions.first()) 1 else 0
+
+    private fun updateFilterUi() {
+        binding.tvFilterBadge.visibility = if (jumlahFilterAktif() > 0) View.VISIBLE else View.GONE
+        binding.tvFilterBadge.text = jumlahFilterAktif().toString()
     }
 
     private fun setEmptyStateVisible(visible: Boolean, text: String = "") {
         binding.tvEmpty.visibility = if (visible) View.VISIBLE else View.GONE
-        if (text.isNotBlank()) {
-            binding.tvEmpty.text = text
-        }
+        if (text.isNotBlank()) binding.tvEmpty.text = text
         binding.rvList.visibility = if (visible) View.GONE else View.VISIBLE
     }
 
     companion object {
         const val EXTRA_PRODUCT_ID = "extra_product_id"
-    }
-}
-
-data class ProdukStokItem(
-    val id: String,
-    val namaProduk: String,
-    val jenisProduk: String,
-    val satuan: String,
-    val stokSaatIni: Long,
-    val stokMinimum: Long,
-    val aktifDijual: Boolean
-) {
-    fun statusStok(): String {
-        return when {
-            stokSaatIni <= 0L -> "Habis"
-            stokSaatIni <= stokMinimum -> "Menipis"
-            else -> "Aman"
-        }
     }
 }

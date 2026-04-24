@@ -6,7 +6,7 @@ import android.content.Context
 import java.util.Calendar
 
 object PembantuPilihTanggalWaktu {
-    fun showDatePicker(context: Context, currentDate: String?, onSelected: (String) -> Unit) {
+    fun showDatePicker(context: Context, currentDate: String?, dialogTitle: String? = null, onSelected: (String) -> Unit) {
         val calendar = Calendar.getInstance().apply {
             try {
                 time = Formatter.parseDate(currentDate)
@@ -21,7 +21,9 @@ object PembantuPilihTanggalWaktu {
             calendar.get(Calendar.YEAR),
             calendar.get(Calendar.MONTH),
             calendar.get(Calendar.DAY_OF_MONTH)
-        ).show()
+        ).apply {
+            if (!dialogTitle.isNullOrBlank()) setTitle(dialogTitle)
+        }.show()
     }
 
     fun showTimePicker(context: Context, currentDateTime: String?, onSelected: (String) -> Unit) {

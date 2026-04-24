@@ -1,0 +1,225 @@
+package muhamad.irfan.si_tahu.ui.penjualan
+
+import android.content.Context
+import android.content.Intent
+import android.os.Bundle
+import android.view.View
+import android.widget.PopupMenu
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import muhamad.irfan.si_tahu.R
+import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
+import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
+import muhamad.irfan.si_tahu.ui.utama.AktivitasUtamaKasir
+import muhamad.irfan.si_tahu.util.Formatter
+import muhamad.irfan.si_tahu.util.ItemBaris
+import muhamad.irfan.si_tahu.util.PembantuPilihTanggalWaktu
+import muhamad.irfan.si_tahu.util.WarnaBaris
+import java.util.Calendar
+import java.util.Date
+
+class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
+
+    private var semuaRows: List<RiwayatPenjualanUiRow> = emptyList()
+    private var filteredRows: List<RiwayatPenjualanUiRow> = emptyList()
+
+    private var halamanSaatIni = 1
+    private val itemPerHalaman = 5
+
+    private var judulLayar = "Riwayat Penjualan"
+    private var subjudulLayar = "Rumahan dan pasar"
+    private var defaultFilter = FILTER_SEMUA
+    private var lockFilter = false
+    private var tampilkanTombolTransaksiBaru = true
+    private var tampilkanTombolRekapPasar = true
+    private var izinkanHapus = true
+
+    private var tanggalTunggal: String? = null
+    private var rentangMulai: String? = null
+    private var rentangSelesai: String? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        bacaIntent()
+        configureScreen(judulLayar, subjudulLayar)
+
+        hidePrimaryFilter()
+        hideSecondaryFilter()
+
+        setPrimaryButton("Tanggal") {
+            bukaPilihTanggal()
+        }
+
+        setSecondaryButton("Rentang") {
+            bukaPilihRentang()
+        }
+
+        binding.btnResetFilter.setOnClickListener {
+            resetFilterTanggal()
+        }
+
+        if (tampilkanTombolTransaksiBaru || tampilkanTombolRekapPasar) {
+            // tombol filter tanggal tetap tampil
+        }
+
+        updateFilterTanggalUi()
+
+        if (tampilkanTombolTransaksiBaru) {
+            binding.btnPrimary.text = labelTombolTanggal()
+            binding.btnPrimary.setOnClickListener { bukaPilihTanggal() }
+
+            binding.btnSecondary.text = labelTombolRentang()
+            binding.btnSecondary.setOnClickListener { bukaPilihRentang() }
+        }
+
+        if (tampilkanTombolTransaksiBaru && tampilkanTombolRekapPasar) {
+            // riwayat kasir lama punya dua tombol aksi, sekarang kita prioritaskan filter tanggal
+        }
+
+        if (!tampilkanTombolTransaksiBaru && !tampilkanTombolRekapPasar) {
+            // admin tetap pakai tombol filter tanggal
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        buildRows()
+    }
+
+    override fun onSearchChanged() {
+        halamanSaatIni = 1
+        refresh()
+    }
+
+    private fun bacaIntent() {
+        judulLayar = intent.getStringExtra(EXTRA_SCREEN_TITLE)
+            .orEmpty()
+            .ifBlank { "Riwayat Penjualan" }
+
+        subjudulLayar = intent.getStringExtra(EXTRA_SCREEN_SUBTITLE)
+            .orEmpty()
+            .ifBlank { "Rumahan dan pasar" }
+
+        defaultFilter = intent.getStringExtra(EXTRA_DEFAULT_FILTER)
+            .orEmpty()
+            .ifBlank { FILTER_SEMUA }
+
+        lockFilter = intent.getBooleanExtra(EXTRA_LOCK_FILTER, false)
+        tampilkanTombolTransaksiBaru =
+            intent.getBooleanExtra(EXTRA_SHOW_NEW_SALE_BUTTON, true)
+        tampilkanTombolRekapPasar =
+            intent.getBooleanExtra(EXTRA_SHOW_RECAP_BUTTON, true)
+        izinkanHapus = intent.getBooleanExtra(EXTRA_ALLOW_DELETE, true)
+    }
+
+    private fun buildRows() {
+        lifecycleScope.launch {
+            runCatching { RepositoriFirebaseUtama.muatRiwayatPenjualan() }
+                .onSuccess { sales ->
+                    semuaRows = sales
+                        .sortedByDescending { it.tanggalIso }
+                        .filter { sale ->
+                            when (defaultFilter) {
+                                FILTER_RUMAHAN -> sale.badge.equals(FILTER_RUMAHAN, true)
+                                FILTER_PASAR -> sale.badge.equals(FILTER_PASAR, true)
+                                else -> true
+                            }
+                        }
+                        .map {
+                            val statusLabel = if (it.statusPenjualan.equals("BATAL", true)) {
+                                "Batal"
+                            } else {
+                                "Selesai"
+                            }
+
+                            RiwayatPenjualanUiRow(
+                                tanggalIso = it.tanggalIso,
+                                item = ItemBaris(
+                                    id = it.id,
+                                    title = it.title,
+                                    subtitle = it.subtitle,
+                                    amount = it.amount,
+                                    badge = it.badge,
+                                    tone = when (it.badge) {
+                                        FILTER_RUMAHAN -> WarnaBaris.GREEN
+                                        FILTER_PASAR -> WarnaBaris.BLUE
+                                        else -> WarnaBaris.GOLD
+                                    },
+                                    parameterStatus = statusLabel,
+                                    parameterTone = if (statusLabel == "Batal") {
+                                        WarnaBaris.RED
+                                    } else {
+                                        WarnaBaris.GREEN
+                                    },
+                                    actionLabel = "⋮"
+                                )
+                            )
+                        }
+
+                    halamanSaatIni = 1
+                    refresh()
+                }
+                .onFailure {
+                    semuaRows = emptyList()
+                    filteredRows = emptyList()
+                    halamanSaatIni = 1
+                    hidePagination()
+                    submitRows(emptyList(), "Riwayat penjualan belum tersedia")
+                    showMessage(it.message ?: "Gagal memuat riwayat penjualan")
+                }
+        }
+    }
+
+    private fun refresh() {
+        val keyword = searchText()
+
+        filteredRows = semuaRows.filter { row ->
+            val item = row.item
+
+            val cocokTanggal = cocokFilterTanggal(Formatter.parseDate(row.tanggalIso))
+            val cocokKeyword =
+                keyword.isBlank() ||
+                        item.title.lowercase().contains(keyword) ||
+                        item.subtitle.lowercase().contains(keyword) ||
+                        item.badge.lowercase().contains(keyword) ||
+                        item.parameterStatus.lowercase().contains(keyword)
+
+            cocokTanggal && cocokKeyword
+        }
+
+        val totalPages =
+            if (filteredRows.isEmpty()) 1 else ((filteredRows.size - 1) / itemPerHalaman) + 1
+
+        if (halamanSaatIni > totalPages) halamanSaatIni = totalPages
+        if (halamanSaatIni < 1) halamanSaatIni = 1
+
+        val fromIndex = (halamanSaatIni - 1) * itemPerHalaman
+        val untilIndex = minOf(fromIndex + itemPerHalaman, filteredRows.size)
+
+        val currentPageRows = if (filteredRows.isEmpty()) {
+            emptyList()
+        } else {
+            filteredRows.subList(fromIndex, untilIndex).map { it.item }
+        }
+
+        submitRows(
+            currentPageRows,
+            if (semuaRows.isEmpty()) "Belum ada riwayat penjualan" else "Tidak ada data yang cocok"
+        )
+
+        if (filteredRows.isEmpty()) {
+            hidePagination()
+        } else {
+            showPagination(
+                currentPage = halamanSaatIni,
+                totalPages = totalPages,
+                onPrev = if (halamanSaatIni > 1) {
+                    {
+                        halamanSaatIni--
+                        refresh()
+                    }
+                } else {
+                    null
+                },
+                onNext = if (halamanSaatIni

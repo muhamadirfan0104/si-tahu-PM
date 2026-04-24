@@ -241,9 +241,9 @@ class FragmenPenjualan : FragmenDasar(R.layout.fragment_sales_menu) {
                     safeBinding.tvRecapTotal.text =
                         "Pasar tercatat: ${Formatter.currency(summary.totalRekapHariIni)}"
                     safeBinding.tvSalesCount.text =
-                        "Transaksi: ${summary.jumlahTransaksiHariIni}"
+                        "Transaksi: ${Formatter.ribuan(summary.jumlahTransaksiHariIni.toLong())}"
                     safeBinding.tvSoldQty.text =
-                        "Item terjual: ${summary.totalItemHariIni}"
+                        "Item terjual: ${Formatter.ribuan(summary.totalItemHariIni.toLong())}"
 
                     val rows = summary.recentRows.map {
                         val statusLabel = if (it.statusPenjualan.equals("BATAL", true)) {

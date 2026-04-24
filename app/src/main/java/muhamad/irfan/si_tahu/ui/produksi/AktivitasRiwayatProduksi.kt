@@ -4,15 +4,18 @@ import android.os.Bundle
 import android.view.View
 import android.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.datepicker.MaterialDatePicker
 import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
-import muhamad.irfan.si_tahu.util.PembantuPilihTanggalWaktu
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.utilitas.PembantuFilterRiwayat
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 
 class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
 
@@ -21,36 +24,25 @@ class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
     private var halamanSaatIni = 1
     private val itemPerHalaman = 5
 
+    private var kategoriAktif = FILTER_SEMUA
     private var tanggalTunggal: String? = null
     private var rentangMulai: String? = null
     private var rentangSelesai: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        configureScreen("Riwayat Produksi", "Dasar dan produk olahan")
+        configureScreen(
+            title = "",
+            subtitle = null,
+            searchHint = "Cari produksi..."
+        )
 
         hidePrimaryFilter()
         hideSecondaryFilter()
-
-        setPrimaryButton("Pilih Tanggal") {
-            bukaPilihTanggal()
-        }
-
-        setSecondaryButton("Pilih Rentang") {
-            bukaPilihRentang()
-        }
-
-        binding.btnPrimary.setOnLongClickListener {
-            resetFilterTanggal()
-            true
-        }
-
-        binding.btnSecondary.setOnLongClickListener {
-            resetFilterTanggal()
-            true
-        }
-
-        updateFilterTanggalUi()
+        hideButtons()
+        binding.cardDateFilter.visibility = View.GONE
+        showFilterButton(View.OnClickListener { bukaBottomSheetFilter() })
+        updateFilterUi()
     }
 
     override fun onResume() {
@@ -77,12 +69,12 @@ class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
                                 badge = it.badge,
                                 amount = it.amount,
                                 actionLabel = "⋮",
-                                tone = if (it.badge == "Produk Olahan") {
+                                tone = if (it.badge.contains("Olahan", true)) {
                                     WarnaBaris.BLUE
                                 } else {
                                     WarnaBaris.GREEN
                                 },
-                                priceTone = if (it.badge == "Produk Olahan") {
+                                priceTone = if (it.badge.contains("Olahan", true)) {
                                     WarnaBaris.BLUE
                                 } else {
                                     WarnaBaris.GREEN
@@ -90,7 +82,6 @@ class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
                             )
                         )
                     }
-                    filteredRows = rows
                     halamanSaatIni = 1
                     refresh()
                 }
@@ -116,8 +107,13 @@ class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
                         item.title.lowercase().contains(keyword) ||
                         item.subtitle.lowercase().contains(keyword) ||
                         item.badge.lowercase().contains(keyword)
+            val cocokKategori = when (kategoriAktif) {
+                FILTER_DASAR -> !item.badge.contains("Olahan", true)
+                FILTER_OLAHAN -> item.badge.contains("Olahan", true)
+                else -> true
+            }
 
-            cocokTanggal && cocokKeyword
+            cocokTanggal && cocokKeyword && cocokKategori
         }
 
         val totalPages = if (filteredRows.isEmpty()) {
@@ -167,49 +163,82 @@ class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
                 }
             )
         }
+
+        updateFilterUi()
     }
 
-    private fun bukaPilihTanggal() {
-        PembantuPilihTanggalWaktu.showDatePicker(this, tanggalTunggal) { hasil ->
-            tanggalTunggal = hasil
-            rentangMulai = null
-            rentangSelesai = null
+    private fun bukaBottomSheetFilter() {
+        PembantuFilterRiwayat.show(
+            activity = this,
+            kategori = listOf(FILTER_SEMUA, FILTER_DASAR, FILTER_OLAHAN),
+            kategoriTerpilih = kategoriAktif,
+            tanggalLabel = labelDateRangeUntukField(),
+            jumlahFilterAktif = jumlahFilterAktif(),
+            onKategoriDipilih = {
+                kategoriAktif = it
+                halamanSaatIni = 1
+                refresh()
+            },
+            onPilihTanggal = { bukaDateRangePicker() },
+            onHapusTanggal = {
+                clearDateFilter(showToast = true)
+            },
+            onReset = {
+                resetSemuaFilter()
+            }
+        )
+    }
+
+    private fun bukaDateRangePicker() {
+        val picker = MaterialDatePicker.Builder.dateRangePicker()
+            .setTitleText("Pilih rentang")
+            .build()
+
+        picker.addOnPositiveButtonClickListener { selection ->
+            val start = selection.first ?: return@addOnPositiveButtonClickListener
+            val end = selection.second ?: start
+            val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val mulai = formatter.format(Date(start))
+            val selesai = formatter.format(Date(end))
+
+            if (isSameDay(Formatter.parseDate(mulai), Formatter.parseDate(selesai))) {
+                tanggalTunggal = mulai
+                rentangMulai = null
+                rentangSelesai = null
+            } else if (Formatter.parseDate(mulai).after(Formatter.parseDate(selesai))) {
+                tanggalTunggal = null
+                rentangMulai = selesai
+                rentangSelesai = mulai
+            } else {
+                tanggalTunggal = null
+                rentangMulai = mulai
+                rentangSelesai = selesai
+            }
+
             halamanSaatIni = 1
-            updateFilterTanggalUi()
             refresh()
         }
+
+        picker.show(supportFragmentManager, "filter_range_produksi")
     }
 
-    private fun bukaPilihRentang() {
-        PembantuPilihTanggalWaktu.showDatePicker(this, rentangMulai) { mulai ->
-            PembantuPilihTanggalWaktu.showDatePicker(this, rentangSelesai ?: mulai) { selesai ->
-                val tanggalMulai = Formatter.parseDate(mulai)
-                val tanggalSelesai = Formatter.parseDate(selesai)
-
-                if (tanggalMulai.after(tanggalSelesai)) {
-                    rentangMulai = selesai
-                    rentangSelesai = mulai
-                } else {
-                    rentangMulai = mulai
-                    rentangSelesai = selesai
-                }
-
-                tanggalTunggal = null
-                halamanSaatIni = 1
-                updateFilterTanggalUi()
-                refresh()
-            }
-        }
+    private fun resetSemuaFilter() {
+        kategoriAktif = FILTER_SEMUA
+        clearDateFilter(showToast = false)
+        halamanSaatIni = 1
+        refresh()
+        showMessage("Semua filter direset")
     }
 
-    private fun resetFilterTanggal() {
+    private fun clearDateFilter(showToast: Boolean) {
         tanggalTunggal = null
         rentangMulai = null
         rentangSelesai = null
         halamanSaatIni = 1
-        updateFilterTanggalUi()
         refresh()
-        showMessage("Filter tanggal direset")
+        if (showToast) {
+            showMessage("Filter tanggal dihapus")
+        }
     }
 
     private fun cocokFilterTanggal(tanggalData: Date): Boolean {
@@ -227,34 +256,33 @@ class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
         return true
     }
 
-    private fun updateFilterTanggalUi() {
-        binding.buttonRow.visibility = View.VISIBLE
-        binding.btnPrimary.text = labelTombolTanggal()
-        binding.btnSecondary.text = labelTombolRentang()
-        binding.toolbar.subtitle = subtitleAktif()
+    private fun updateFilterUi() {
+        setFilterBadge(jumlahFilterAktif())
+        binding.btnResetFilter.visibility = View.GONE
+        binding.toolbar.subtitle = null
     }
 
-    private fun labelTombolTanggal(): String {
-        return tanggalTunggal?.let { Formatter.readableShortDate(it) } ?: "Pilih Tanggal"
+    private fun jumlahFilterAktif(): Int {
+        var total = 0
+        if (kategoriAktif != FILTER_SEMUA) total++
+        if (punyaFilterTanggal()) total++
+        return total
     }
 
-    private fun labelTombolRentang(): String {
-        return if (!rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank()) {
-            "${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
-        } else {
-            "Pilih Rentang"
-        }
-    }
-
-    private fun subtitleAktif(): String {
+    private fun labelDateRangeUntukField(): String? {
         return when {
             !tanggalTunggal.isNullOrBlank() ->
-                "Dasar dan produk olahan • ${Formatter.readableDate(tanggalTunggal)}"
+                "${Formatter.readableDate(tanggalTunggal)}"
             !rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank() ->
-                "Dasar dan produk olahan • ${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
+                "${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
             else ->
-                "Dasar dan produk olahan • semua tanggal"
+                null
         }
+    }
+
+    private fun punyaFilterTanggal(): Boolean {
+        return !tanggalTunggal.isNullOrBlank() ||
+                (!rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank())
     }
 
     private fun isSameDay(first: Date, second: Date): Boolean {
@@ -330,6 +358,12 @@ class AktivitasRiwayatProduksi : AktivitasDaftarDasar() {
                     }
             }
         }
+    }
+
+    companion object {
+        private const val FILTER_SEMUA = "Semua"
+        private const val FILTER_DASAR = "Dasar"
+        private const val FILTER_OLAHAN = "Olahan"
     }
 }
 

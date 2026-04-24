@@ -9,6 +9,7 @@ import muhamad.irfan.si_tahu.databinding.ActivityParameterFormBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.util.AdapterSpinner
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
+import muhamad.irfan.si_tahu.util.InputAngka
 
 class AktivitasFormParameter : AktivitasDasar() {
 
@@ -29,6 +30,7 @@ class AktivitasFormParameter : AktivitasDasar() {
         requestedProductId = intent.getStringExtra(EkstraAplikasi.EXTRA_PRODUCT_ID)
 
         binding.cbActive.isChecked = true
+        InputAngka.pasang(binding.etResultPerBatch)
 
         if (!editingParameterId.isNullOrBlank()) {
             lockProductFieldForEdit()
@@ -170,9 +172,7 @@ class AktivitasFormParameter : AktivitasDasar() {
             .takeIf { it >= 0 } ?: 0
         binding.spProduct.setSelection(productIndex)
 
-        binding.etResultPerBatch.setText(
-            (doc.getLong("hasilPerProduksi") ?: 0L).toString()
-        )
+        InputAngka.setNilai(binding.etResultPerBatch, doc.getLong("hasilPerProduksi") ?: 0L)
         binding.etNote.setText(doc.getString("catatan").orEmpty())
         binding.cbActive.isChecked = doc.getBoolean("aktif") ?: true
     }
@@ -184,10 +184,7 @@ class AktivitasFormParameter : AktivitasDasar() {
             return
         }
 
-        val hasilPerProduksi = binding.etResultPerBatch.text
-            ?.toString()
-            ?.trim()
-            ?.toLongOrNull() ?: 0L
+        val hasilPerProduksi = InputAngka.ambilLong(binding.etResultPerBatch)
         val catatan = binding.etNote.text?.toString()?.trim().orEmpty()
         val aktif = binding.cbActive.isChecked
 

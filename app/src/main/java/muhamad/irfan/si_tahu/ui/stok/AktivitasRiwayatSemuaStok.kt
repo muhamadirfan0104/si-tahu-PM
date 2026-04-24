@@ -1,19 +1,22 @@
 package muhamad.irfan.si_tahu.ui.stok
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.core.widget.addTextChangedListener
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.datepicker.MaterialDatePicker
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
+import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.databinding.ActivityListScreenBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
-import muhamad.irfan.si_tahu.util.PembantuPilihTanggalWaktu
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.utilitas.PembantuFilterRiwayat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -29,6 +32,7 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
     private var currentPage = 1
     private var totalPages = 1
 
+    private var kategoriAktif = FILTER_SEMUA
     private var tanggalTunggal: String? = null
     private var rentangMulai: String? = null
     private var rentangSelesai: String? = null
@@ -37,9 +41,15 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
         AdapterBarisUmum(
             onItemClick = onItemClick@{ item ->
                 if (item.id.isBlank()) return@onItemClick
-                val intent = Intent(this, AktivitasDetailStok::class.java)
-                intent.putExtra(AktivitasMonitoringStok.EXTRA_PRODUCT_ID, item.id)
-                startActivity(intent)
+                lifecycleScope.launch {
+                    runCatching { RepositoriFirebaseUtama.buildStockMutationDetailText(item.id) }
+                        .onSuccess { detail ->
+                            showReceiptModal("Detail Riwayat Stok", detail)
+                        }
+                        .onFailure {
+                            showMessage(it.message ?: "Gagal memuat detail riwayat stok")
+                        }
+                }
             }
         )
     }
@@ -48,16 +58,10 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
         super.onCreate(savedInstanceState)
         binding = ActivityListScreenBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        bindToolbar(
-            binding.toolbar,
-            "Riwayat Semua Stok",
-            "Semua mutasi stok lintas produk • semua tanggal"
-        )
-
+        bindToolbar(binding.toolbar, "", null)
         setupView()
         setupActions()
-        updateFilterTanggalUi()
+        updateFilterUi()
         loadData()
     }
 
@@ -70,41 +74,25 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
         rvList.layoutManager = LinearLayoutManager(this@AktivitasRiwayatSemuaStok)
         rvList.adapter = adapter
 
+        etSearch.hint = "Cari mutasi stok..."
+        cardPrimaryFilter.visibility = View.GONE
         spPrimaryFilter.visibility = View.GONE
         cardSecondaryFilter.visibility = View.GONE
+        cardDateFilter.visibility = View.GONE
         fabAdd.visibility = View.GONE
-
-        buttonRow.visibility = View.VISIBLE
-        btnPrimary.visibility = View.VISIBLE
-        btnSecondary.visibility = View.VISIBLE
-        btnPrimary.text = "Pilih Tanggal"
-        btnSecondary.text = "Pilih Rentang"
+        buttonRow.visibility = View.GONE
+        btnOpenFilters.visibility = View.VISIBLE
+        tvFilterBadge.visibility = View.GONE
     }
 
     private fun setupActions() = with(binding) {
-        etSearch.hint = "Cari produk atau catatan..."
-
         etSearch.addTextChangedListener {
             currentPage = 1
             renderList()
         }
 
-        btnPrimary.setOnClickListener {
-            bukaPilihTanggal()
-        }
-
-        btnSecondary.setOnClickListener {
-            bukaPilihRentang()
-        }
-
-        btnPrimary.setOnLongClickListener {
-            resetFilterTanggal()
-            true
-        }
-
-        btnSecondary.setOnLongClickListener {
-            resetFilterTanggal()
-            true
+        btnOpenFilters.setOnClickListener {
+            bukaBottomSheetFilter()
         }
 
         btnPagePrev.setOnClickListener {
@@ -144,6 +132,7 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
                         jenisMutasi.contains("PRODUKSI_DASAR") -> "Produksi Dasar"
                         jenisMutasi.contains("KONVERSI_MASUK") -> "Produk Olahan Masuk"
                         jenisMutasi.contains("KONVERSI_KELUAR") -> "Produk Olahan Keluar"
+                        jenisMutasi.contains("ADJUSTMENT_KADALUARSA") -> "Adjustment Kadaluarsa"
                         jenisMutasi.contains("ADJUSTMENT_TAMBAH") -> "Adjustment Tambah"
                         jenisMutasi.contains("ADJUSTMENT_KURANG") -> "Adjustment Kurang"
                         jenisMutasi.contains("PENJUALAN") -> "Penjualan"
@@ -151,6 +140,7 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
                     }
 
                     RiwayatStokGlobalUi(
+                        mutationId = doc.id,
                         productId = produkId,
                         namaProduk = namaProduk,
                         title = title,
@@ -163,14 +153,14 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
                                 }
                             )
                             append(" • stok ")
-                            append(stokSebelum)
+                            append(Formatter.ribuan(stokSebelum))
                             append(" → ")
-                            append(stokSesudah)
+                            append(Formatter.ribuan(stokSesudah))
                         },
                         badge = Formatter.readableDateTime(isoFromTimestamp(waktuMutasi)),
                         amount = when {
-                            qtyMasuk > 0L -> "+$qtyMasuk"
-                            qtyKeluar > 0L -> "-$qtyKeluar"
+                            qtyMasuk > 0L -> "+${Formatter.ribuan(qtyMasuk)}"
+                            qtyKeluar > 0L -> "-${Formatter.ribuan(qtyKeluar)}"
                             else -> "0"
                         },
                         kategori = kategoriUntuk(jenisMutasi, qtyMasuk, qtyKeluar),
@@ -196,8 +186,17 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
                     row.title.lowercase().contains(keyword)
 
             val cocokTanggal = cocokFilterTanggal(row.dibuatPada.toDate())
+            val cocokKategori = when (kategoriAktif) {
+                FILTER_PRODUKSI_DASAR -> row.title.contains("Produksi Dasar", true)
+                FILTER_PRODUK_OLAHAN -> row.title.contains("Produk Olahan", true)
+                FILTER_PENJUALAN -> row.title.contains("Penjualan", true)
+                FILTER_ADJUSTMENT -> row.title.contains("Adjustment", true)
+                FILTER_MASUK -> row.amount.startsWith("+")
+                FILTER_KELUAR -> row.amount.startsWith("-")
+                else -> true
+            }
 
-            cocokKeyword && cocokTanggal
+            cocokKeyword && cocokTanggal && cocokKategori
         }
 
         totalPages = if (filtered.isEmpty()) 1 else ((filtered.size - 1) / pageSize) + 1
@@ -212,15 +211,15 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
         adapter.submitList(
             pagedItems.map { row ->
                 ItemBaris(
-                    id = row.productId,
+                    id = row.mutationId,
                     title = row.namaProduk,
                     subtitle = row.subtitle,
                     badge = row.title,
                     amount = row.amount,
                     priceStatus = row.badge,
-                    parameterStatus = "Tap untuk detail produk",
+                    parameterStatus = "Tap untuk lihat detail",
                     tone = when (row.kategori) {
-                        "Adjustment" -> WarnaBaris.BLUE
+                        "Adjustment" -> if (row.title.contains("Kadaluarsa", true)) WarnaBaris.ORANGE else WarnaBaris.BLUE
                         "Penjualan" -> WarnaBaris.GOLD
                         "Produksi" -> WarnaBaris.GREEN
                         else -> if (row.amount.startsWith("+")) WarnaBaris.GREEN else WarnaBaris.RED
@@ -245,49 +244,90 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
         binding.btnPagePrev.alpha = if (currentPage > 1) 1f else 0.45f
         binding.btnPageNext.isEnabled = currentPage < totalPages
         binding.btnPageNext.alpha = if (currentPage < totalPages) 1f else 0.45f
+
+        updateFilterUi()
     }
 
-    private fun bukaPilihTanggal() {
-        PembantuPilihTanggalWaktu.showDatePicker(this, tanggalTunggal) { hasil ->
-            tanggalTunggal = hasil
-            rentangMulai = null
-            rentangSelesai = null
+    private fun bukaBottomSheetFilter() {
+        PembantuFilterRiwayat.show(
+            activity = this,
+            kategori = listOf(
+                FILTER_SEMUA,
+                FILTER_PRODUKSI_DASAR,
+                FILTER_PRODUK_OLAHAN,
+                FILTER_PENJUALAN,
+                FILTER_ADJUSTMENT,
+                FILTER_MASUK,
+                FILTER_KELUAR
+            ),
+            kategoriTerpilih = kategoriAktif,
+            tanggalLabel = labelDateRangeUntukField(),
+            jumlahFilterAktif = jumlahFilterAktif(),
+            onKategoriDipilih = {
+                kategoriAktif = it
+                currentPage = 1
+                renderList()
+            },
+            onPilihTanggal = { bukaDateRangePicker() },
+            onHapusTanggal = {
+                clearDateFilter(showToast = true)
+            },
+            onReset = {
+                resetSemuaFilter()
+            }
+        )
+    }
+
+    private fun bukaDateRangePicker() {
+        val picker = MaterialDatePicker.Builder.dateRangePicker()
+            .setTitleText("Pilih rentang")
+            .build()
+
+        picker.addOnPositiveButtonClickListener { selection ->
+            val start = selection.first ?: return@addOnPositiveButtonClickListener
+            val end = selection.second ?: start
+            val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val mulai = formatter.format(Date(start))
+            val selesai = formatter.format(Date(end))
+
+            if (isSameDay(Formatter.parseDate(mulai), Formatter.parseDate(selesai))) {
+                tanggalTunggal = mulai
+                rentangMulai = null
+                rentangSelesai = null
+            } else if (Formatter.parseDate(mulai).after(Formatter.parseDate(selesai))) {
+                tanggalTunggal = null
+                rentangMulai = selesai
+                rentangSelesai = mulai
+            } else {
+                tanggalTunggal = null
+                rentangMulai = mulai
+                rentangSelesai = selesai
+            }
+
             currentPage = 1
-            updateFilterTanggalUi()
             renderList()
         }
+
+        picker.show(supportFragmentManager, "filter_range_stok")
     }
 
-    private fun bukaPilihRentang() {
-        PembantuPilihTanggalWaktu.showDatePicker(this, rentangMulai) { mulai ->
-            PembantuPilihTanggalWaktu.showDatePicker(this, rentangSelesai ?: mulai) { selesai ->
-                val tanggalMulai = Formatter.parseDate(mulai)
-                val tanggalSelesai = Formatter.parseDate(selesai)
-
-                if (tanggalMulai.after(tanggalSelesai)) {
-                    rentangMulai = selesai
-                    rentangSelesai = mulai
-                } else {
-                    rentangMulai = mulai
-                    rentangSelesai = selesai
-                }
-
-                tanggalTunggal = null
-                currentPage = 1
-                updateFilterTanggalUi()
-                renderList()
-            }
-        }
+    private fun resetSemuaFilter() {
+        kategoriAktif = FILTER_SEMUA
+        clearDateFilter(showToast = false)
+        currentPage = 1
+        renderList()
+        showMessage("Semua filter direset")
     }
 
-    private fun resetFilterTanggal() {
+    private fun clearDateFilter(showToast: Boolean) {
         tanggalTunggal = null
         rentangMulai = null
         rentangSelesai = null
         currentPage = 1
-        updateFilterTanggalUi()
         renderList()
-        showMessage("Filter tanggal direset")
+        if (showToast) {
+            showMessage("Filter tanggal dihapus")
+        }
     }
 
     private fun cocokFilterTanggal(tanggalData: Date): Boolean {
@@ -305,25 +345,31 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
         return true
     }
 
-    private fun updateFilterTanggalUi() {
-        binding.btnPrimary.text =
-            tanggalTunggal?.let { Formatter.readableShortDate(it) } ?: "Pilih Tanggal"
+    private fun updateFilterUi() {
+        binding.tvFilterBadge.visibility = if (jumlahFilterAktif() > 0) View.VISIBLE else View.GONE
+        binding.tvFilterBadge.text = if (jumlahFilterAktif() > 9) "9+" else jumlahFilterAktif().toString()
+        binding.toolbar.subtitle = null
+    }
 
-        binding.btnSecondary.text =
-            if (!rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank()) {
-                "${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
-            } else {
-                "Pilih Rentang"
-            }
-
-        binding.toolbar.subtitle = when {
-            !tanggalTunggal.isNullOrBlank() ->
-                "Semua mutasi stok lintas produk • ${Formatter.readableDate(tanggalTunggal)}"
+    private fun labelDateRangeUntukField(): String? {
+        return when {
+            !tanggalTunggal.isNullOrBlank() -> Formatter.readableDate(tanggalTunggal)
             !rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank() ->
-                "Semua mutasi stok lintas produk • ${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
-            else ->
-                "Semua mutasi stok lintas produk • semua tanggal"
+                "${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
+            else -> null
         }
+    }
+
+    private fun jumlahFilterAktif(): Int {
+        var total = 0
+        if (kategoriAktif != FILTER_SEMUA) total++
+        if (punyaFilterTanggal()) total++
+        return total
+    }
+
+    private fun punyaFilterTanggal(): Boolean {
+        return !tanggalTunggal.isNullOrBlank() ||
+                (!rentangMulai.isNullOrBlank() && !rentangSelesai.isNullOrBlank())
     }
 
     private fun isSameDay(first: Date, second: Date): Boolean {
@@ -368,9 +414,20 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
         val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
         return formatter.format((timestamp ?: Timestamp.now()).toDate())
     }
+
+    companion object {
+        private const val FILTER_SEMUA = "Semua"
+        private const val FILTER_PRODUKSI_DASAR = "Produksi Dasar"
+        private const val FILTER_PRODUK_OLAHAN = "Produk Olahan"
+        private const val FILTER_PENJUALAN = "Penjualan"
+        private const val FILTER_ADJUSTMENT = "Adjustment"
+        private const val FILTER_MASUK = "Masuk"
+        private const val FILTER_KELUAR = "Keluar"
+    }
 }
 
 data class RiwayatStokGlobalUi(
+    val mutationId: String,
     val productId: String,
     val namaProduk: String,
     val title: String,

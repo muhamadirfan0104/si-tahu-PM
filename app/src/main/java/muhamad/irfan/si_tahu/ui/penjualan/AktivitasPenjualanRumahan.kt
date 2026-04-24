@@ -15,6 +15,7 @@ import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.umum.AdapterProduk
 import muhamad.irfan.si_tahu.util.AdapterSpinner
 import muhamad.irfan.si_tahu.util.Formatter
+import muhamad.irfan.si_tahu.utilitas.PembantuFilterRiwayat
 
 class AktivitasPenjualanRumahan : AktivitasDasar() {
 
@@ -24,6 +25,9 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
     private val pageSize = 5
 
     private var products: List<Produk> = emptyList()
+    private var categoryOptions = listOf("Semua")
+    private var kategoriAktif = "Semua"
+    private var modeAktif = MODE_ALL
     private var currentPage = 1
     private var totalPages = 1
 
@@ -63,22 +67,14 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
             AdapterSpinner.stringAdapter(this, listOf("Semua"))
 
         binding.spStockMode.adapter =
-            AdapterSpinner.stringAdapter(
-                this,
-                listOf(
-                    MODE_READY,
-                    MODE_EMPTY
-                )
-            )
+            AdapterSpinner.stringAdapter(this, listOf(MODE_ALL, MODE_READY, MODE_EMPTY))
 
-        binding.spCategory.onItemSelectedListener = SimpleSpinnerListener {
-            currentPage = 1
-            renderProducts()
-        }
+        binding.spCategory.isVisible = false
+        binding.spStockMode.isVisible = false
+        binding.tvFilterBadge.isVisible = false
 
-        binding.spStockMode.onItemSelectedListener = SimpleSpinnerListener {
-            currentPage = 1
-            renderProducts()
+        binding.btnOpenFilters.setOnClickListener {
+            bukaFilter()
         }
 
         binding.etSearch.addTextChangedListener {
@@ -125,14 +121,15 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                         .filter { hasValidCashierPrice(it) }
                         .sortedWith(productComparator())
 
-                    val categories = listOf("Semua") + products.map { it.category }
+                    categoryOptions = listOf("Semua") + products.map { it.category }
                         .distinct()
                         .sorted()
 
                     binding.spCategory.adapter =
-                        AdapterSpinner.stringAdapter(this@AktivitasPenjualanRumahan, categories)
+                        AdapterSpinner.stringAdapter(this@AktivitasPenjualanRumahan, categoryOptions)
 
-                    binding.spStockMode.setSelection(0)
+                    if (kategoriAktif !in categoryOptions) kategoriAktif = "Semua"
+                    modeAktif = MODE_ALL
                     currentPage = 1
 
                     renderProducts()
@@ -158,9 +155,16 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         return defaultPrice(product) > 0L
     }
 
+    private fun stokLayakJual(product: Produk): Int {
+        return product.safeStock + product.nearExpiredStock
+    }
+
     private fun productStatus(product: Produk): String = when {
-        product.stock <= 0 -> STATUS_EMPTY
-        else -> STATUS_READY
+        stokLayakJual(product) <= 0 && product.expiredStock > 0 -> STATUS_EXPIRED
+        stokLayakJual(product) <= 0 -> STATUS_EMPTY
+        product.nearExpiredStock > 0 -> STATUS_NEAR_EXPIRED
+        product.producedToday -> STATUS_PRODUCED_TODAY
+        else -> STATUS_LEFTOVER
     }
 
     private fun productComparator(): Comparator<Produk> {
@@ -172,19 +176,21 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
 
     private fun statusRank(status: String): Int {
         return when (status) {
-            STATUS_READY -> 0
-            STATUS_EMPTY -> 1
-            else -> 2
+            STATUS_PRODUCED_TODAY -> 0
+            STATUS_LEFTOVER -> 1
+            STATUS_NEAR_EXPIRED -> 2
+            STATUS_EMPTY -> 3
+            STATUS_EXPIRED -> 4
+            else -> 5
         }
     }
 
     private fun selectedMode(): String {
-        return binding.spStockMode.selectedItem?.toString().orEmpty().ifBlank { MODE_READY }
+        return modeAktif
     }
 
     private fun renderProducts() {
         val keyword = binding.etSearch.text?.toString().orEmpty().trim().lowercase()
-        val category = binding.spCategory.selectedItem?.toString().orEmpty().ifBlank { "Semua" }
         val mode = selectedMode()
 
         val filtered = products
@@ -196,16 +202,13 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                             product.name.lowercase().contains(keyword) ||
                             product.code.lowercase().contains(keyword)
 
-                val cocokKategori =
-                    category == "Semua" || product.category == category
-
                 val cocokMode = when (mode) {
-                    MODE_READY -> status == STATUS_READY
-                    MODE_EMPTY -> status == STATUS_EMPTY
-                    else -> status == STATUS_READY
+                    MODE_READY -> stokLayakJual(product) > 0
+                    MODE_EMPTY -> stokLayakJual(product) <= 0
+                    else -> true
                 }
 
-                cocokKeyword && cocokKategori && cocokMode
+                cocokKeyword && cocokMode
             }
             .sortedWith(productComparator())
 
@@ -220,16 +223,18 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
 
         productAdapter.submitList(pagedProducts)
 
-        val totalReady = products.count { productStatus(it) == STATUS_READY }
-        val totalEmpty = products.count { productStatus(it) == STATUS_EMPTY }
+        val totalReady = products.count { stokLayakJual(it) > 0 }
+        val totalEmpty = products.count { stokLayakJual(it) <= 0 }
+        val totalNearExpired = products.count { it.nearExpiredStock > 0 }
+        val totalExpired = products.count { it.expiredStock > 0 }
 
         binding.tvProductSummary.text = when {
             products.isEmpty() ->
                 "Belum ada produk kasir dengan harga aktif di atas 0"
             filtered.isEmpty() ->
-                "Tidak ada produk yang cocok • siap dijual $totalReady • habis $totalEmpty"
+                "Tidak ada produk yang cocok • siap dijual $totalReady • habis $totalEmpty • hampir ED $totalNearExpired • ED $totalExpired"
             else ->
-                "${filtered.size} produk total • tampil ${pagedProducts.size} di halaman $currentPage • siap dijual $totalReady • habis $totalEmpty"
+                "${filtered.size} produk total • siap dijual $totalReady • habis $totalEmpty • hampir ED $totalNearExpired • ED $totalExpired"
         }
 
         binding.tvEmptyProducts.isVisible = pagedProducts.isEmpty()
@@ -240,6 +245,43 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         binding.btnPagePrev.alpha = if (currentPage > 1) 1f else 0.45f
         binding.btnPageNext.isEnabled = currentPage < totalPages
         binding.btnPageNext.alpha = if (currentPage < totalPages) 1f else 0.45f
+        updateFilterUi()
+    }
+
+    private fun bukaFilter() {
+        PembantuFilterRiwayat.show(
+            activity = this,
+            kategori = listOf(MODE_ALL, MODE_READY, MODE_EMPTY),
+            kategoriTerpilih = modeAktif,
+            tanggalLabel = null,
+            jumlahFilterAktif = jumlahFilterAktif(),
+            onKategoriDipilih = { pilihan ->
+                modeAktif = pilihan
+                currentPage = 1
+                renderProducts()
+            },
+            onPilihTanggal = {},
+            onHapusTanggal = {},
+            onReset = {
+                modeAktif = MODE_ALL
+                currentPage = 1
+                renderProducts()
+                showMessage("Filter produk kasir direset")
+            },
+            kategoriLabel = "Status Produk",
+            tampilkanTanggal = false
+        )
+    }
+
+    private fun jumlahFilterAktif(): Int {
+        var total = 0
+        if (modeAktif != MODE_ALL) total++
+        return total
+    }
+
+    private fun updateFilterUi() {
+        binding.tvFilterBadge.isVisible = jumlahFilterAktif() > 0
+        binding.tvFilterBadge.text = jumlahFilterAktif().toString()
     }
 
     private fun addToCart(product: Produk) {
@@ -248,15 +290,21 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
             return
         }
 
-        if (product.stock <= 0) {
-            showMessage("Produk ${product.name} sedang habis")
+        val stokLayak = stokLayakJual(product)
+        if (stokLayak <= 0) {
+            val message = if (product.expiredStock > 0) {
+                "Stok ${product.name} sudah kadaluarsa dan tidak bisa dijual"
+            } else {
+                "Produk ${product.name} sedang habis"
+            }
+            showMessage(message)
             return
         }
 
         val success = SessionKeranjangRumahan.addOrIncrease(
             productId = product.id,
             price = defaultPrice(product),
-            maxStock = product.stock
+            maxStock = stokLayak
         )
 
         if (!success) {
@@ -272,7 +320,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         if (SessionKeranjangRumahan.isEmpty()) return
 
         val success = SessionKeranjangRumahan.increaseFocused { productId ->
-            products.firstOrNull { it.id == productId }?.stock ?: 0
+            products.firstOrNull { it.id == productId }?.let { stokLayakJual(it) } ?: 0
         }
 
         if (!success) {
@@ -321,10 +369,14 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
     }
 
     companion object {
+        private const val MODE_ALL = "Semua"
         private const val MODE_READY = "Siap Dijual"
         private const val MODE_EMPTY = "Habis"
 
-        private const val STATUS_READY = "Siap Dijual"
+        private const val STATUS_PRODUCED_TODAY = "Produksi Hari Ini"
+        private const val STATUS_LEFTOVER = "Stok Sisa"
+        private const val STATUS_NEAR_EXPIRED = "Hampir Kadaluarsa"
+        private const val STATUS_EXPIRED = "Kadaluarsa"
         private const val STATUS_EMPTY = "Habis"
     }
 }

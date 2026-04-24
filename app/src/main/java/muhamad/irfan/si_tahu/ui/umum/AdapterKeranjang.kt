@@ -40,8 +40,8 @@ class AdapterKeranjang(
         fun bind(item: ItemKeranjang) {
             val product = getProduk(item.productId)
             binding.tvTitle.text = product?.name ?: "Produk"
-            binding.tvSubtitle.text = "${item.qty} x ${Formatter.currency(item.price)}"
-            binding.tvQty.text = item.qty.toString()
+            binding.tvSubtitle.text = "${Formatter.ribuan(item.qty.toLong())} x ${Formatter.currency(item.price)}"
+            binding.tvQty.text = Formatter.ribuan(item.qty.toLong())
             binding.tvTotal.text = Formatter.currency(item.qty.toLong() * item.price)
             binding.btnMinus.setOnClickListener { onDecrease(item) }
             binding.btnPlus.setOnClickListener { onIncrease(item) }

@@ -44,30 +44,84 @@
                         android:textColor="@color/text_primary"
                         android:textStyle="bold" />
 
-                    <com.google.android.material.textfield.TextInputLayout
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp">
+                        android:layout_marginTop="14dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etSearch"
-                            android:layout_width="match_parent"
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:hint="Cari nama / kode produk"
-                            android:inputType="text" />
-                    </com.google.android.material.textfield.TextInputLayout>
+                            android:layout_weight="1"
+                            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                            app:boxBackgroundColor="@color/card_surface"
+                            app:boxCornerRadiusBottomEnd="18dp"
+                            app:boxCornerRadiusBottomStart="18dp"
+                            app:boxCornerRadiusTopEnd="18dp"
+                            app:boxCornerRadiusTopStart="18dp"
+                            app:boxStrokeColor="@color/line_color"
+                            app:boxStrokeWidth="1dp"
+                            app:boxStrokeWidthFocused="1dp"
+                            app:hintEnabled="false"
+                            app:startIconDrawable="@android:drawable/ic_menu_search"
+                            app:startIconTint="@color/muted">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etSearch"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:background="@android:color/transparent"
+                                android:hint="Cari produk..."
+                                android:imeOptions="actionSearch"
+                                android:inputType="text"
+                                android:maxLines="1"
+                                android:textColor="@color/text_primary"
+                                android:textColorHint="@color/muted" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <FrameLayout
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="12dp">
+
+                            <ImageButton
+                                android:id="@+id/btnOpenFilters"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:background="@android:color/transparent"
+                                android:contentDescription="Filter"
+                                android:padding="10dp"
+                                android:src="@drawable/ic_filter_tune"
+                                android:tint="@color/green_primary" />
+
+                            <TextView
+                                android:id="@+id/tvFilterBadge"
+                                android:layout_width="18dp"
+                                android:layout_height="18dp"
+                                android:layout_gravity="top|end"
+                                android:background="@drawable/bg_filter_badge"
+                                android:gravity="center"
+                                android:text="1"
+                                android:textColor="@android:color/white"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </FrameLayout>
+                    </LinearLayout>
 
                     <Spinner
                         android:id="@+id/spCategory"
                         android:layout_width="match_parent"
                         android:layout_height="52dp"
-                        android:layout_marginTop="12dp" />
+                        android:visibility="gone" />
 
                     <Spinner
                         android:id="@+id/spStockMode"
                         android:layout_width="match_parent"
                         android:layout_height="52dp"
-                        android:layout_marginTop="10dp" />
+                        android:visibility="gone" />
 
                     <TextView
                         android:id="@+id/tvProductSummary"
