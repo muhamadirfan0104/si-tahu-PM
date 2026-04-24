@@ -8,6 +8,7 @@ import java.util.UUID
 
 object Formatter {
     private val currencyFormat = NumberFormat.getCurrencyInstance(Locale("id", "ID"))
+    private val ribuanFormat = NumberFormat.getNumberInstance(Locale("id", "ID"))
     private val dateTimeParser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
     private val dateOnlyParser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     private val longDate = SimpleDateFormat("dd MMMM yyyy", Locale("id", "ID"))
@@ -15,7 +16,34 @@ object Formatter {
     private val shortTime = SimpleDateFormat("HH:mm", Locale("id", "ID"))
     private val longDateTime = SimpleDateFormat("dd MMM yyyy HH:mm", Locale("id", "ID"))
 
+    init {
+        currencyFormat.maximumFractionDigits = 0
+        currencyFormat.minimumFractionDigits = 0
+        ribuanFormat.maximumFractionDigits = 0
+        ribuanFormat.minimumFractionDigits = 0
+    }
+
     fun currency(value: Long): String = currencyFormat.format(value)
+
+    fun ribuan(value: Long): String = ribuanFormat.format(value)
+
+    fun parseRupiah(value: String?): Long {
+        if (value.isNullOrBlank()) return 0L
+
+        val clean = value
+            .replace("Rp", "", ignoreCase = true)
+            .replace(".", "")
+            .replace(",", "")
+            .replace(" ", "")
+            .trim()
+
+        return clean.toLongOrNull() ?: 0L
+    }
+
+    fun formatRupiahInput(value: String?): String {
+        val angka = parseRupiah(value)
+        return if (angka == 0L && value.isNullOrBlank()) "" else ribuan(angka)
+    }
 
     fun parseDate(value: String?): Date {
         if (value.isNullOrBlank()) return Date()
@@ -41,5 +69,6 @@ object Formatter {
 
     fun isoDate(date: String, time: String): String = "${date}T${time}"
 
-    fun newId(prefix: String): String = prefix + "-" + UUID.randomUUID().toString().replace("-", "").take(10)
+    fun newId(prefix: String): String =
+        prefix + "-" + UUID.randomUUID().toString().replace("-", "").take(10)
 }

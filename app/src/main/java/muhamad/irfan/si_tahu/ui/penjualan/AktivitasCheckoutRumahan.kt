@@ -16,6 +16,7 @@ import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.umum.AdapterKeranjang
 import muhamad.irfan.si_tahu.util.AdapterSpinner
 import muhamad.irfan.si_tahu.util.Formatter
+import muhamad.irfan.si_tahu.util.InputRupiah
 
 class AktivitasCheckoutRumahan : AktivitasDasar() {
 
@@ -39,11 +40,7 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
 
     override fun onResume() {
         super.onResume()
-        if (SessionKeranjangRumahan.isEmpty()) {
-            finish()
-        } else {
-            renderCheckout()
-        }
+        renderCheckout()
     }
 
     private fun setupAdapter() {
@@ -61,12 +58,10 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
                 val product = products.firstOrNull { it.id == item.productId } ?: return@AdapterKeranjang
                 SessionKeranjangRumahan.changeQty(item.productId, -1, product.stock)
                 renderCheckout()
-                if (SessionKeranjangRumahan.isEmpty()) finish()
             },
             onRemove = { item ->
                 SessionKeranjangRumahan.remove(item.productId)
                 renderCheckout()
-                if (SessionKeranjangRumahan.isEmpty()) finish()
             },
             getProduk = { productId ->
                 products.firstOrNull { it.id == productId }
@@ -84,6 +79,8 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
         binding.spPayment.onItemSelectedListener = CheckoutSpinnerListener {
             renderCheckout()
         }
+
+        InputRupiah.pasang(binding.etCashPaid)
 
         binding.etCashPaid.addTextChangedListener {
             renderCheckout()
@@ -119,7 +116,7 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
         val total = totalAmount()
         val qty = totalQty()
         val method = binding.spPayment.selectedItem?.toString().orEmpty().ifBlank { "Tunai" }
-        val paid = binding.etCashPaid.text?.toString()?.toLongOrNull() ?: 0L
+        val paid = InputRupiah.ambilNilai(binding.etCashPaid)
         val change = (paid - total).coerceAtLeast(0L)
         val emptyCart = items.isEmpty()
 
@@ -142,9 +139,10 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
 
         if (method != "Tunai") {
             if (total > 0L) {
-                val totalText = total.toString()
+                val totalText = Formatter.ribuan(total)
                 if (binding.etCashPaid.text?.toString() != totalText) {
                     binding.etCashPaid.setText(totalText)
+                    binding.etCashPaid.setSelection(binding.etCashPaid.text?.length ?: 0)
                 }
             } else if (binding.etCashPaid.text?.isNotEmpty() == true) {
                 binding.etCashPaid.setText("")
@@ -164,7 +162,7 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
 
         val method = binding.spPayment.selectedItem?.toString().orEmpty().ifBlank { "Tunai" }
         val total = totalAmount()
-        val cash = binding.etCashPaid.text?.toString()?.toLongOrNull() ?: 0L
+        val cash = InputRupiah.ambilNilai(binding.etCashPaid)
 
         if (method == "Tunai" && cash < total) {
             showMessage("Uang dibayar masih kurang")
@@ -173,6 +171,7 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
 
         lifecycleScope.launch {
             binding.btnSaveTransaction.isEnabled = false
+            binding.btnSaveTransaction.alpha = 0.5f
 
             runCatching {
                 val saleId = RepositoriFirebaseUtama.simpanPenjualanRumahan(
@@ -185,13 +184,19 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
                 RepositoriFirebaseUtama.buildReceiptText(saleId)
             }.onSuccess { receipt ->
                 SessionKeranjangRumahan.clear()
-                showReceiptModal("Transaksi berhasil", receipt)
-                finish()
+                renderCheckout()
+                showReceiptDialogAndFinish(receipt)
             }.onFailure {
                 showMessage(it.message ?: "Gagal menyimpan transaksi")
                 binding.btnSaveTransaction.isEnabled = true
                 binding.btnSaveTransaction.alpha = 1f
             }
+        }
+    }
+
+    private fun showReceiptDialogAndFinish(receipt: String) {
+        showReceiptModal("Transaksi berhasil", receipt) {
+            finish()
         }
     }
 }

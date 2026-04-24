@@ -9,6 +9,7 @@ import muhamad.irfan.si_tahu.databinding.ActivityPriceFormBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.util.AdapterSpinner
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
+import muhamad.irfan.si_tahu.util.InputRupiah
 
 class AktivitasFormHarga : AktivitasDasar() {
 
@@ -29,6 +30,7 @@ class AktivitasFormHarga : AktivitasDasar() {
         editingPriceId = intent.getStringExtra(EkstraAplikasi.EXTRA_PRICE_ID)
 
         binding.cbActive.isChecked = true
+        InputRupiah.pasang(binding.etPrice)
 
         if (!editingPriceId.isNullOrBlank()) {
             lockProductFieldForEdit()
@@ -53,11 +55,11 @@ class AktivitasFormHarga : AktivitasDasar() {
                 products = snapshot.documents
                     .filter { it.getBoolean("dihapus") != true }
                     .map { doc ->
-                    OpsiProduk(
-                        id = doc.id,
-                        name = doc.getString("namaProduk").orEmpty()
-                    )
-                }.sortedBy { it.name }
+                        OpsiProduk(
+                            id = doc.id,
+                            name = doc.getString("namaProduk").orEmpty()
+                        )
+                    }.sortedBy { it.name }
 
                 if (products.isEmpty()) {
                     binding.spProduct.adapter =
@@ -92,8 +94,12 @@ class AktivitasFormHarga : AktivitasDasar() {
             .addOnSuccessListener { doc ->
                 if (!doc.exists()) return@addOnSuccessListener
 
-                binding.etLabel.setText(doc.getString("kanalHarga").orEmpty().ifBlank { doc.getString("namaHarga").orEmpty() })
-                binding.etPrice.setText((doc.getLong("hargaSatuan") ?: 0L).toString())
+                binding.etLabel.setText(
+                    doc.getString("kanalHarga").orEmpty().ifBlank {
+                        doc.getString("namaHarga").orEmpty()
+                    }
+                )
+                InputRupiah.setNilai(binding.etPrice, doc.getLong("hargaSatuan") ?: 0L)
                 binding.cbActive.isChecked = doc.getBoolean("aktif") ?: true
                 binding.cbDefault.isChecked = doc.getBoolean("hargaUtama") ?: false
             }
@@ -111,7 +117,7 @@ class AktivitasFormHarga : AktivitasDasar() {
 
         val kanalInput = binding.etLabel.text?.toString()?.trim().orEmpty()
         val kanalKey = normalizeChannelKey(kanalInput)
-        val hargaSatuan = binding.etPrice.text?.toString()?.trim()?.toLongOrNull() ?: 0L
+        val hargaSatuan = InputRupiah.ambilNilai(binding.etPrice)
         val aktif = binding.cbActive.isChecked
         val hargaUtama = binding.cbDefault.isChecked
 
@@ -135,8 +141,8 @@ class AktivitasFormHarga : AktivitasDasar() {
             .addOnSuccessListener { snapshot ->
                 val duplicateExists = snapshot.documents.any {
                     it.getBoolean("dihapus") != true &&
-                        it.getString("kanalKey").orEmpty() == kanalKey &&
-                        it.id != editingPriceId
+                            it.getString("kanalKey").orEmpty() == kanalKey &&
+                            it.id != editingPriceId
                 }
 
                 if (duplicateExists) {

@@ -1,4 +1,3 @@
-// AktivitasDasar.kt
 package muhamad.irfan.si_tahu.ui.dasar
 
 import android.content.Intent
@@ -111,7 +110,8 @@ open class AktivitasDasar : AppCompatActivity() {
         onNeutral: (() -> Unit)? = null,
         negativeLabel: String? = null,
         onNegative: (() -> Unit)? = null,
-        monospace: Boolean = true
+        monospace: Boolean = true,
+        onClosed: (() -> Unit)? = null
     ) {
         PembantuModal.showDetailModal(
             context = this,
@@ -121,7 +121,8 @@ open class AktivitasDasar : AppCompatActivity() {
             onNeutral = onNeutral,
             negativeLabel = negativeLabel,
             onNegative = onNegative,
-            monospace = monospace
+            monospace = monospace,
+            onClosed = onClosed
         )
     }
 
@@ -154,7 +155,8 @@ open class AktivitasDasar : AppCompatActivity() {
     protected fun showReceiptModal(
         title: String,
         receiptText: String,
-        pdfLabel: String = "Simpan PDF"
+        pdfLabel: String = "Simpan PDF",
+        onClosed: (() -> Unit)? = null
     ) {
         showDetailModal(
             title = title,
@@ -163,7 +165,8 @@ open class AktivitasDasar : AppCompatActivity() {
             onNegative = { sharePlainText(title, receiptText) },
             neutralLabel = pdfLabel,
             onNeutral = { PembantuCetak.printPlainText(this, title, receiptText) },
-            monospace = true
+            monospace = true,
+            onClosed = onClosed
         )
     }
 

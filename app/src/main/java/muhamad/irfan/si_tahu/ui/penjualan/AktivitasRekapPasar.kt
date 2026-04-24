@@ -6,7 +6,9 @@ import android.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import muhamad.irfan.si_tahu.data.HargaKanal
 import muhamad.irfan.si_tahu.data.ItemDraftRekap
 import muhamad.irfan.si_tahu.data.Produk
@@ -26,6 +28,8 @@ class AktivitasRekapPasar : AktivitasDasar() {
     private val itemAdapter = AdapterBarisUmum(onItemClick = {}, onActionClick = ::showItemMenu)
     private lateinit var draftBottomSheetBehavior: BottomSheetBehavior<View>
 
+    private val firestore by lazy { FirebaseFirestore.getInstance() }
+
     private var products: List<Produk> = emptyList()
     private val draftItems = mutableListOf<ItemDraftRekap>()
     private var opsiHargaAktif: List<OpsiHargaRekap> = emptyList()
@@ -39,7 +43,7 @@ class AktivitasRekapPasar : AktivitasDasar() {
         bindToolbar(binding.toolbar, "Rekap Penjualan Pasar", "Catat penjualan di luar kasir")
 
         setupView()
-        loadProducts()
+        loadProductsBySelectedDate()
     }
 
     private fun setupView() {
@@ -50,12 +54,23 @@ class AktivitasRekapPasar : AktivitasDasar() {
             PembantuPilihTanggalWaktu.showDatePicker(
                 this,
                 binding.etDate.text?.toString()
-            ) { binding.etDate.setText(it) }
+            ) { selectedDate ->
+                binding.etDate.setText(selectedDate)
+
+                draftItems.clear()
+                binding.etQty.setText("")
+                refreshDraft()
+
+                loadProductsBySelectedDate()
+            }
         }
 
         binding.etTime.setOnClickListener {
-            val previewDateTime = "${binding.etDate.text?.toString().orEmpty()}T${binding.etTime.text?.toString().orEmpty()}:00"
-            PembantuPilihTanggalWaktu.showTimePicker(this, previewDateTime) { binding.etTime.setText(it) }
+            val previewDateTime =
+                "${binding.etDate.text?.toString().orEmpty()}T${binding.etTime.text?.toString().orEmpty()}:00"
+            PembantuPilihTanggalWaktu.showTimePicker(this, previewDateTime) { selectedTime ->
+                binding.etTime.setText(selectedTime)
+            }
         }
 
         binding.rvItems.layoutManager = LinearLayoutManager(this)
@@ -65,8 +80,13 @@ class AktivitasRekapPasar : AktivitasDasar() {
         binding.spProduct.adapter = AdapterSpinner.stringAdapter(this, listOf("Belum ada produk"))
         binding.spPrice.adapter = AdapterSpinner.stringAdapter(this, listOf("Belum ada harga aktif"))
 
-        binding.spProduct.onItemSelectedListener = RecapSpinnerListener { refreshPriceOptions() }
-        binding.spPrice.onItemSelectedListener = RecapSpinnerListener { updateSelectedPriceInfo() }
+        binding.spProduct.onItemSelectedListener = RecapSpinnerListener {
+            refreshPriceOptions()
+        }
+
+        binding.spPrice.onItemSelectedListener = RecapSpinnerListener {
+            updateSelectedPriceInfo()
+        }
 
         binding.btnAddItem.setOnClickListener { addItem() }
         binding.btnSaveRecap.setOnClickListener { saveRecap() }
@@ -83,29 +103,66 @@ class AktivitasRekapPasar : AktivitasDasar() {
         updateSelectedPriceInfo()
     }
 
-    private fun loadProducts() {
+    /**
+     * Revisi nomor 1:
+     * Halaman penjualan admin hanya menampilkan produk
+     * yang punya catatan produksi pada tanggal terpilih.
+     *
+     * Alur:
+     * 1. Ambil CatatanProduksi by kunciTanggal
+     * 2. Ambil idProdukHasil yang unik
+     * 3. Filter Produk aktif berdasarkan id tersebut
+     *
+     * Catatan:
+     * - stok lama tidak membuat produk ikut tampil
+     * - kasir tidak ikut logika ini
+     */
+    private fun loadProductsBySelectedDate() {
+        val selectedDate = binding.etDate.text?.toString().orEmpty()
+            .ifBlank { Formatter.currentDateOnly() }
+
         lifecycleScope.launch {
-            runCatching { RepositoriFirebaseUtama.muatProdukAktif() }
-                .onSuccess {
-                    products = it
-                    val labels = if (products.isEmpty()) {
-                        listOf("Belum ada produk")
-                    } else {
-                        products.map { produk -> "${produk.code} • ${produk.name}" }
+            runCatching {
+                val produksiSnapshot = firestore.collection("CatatanProduksi")
+                    .whereEqualTo("kunciTanggal", selectedDate)
+                    .get()
+                    .await()
+
+                val producedProductIds = produksiSnapshot.documents
+                    .mapNotNull { it.getString("idProdukHasil") }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+
+                if (producedProductIds.isEmpty()) {
+                    emptyList()
+                } else {
+                    RepositoriFirebaseUtama.muatProdukAktif()
+                        .filter { it.id in producedProductIds }
+                        .sortedBy { it.name.lowercase() }
+                }
+            }.onSuccess { result ->
+                products = result
+
+                val labels = if (products.isEmpty()) {
+                    listOf("Tidak ada produksi pada tanggal ini")
+                } else {
+                    products.map { produk ->
+                        "${produk.code} • ${produk.name}"
                     }
-
-                    binding.spProduct.adapter =
-                        AdapterSpinner.stringAdapter(this@AktivitasRekapPasar, labels)
-
-                    refreshPriceOptions()
-                    refreshDraft()
                 }
-                .onFailure {
-                    products = emptyList()
-                    refreshPriceOptions()
-                    refreshDraft()
-                    showMessage(it.message ?: "Gagal memuat produk")
-                }
+
+                binding.spProduct.adapter =
+                    AdapterSpinner.stringAdapter(this@AktivitasRekapPasar, labels)
+
+                refreshPriceOptions()
+                refreshDraft()
+            }.onFailure { error ->
+                products = emptyList()
+                refreshPriceOptions()
+                refreshDraft()
+                showMessage(error.message ?: "Gagal memuat produk")
+            }
         }
     }
 
@@ -117,9 +174,13 @@ class AktivitasRekapPasar : AktivitasDasar() {
 
     private fun refreshPriceOptions() {
         val product = selectedProduct()
+
         opsiHargaAktif = product?.channels
             ?.filter { it.active && it.price > 0L }
-            ?.sortedWith(compareByDescending<HargaKanal> { it.defaultCashier }.thenBy { it.label.lowercase() })
+            ?.sortedWith(
+                compareByDescending<HargaKanal> { it.defaultCashier }
+                    .thenBy { it.label.lowercase() }
+            )
             ?.map {
                 OpsiHargaRekap(
                     label = it.label,
@@ -150,26 +211,37 @@ class AktivitasRekapPasar : AktivitasDasar() {
         val product = selectedProduct()
         val selectedPrice = selectedPriceOption()
 
-        binding.tvSelectedPrice.text = if (product == null) {
-            "Pilih produk untuk melihat harga."
-        } else if (selectedPrice == null) {
-            "Produk ${product.name} belum punya harga aktif yang bisa dipakai rekap."
-        } else {
-            val labelDefault = if (selectedPrice.defaultCashier) " • Default Kasir" else ""
-            "Harga terpilih: ${selectedPrice.label}$labelDefault\n${Formatter.currency(selectedPrice.price)}"
+        binding.tvSelectedPrice.text = when {
+            product == null && products.isEmpty() ->
+                "Tidak ada produk yang diproduksi pada tanggal ${binding.etDate.text?.toString().orEmpty()}."
+
+            product == null ->
+                "Pilih produk untuk melihat harga."
+
+            selectedPrice == null ->
+                "Produk ${product.name} belum punya harga aktif yang bisa dipakai rekap."
+
+            else -> {
+                val labelDefault = if (selectedPrice.defaultCashier) " • Default Kasir" else ""
+                "Harga terpilih: ${selectedPrice.label}$labelDefault\n${Formatter.currency(selectedPrice.price)}"
+            }
         }
 
         binding.tvProductInfo.text = if (product == null) {
-            "Belum ada produk yang dipilih"
+            "Produk admin hanya tampil jika ada produksi pada tanggal yang dipilih."
         } else {
             val hargaInfo = product.channels
                 .filter { it.active }
-                .sortedWith(compareByDescending<HargaKanal> { it.defaultCashier }.thenBy { it.label.lowercase() })
+                .sortedWith(
+                    compareByDescending<HargaKanal> { it.defaultCashier }
+                        .thenBy { it.label.lowercase() }
+                )
                 .joinToString("\n") {
                     val infoDefault = if (it.defaultCashier) " (Default Kasir)" else ""
                     "• ${it.label}: ${Formatter.currency(it.price)}$infoDefault"
                 }
                 .ifBlank { "Belum ada harga aktif" }
+
             "Pilihan harga produk:\n$hargaInfo"
         }
 
@@ -183,7 +255,7 @@ class AktivitasRekapPasar : AktivitasDasar() {
     private fun addItem() {
         val product = selectedProduct()
         if (product == null) {
-            showMessage("Produk belum tersedia")
+            showMessage("Produk belum tersedia pada tanggal ini")
             return
         }
 
@@ -202,6 +274,7 @@ class AktivitasRekapPasar : AktivitasDasar() {
         val totalDraftProduk = draftItems
             .filter { it.productId == product.id }
             .sumOf { it.qty }
+
         if (totalDraftProduk + qty > product.stock) {
             showMessage("Stok ${product.name} tidak mencukupi")
             return
@@ -209,8 +282,8 @@ class AktivitasRekapPasar : AktivitasDasar() {
 
         val existing = draftItems.firstOrNull {
             it.productId == product.id &&
-                it.channelLabel.equals(opsiHarga.label, true) &&
-                it.price == opsiHarga.price
+                    it.channelLabel.equals(opsiHarga.label, true) &&
+                    it.price == opsiHarga.price
         }
 
         if (existing == null) {
@@ -289,6 +362,7 @@ class AktivitasRekapPasar : AktivitasDasar() {
 
         lifecycleScope.launch {
             binding.btnSaveRecap.isEnabled = false
+
             runCatching {
                 val saleId = RepositoriFirebaseUtama.simpanRekapPasar(
                     dateOnly = date,
@@ -304,11 +378,13 @@ class AktivitasRekapPasar : AktivitasDasar() {
                 binding.etQty.setText("")
                 refreshDraft()
                 showReceiptModal("Rekap pasar tersimpan", receipt)
-                loadProducts()
+                loadProductsBySelectedDate()
             }.onFailure {
                 showMessage(it.message ?: "Gagal menyimpan rekap")
                 refreshDraft()
             }
+
+            binding.btnSaveRecap.isEnabled = true
         }
     }
 
@@ -326,6 +402,7 @@ class AktivitasRekapPasar : AktivitasDasar() {
 private class RecapSpinnerListener(
     private val onSelected: () -> Unit
 ) : android.widget.AdapterView.OnItemSelectedListener {
+
     override fun onItemSelected(
         parent: android.widget.AdapterView<*>?,
         view: View?,

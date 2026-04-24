@@ -20,29 +20,47 @@ object PembantuModal {
         onNeutral: (() -> Unit)? = null,
         negativeLabel: String? = null,
         onNegative: (() -> Unit)? = null,
-        monospace: Boolean = true
+        monospace: Boolean = true,
+        onClosed: (() -> Unit)? = null
     ): AlertDialog {
         val density = context.resources.displayMetrics.density
         val textView = TextView(context).apply {
             text = message
             textSize = 14f
             setLineSpacing(0f, 1.35f)
-            setPadding((20 * density).toInt(), (18 * density).toInt(), (20 * density).toInt(), (18 * density).toInt())
+            setPadding(
+                (20 * density).toInt(),
+                (18 * density).toInt(),
+                (20 * density).toInt(),
+                (18 * density).toInt()
+            )
             setTextColor(context.getColorCompat(muhamad.irfan.si_tahu.R.color.text_primary))
             typeface = if (monospace) Typeface.MONOSPACE else Typeface.SANS_SERIF
             movementMethod = LinkMovementMethod.getInstance()
             setTextIsSelectable(true)
         }
+
         val scroll = ScrollView(context).apply { addView(textView) }
-        return MaterialAlertDialogBuilder(context)
+
+        val dialog = MaterialAlertDialogBuilder(context)
             .setTitle(title)
             .setView(scroll)
             .setPositiveButton(positiveLabel, null)
             .apply {
-                if (neutralLabel != null) setNeutralButton(neutralLabel) { _, _ -> onNeutral?.invoke() }
-                if (negativeLabel != null) setNegativeButton(negativeLabel) { _, _ -> onNegative?.invoke() }
+                if (neutralLabel != null) {
+                    setNeutralButton(neutralLabel) { _, _ -> onNeutral?.invoke() }
+                }
+                if (negativeLabel != null) {
+                    setNegativeButton(negativeLabel) { _, _ -> onNegative?.invoke() }
+                }
             }
             .show()
+
+        dialog.setOnDismissListener {
+            onClosed?.invoke()
+        }
+
+        return dialog
     }
 
     fun showInputModal(
@@ -101,5 +119,6 @@ object PembantuModal {
             .show()
     }
 
-    private fun Context.getColorCompat(colorRes: Int): Int = androidx.core.content.ContextCompat.getColor(this, colorRes)
+    private fun Context.getColorCompat(colorRes: Int): Int =
+        androidx.core.content.ContextCompat.getColor(this, colorRes)
 }
