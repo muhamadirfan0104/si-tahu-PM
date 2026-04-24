@@ -63,6 +63,8 @@ object PembantuPilihProduk {
                 val cocokKategori = when (kategoriAktif.lowercase()) {
                     "dasar" -> item.jenisProduk.equals("DASAR", true)
                     "olahan" -> item.jenisProduk.equals("OLAHAN", true)
+                    "siap dijual" -> item.aktifDijual && item.stokSaatIni > 0L
+                    "habis" -> item.stokSaatIni <= 0L
                     else -> true
                 }
                 cocokKeyword && cocokKategori

@@ -125,17 +125,18 @@ class AktivitasRekapPasar : AktivitasDasar() {
 
                 RepositoriFirebaseUtama.muatProdukAktif()
                     .filter { product ->
-                        val stokLayakJual = product.safeStock + product.nearExpiredStock
                         val punyaHargaAktif = product.channels.any { it.active && it.price > 0L }
-                        punyaHargaAktif && stokLayakJual > 0
+                        punyaHargaAktif
                     }
                     .sortedWith(
-                        compareByDescending<Produk> { it.id in producedProductIds }
+                        compareByDescending<Produk> { stokLayakJual(it) > 0 }
+                            .thenByDescending { it.id in producedProductIds }
                             .thenBy { it.name.lowercase() }
                     )
             }.onSuccess { result ->
                 products = result
                 selectedProductIdAktif = products.firstOrNull { it.id == selectedProductIdAktif }?.id
+                    ?: products.firstOrNull { stokLayakJual(it) > 0 }?.id
                     ?: products.firstOrNull()?.id
                 updateProductSelector()
                 refreshPriceOptions()
@@ -163,7 +164,7 @@ class AktivitasRekapPasar : AktivitasDasar() {
 
     private fun labelStatusStokRekap(product: Produk): String {
         return when {
-            stokLayakJual(product) <= 0 -> "Tidak layak jual"
+            stokLayakJual(product) <= 0 -> "Habis"
             product.producedToday -> "Produksi Hari Ini"
             product.nearExpiredStock > 0 -> "Hampir Kadaluarsa"
             else -> "Stok Sisa"
@@ -179,8 +180,8 @@ class AktivitasRekapPasar : AktivitasDasar() {
             else -> product.name
         }
         binding.tvSelectedProductMeta.text = when {
-            products.isEmpty() -> "Tidak ada produk dengan stok layak jual dan harga aktif"
-            product == null -> "Produk produksi hari ini dan stok sisa layak jual bisa direkap"
+            products.isEmpty() -> "Tidak ada produk dengan harga aktif"
+            product == null -> "Gunakan filter Semua, Siap Dijual, atau Habis untuk memilih produk"
             else -> listOf(
                 product.category.ifBlank { "Produk" },
                 labelStatusStokRekap(product),
@@ -203,14 +204,14 @@ class AktivitasRekapPasar : AktivitasDasar() {
                     id = product.id,
                     namaProduk = product.name,
                     jenisProduk = product.category,
-                    stokSaatIni = product.stock.toLong(),
+                    stokSaatIni = stokLayakJual(product).toLong(),
                     satuan = product.unit,
                     aktifDijual = product.active,
                     infoTambahan = "${labelStatusStokRekap(product)} • layak jual ${Formatter.ribuan(stokLayakJual(product).toLong())} ${product.unit}"
                 )
             },
             selectedId = selectedProductIdAktif,
-            kategoriOptions = listOf("Semua", "Dasar", "Olahan")
+            kategoriOptions = listOf("Semua", "Siap Dijual", "Habis")
         ) { selected ->
             selectedProductIdAktif = selected.id
             updateProductSelector()
@@ -323,7 +324,7 @@ class AktivitasRekapPasar : AktivitasDasar() {
             .sumOf { it.qty }
 
         if (totalDraftProduk + qty > stokLayakJual(product)) {
-            showMessage("Stok layak jual ${product.name} tidak mencukupi")
+            showMessage("${product.name} sedang habis atau stok layak jual tidak mencukupi")
             return
         }
 
