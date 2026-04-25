@@ -149,10 +149,10 @@
                             app:boxStrokeColor="#B8B1A5">
 
                             <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/etStock"
+                                android:id="@+id/etMinStock"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:hint="Stok"
+                                android:hint="Min stok"
                                 android:inputType="number"
                                 android:textColor="#293226" />
                         </com.google.android.material.textfield.TextInputLayout>
@@ -174,14 +174,22 @@
                             app:boxStrokeColor="#B8B1A5">
 
                             <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/etMinStock"
+                                android:id="@+id/etNearExpiryDays"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:hint="Min stok"
+                                android:hint="Hampir ED (hari)"
                                 android:inputType="number"
                                 android:textColor="#293226" />
                         </com.google.android.material.textfield.TextInputLayout>
                     </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Stok awal tidak diisi dari form produk. Stok akan bertambah dari produksi atau adjustment."
+                        android:textColor="#7D7569"
+                        android:textSize="12sp" />
 
                     <com.google.android.material.card.MaterialCardView
                         android:id="@+id/cardPhotoTone"

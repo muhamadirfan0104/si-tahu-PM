@@ -169,15 +169,24 @@ object RepositoriFirebaseUtama {
         return formatTanggal.format(cal.time)
     }
 
-    private fun besokKey(): String = tambahHariKey(tanggalKeySaatIni(), 1)
+    private fun batasHampirKadaluarsaKey(hariHampirKadaluarsa: Int): String {
+        val cal = Calendar.getInstance().apply {
+            time = Formatter.parseDate("${tanggalKeySaatIni()}T00:00:00")
+            add(Calendar.DAY_OF_MONTH, hariHampirKadaluarsa.coerceAtLeast(0))
+        }
+        return formatTanggal.format(cal.time)
+    }
 
-    private fun statusBatchKadaluarsa(expiryKey: String): String {
+    private fun statusBatchKadaluarsa(
+        expiryKey: String,
+        hariHampirKadaluarsa: Int = 1
+    ): String {
         val today = tanggalKeySaatIni()
-        val tomorrow = besokKey()
+        val warningLimit = batasHampirKadaluarsaKey(hariHampirKadaluarsa)
         return when {
             expiryKey.isBlank() -> "AMAN"
             expiryKey < today -> "KADALUARSA"
-            expiryKey <= tomorrow -> "HAMPIR_KADALUARSA"
+            expiryKey <= warningLimit -> "HAMPIR_KADALUARSA"
             else -> "AMAN"
         }
     }
@@ -186,7 +195,11 @@ object RepositoriFirebaseUtama {
         return Timestamp(Formatter.parseDate("${expiryKey}T23:59:59"))
     }
 
-    private suspend fun ringkasanBatchStok(productId: String, stokProduk: Long): RingkasanBatchStok {
+    private suspend fun ringkasanBatchStok(
+        productId: String,
+        stokProduk: Long,
+        hariHampirKadaluarsaProduk: Int = 1
+    ): RingkasanBatchStok {
         val snapshot = firestore.collection("BatchStok")
             .whereEqualTo("idProduk", productId)
             .get()
@@ -225,10 +238,11 @@ object RepositoriFirebaseUtama {
                 .ifBlank { dayKeyFromTimestamp(doc.getTimestamp("tanggalProduksi")) }
             val expiryKey = doc.getString("kunciTanggalKadaluarsa").orEmpty()
                 .ifBlank { dayKeyFromTimestamp(doc.getTimestamp("tanggalKadaluarsa")) }
+            val hariHampirKadaluarsa = hariHampirKadaluarsaProduk.coerceAtLeast(0)
 
             if (prodKey == today) producedToday = true
 
-            when (statusBatchKadaluarsa(expiryKey)) {
+            when (statusBatchKadaluarsa(expiryKey, hariHampirKadaluarsa)) {
                 "KADALUARSA" -> expired += qty
                 "HAMPIR_KADALUARSA" -> {
                     near += qty
@@ -476,7 +490,12 @@ object RepositoriFirebaseUtama {
         snapshot.documents.map { doc ->
             async {
                 val stokSaatIni = doc.getLong("stokSaatIni") ?: 0L
-                val ringkasanBatch = ringkasanBatchStok(doc.id, stokSaatIni)
+                val masaSimpanHari = (doc.getLong("masaSimpanHari") ?: 2L).toInt().coerceAtLeast(1)
+                val hariHampirKadaluarsa = (doc.getLong("hariHampirKadaluarsa") ?: 1L)
+                    .toInt()
+                    .coerceAtLeast(0)
+                    .coerceAtMost(masaSimpanHari)
+                val ringkasanBatch = ringkasanBatchStok(doc.id, stokSaatIni, hariHampirKadaluarsa)
                 Produk(
                     id = doc.id,
                     code = doc.getString("kodeProduk").orEmpty().ifBlank { doc.id },
@@ -490,7 +509,8 @@ object RepositoriFirebaseUtama {
                     photoTone = "",
                     channels = muatChannelsProduk(doc.reference.path),
                     deleted = false,
-                    shelfLifeDays = (doc.getLong("masaSimpanHari") ?: 2L).toInt().coerceAtLeast(1),
+                    shelfLifeDays = masaSimpanHari,
+                    nearExpiryWarningDays = hariHampirKadaluarsa,
                     producedToday = ringkasanBatch.producedToday,
                     safeStock = ringkasanBatch.safeStock.toInt(),
                     nearExpiredStock = ringkasanBatch.nearExpiredStock.toInt(),
@@ -591,6 +611,9 @@ object RepositoriFirebaseUtama {
             val kodeProduk = produkSnap.getString("kodeProduk") ?: productId
             val satuanHasil = produkSnap.getString("satuan") ?: "pcs"
             val masaSimpanHari = ((produkSnap.getLong("masaSimpanHari") ?: 2L).toInt()).coerceAtLeast(1)
+            val hariHampirKadaluarsa = ((produkSnap.getLong("hariHampirKadaluarsa") ?: 1L).toInt())
+                .coerceAtLeast(0)
+                .coerceAtMost(masaSimpanHari)
             val kunciKadaluarsa = tambahHariKey(kunciTanggal, masaSimpanHari)
             val stokSaatIni = produkSnap.getLong("stokSaatIni") ?: 0L
             val stokSesudah = stokSaatIni + totalHasil.toLong()
@@ -638,6 +661,7 @@ object RepositoriFirebaseUtama {
                     "tanggalKadaluarsa" to tanggalKadaluarsaTimestamp(kunciKadaluarsa),
                     "kunciTanggalKadaluarsa" to kunciKadaluarsa,
                     "masaSimpanHari" to masaSimpanHari,
+                    "hariHampirKadaluarsa" to hariHampirKadaluarsa,
                     "qtyAwal" to totalHasil.toLong(),
                     "qtySisa" to totalHasil.toLong(),
                     "sumberProduksiId" to catatanRef.id,
@@ -723,6 +747,9 @@ object RepositoriFirebaseUtama {
             val toKode = toSnap.getString("kodeProduk") ?: toProductId
             val toSatuan = toSnap.getString("satuan") ?: "pcs"
             val masaSimpanHari = ((toSnap.getLong("masaSimpanHari") ?: 2L).toInt()).coerceAtLeast(1)
+            val hariHampirKadaluarsa = ((toSnap.getLong("hariHampirKadaluarsa") ?: 1L).toInt())
+                .coerceAtLeast(0)
+                .coerceAtMost(masaSimpanHari)
             val kunciKadaluarsa = tambahHariKey(kunciTanggal, masaSimpanHari)
 
             trx.update(fromRef, mapOf("stokSaatIni" to stokAsalSesudah, "diperbaruiPada" to dibuatPada))
@@ -763,6 +790,7 @@ object RepositoriFirebaseUtama {
                     "tanggalKadaluarsa" to tanggalKadaluarsaTimestamp(kunciKadaluarsa),
                     "kunciTanggalKadaluarsa" to kunciKadaluarsa,
                     "masaSimpanHari" to masaSimpanHari,
+                    "hariHampirKadaluarsa" to hariHampirKadaluarsa,
                     "qtyAwal" to outputQty.toLong(),
                     "qtySisa" to outputQty.toLong(),
                     "sumberProduksiId" to catatanRef.id,

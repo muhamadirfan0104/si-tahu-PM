@@ -34,6 +34,7 @@ data class Produk(
     var channels: MutableList<HargaKanal>,
     var deleted: Boolean = false,
     var shelfLifeDays: Int = 2,
+    var nearExpiryWarningDays: Int = 1,
     var producedToday: Boolean = false,
     var safeStock: Int = stock,
     var nearExpiredStock: Int = 0,
