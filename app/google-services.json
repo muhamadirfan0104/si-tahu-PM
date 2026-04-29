@@ -1,13 +1,14 @@
 {
   "project_info": {
-    "project_number": "865925230095",
-    "project_id": "sitahu-e1660",
-    "storage_bucket": "sitahu-e1660.firebasestorage.app"
+    "project_number": "450369758152",
+    "firebase_url": "https://si-tahu-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "si-tahu",
+    "storage_bucket": "si-tahu.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:865925230095:android:f2db0b83923233a44cbd7a",
+        "mobilesdk_app_id": "1:450369758152:android:441e945dda17e19e5996fd",
         "android_client_info": {
           "package_name": "muhamad.irfan.si_tahu"
         }
@@ -15,7 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDSB6SHSFAzZJXFdn6-vxXFodA1i0MdCYc"
+          "current_key": "AIzaSyD3Di5RB3yA0B-HeaPhlnPxD93uKS-bPQU"
         }
       ],
       "services": {

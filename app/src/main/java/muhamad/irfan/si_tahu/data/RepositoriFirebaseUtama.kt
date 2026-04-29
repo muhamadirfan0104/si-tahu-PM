@@ -1380,13 +1380,17 @@ object RepositoriFirebaseUtama {
         metodePembayaranUi: String,
         uangDiterima: Long,
         cartItems: List<ItemKeranjang>,
-        products: List<Produk>
+        products: List<Produk>,
+        paymentGateway: String = "",
+        paymentOrderId: String = "",
+        paymentUrl: String = "",
+        statusPembayaran: String = ""
     ): String {
         require(cartItems.isNotEmpty()) { "Keranjang masih kosong" }
 
-        val metode = when (metodePembayaranUi.uppercase()) {
+        val metode = when (metodePembayaranUi.trim().uppercase()) {
             "TUNAI" -> "TUNAI"
-            "QRIS" -> "QRIS"
+            "QRIS", "PAYMENT LINK", "PAYMENT_LINK", "MIDTRANS" -> "QRIS"
             "TRANSFER" -> "TRANSFER"
             else -> "TUNAI"
         }
@@ -1490,6 +1494,10 @@ object RepositoriFirebaseUtama {
                     "uangDiterima" to if (metode == "TUNAI") uangDiterima else total,
                     "uangKembalian" to if (metode == "TUNAI") (uangDiterima - total).coerceAtLeast(0L) else 0L,
                     "statusPenjualan" to "SELESAI",
+                    "statusPembayaran" to statusPembayaran.ifBlank { "PAID" },
+                    "paymentGateway" to paymentGateway,
+                    "paymentOrderId" to paymentOrderId,
+                    "paymentUrl" to paymentUrl,
                     "alasanPembatalan" to "",
                     "dibatalkanOlehId" to "",
                     "dibatalkanOlehNama" to "",
@@ -1895,6 +1903,9 @@ object RepositoriFirebaseUtama {
         val total = saleDoc.getLong("totalBelanja") ?: 0L
         val uangDiterima = saleDoc.getLong("uangDiterima") ?: 0L
         val uangKembalian = saleDoc.getLong("uangKembalian") ?: 0L
+        val statusPembayaran = saleDoc.getString("statusPembayaran").orEmpty()
+        val paymentGateway = saleDoc.getString("paymentGateway").orEmpty()
+        val paymentOrderId = saleDoc.getString("paymentOrderId").orEmpty()
         val namaUsaha = settingDoc?.getString("namaTampilanToko").orEmpty().ifBlank { "SI Tahu" }
         val alamat = settingDoc?.getString("alamatToko").orEmpty().ifBlank { "-" }
         val telepon = settingDoc?.getString("nomorTelepon").orEmpty().ifBlank { "-" }
@@ -1904,11 +1915,22 @@ object RepositoriFirebaseUtama {
         val timestampBatal = saleDoc.getTimestamp("dibatalkanPada")
         val tanggalBatal = timestampBatal?.let { Formatter.readableDateTime(isoFromTimestamp(it)) }.orEmpty()
 
+        val infoGateway = if (paymentGateway.isNotBlank() || paymentOrderId.isNotBlank()) {
+            """
+Status Bayar   : ${statusPembayaran.ifBlank { "PAID" }}
+Gateway        : ${paymentGateway.ifBlank { "-" }}
+Order ID       : ${paymentOrderId.ifBlank { "-" }}
+            """.trimIndent()
+        } else {
+            "Status Bayar   : ${statusPembayaran.ifBlank { "PAID" }}"
+        }
+
         val pembayaranText = if (metodeLabel.equals("Rekap", true)) {
             """
 RINGKASAN PEMBAYARAN
 Total          : ${Formatter.currency(total)}
 Nilai Rekap    : ${Formatter.currency(total)}
+$infoGateway
             """.trimIndent()
         } else {
             """
@@ -1916,6 +1938,7 @@ RINGKASAN PEMBAYARAN
 Total          : ${Formatter.currency(total)}
 Dibayar        : ${Formatter.currency(uangDiterima)}
 Kembalian      : ${Formatter.currency(uangKembalian)}
+$infoGateway
             """.trimIndent()
         }
 
