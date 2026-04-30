@@ -2,22 +2,40 @@ package muhamad.irfan.si_tahu.ui.penjualan
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.datepicker.MaterialDatePicker
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDaftarDasar
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.util.PembuatQrBitmap
 import muhamad.irfan.si_tahu.utilitas.PembantuFilterRiwayat
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
+
+private const val XENDIT_API_BASE_RIWAYAT = "https://xendit-sitahu-api.vercel.app"
 
 class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
 
@@ -102,10 +120,10 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                     semuaRows = sales
                         .sortedByDescending { it.tanggalIso }
                         .map {
-                            val statusLabel = if (it.statusPenjualan.equals("BATAL", true)) {
-                                "Batal"
-                            } else {
-                                "Selesai"
+                            val statusLabel = when {
+                                it.statusPenjualan.equals("BATAL", true) -> "Batal"
+                                it.statusPenjualan.equals("PENDING", true) -> "Pending"
+                                else -> "Selesai"
                             }
 
                             RiwayatPenjualanUiRow(
@@ -122,10 +140,10 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                                         else -> WarnaBaris.GOLD
                                     },
                                     parameterStatus = statusLabel,
-                                    parameterTone = if (statusLabel == "Batal") {
-                                        WarnaBaris.RED
-                                    } else {
-                                        WarnaBaris.GREEN
+                                    parameterTone = when (statusLabel) {
+                                        "Batal" -> WarnaBaris.RED
+                                        "Pending" -> WarnaBaris.GOLD
+                                        else -> WarnaBaris.GREEN
                                     },
                                     actionLabel = "⋮"
                                 )
@@ -376,6 +394,14 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
     }
 
     override fun onRowClick(item: ItemBaris) {
+        if (item.parameterStatus.equals("Pending", true)) {
+            tampilkanQrisPending(item)
+            return
+        }
+        tampilkanDetailPenjualan(item)
+    }
+
+    private fun tampilkanDetailPenjualan(item: ItemBaris) {
         lifecycleScope.launch {
             runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
                 .onSuccess { detail ->
@@ -391,7 +417,11 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         PopupMenu(this, anchor).apply {
             menu.add("Lihat detail")
             menu.add("Bagikan")
-            if (!item.parameterStatus.equals("Batal", true)) {
+            if (item.parameterStatus.equals("Pending", true)) {
+                menu.add("Lihat QRIS")
+                menu.add("Cek status QRIS")
+                menu.add("Batalkan QRIS")
+            } else if (!item.parameterStatus.equals("Batal", true)) {
                 menu.add("Batalkan penjualan")
             }
             if (izinkanHapus) {
@@ -400,8 +430,9 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
 
             setOnMenuItemClickListener {
                 when (it.title.toString()) {
-                    "Lihat detail" -> onRowClick(item)
+                    "Lihat detail" -> tampilkanDetailPenjualan(item)
 
+                    "Lihat QRIS" -> tampilkanQrisPending(item)
                     "Bagikan" -> lifecycleScope.launch {
                         runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
                             .onSuccess { detail ->
@@ -412,6 +443,8 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
                             }
                     }
 
+                    "Cek status QRIS" -> cekStatusQrisPending(item)
+                    "Batalkan QRIS" -> confirmCancel(item)
                     "Batalkan penjualan" -> confirmCancel(item)
                     "Hapus" -> confirmDelete(item)
                 }
@@ -420,6 +453,189 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         }.show()
     }
 
+
+    private fun tampilkanQrisPending(item: ItemBaris) {
+        lifecycleScope.launch {
+            runCatching { RepositoriFirebaseUtama.muatInfoQrisPending(item.id) }
+                .onSuccess { info ->
+                    if (!info.statusPenjualan.equals("PENDING", true)) {
+                        showMessage("Transaksi ini tidak lagi pending")
+                        buildRows()
+                        return@onSuccess
+                    }
+                    if (info.paymentQrString.isBlank()) {
+                        showMessage("QRIS transaksi lama belum menyimpan data QR. Batalkan lalu buat QRIS baru.")
+                        return@onSuccess
+                    }
+                    tampilkanDialogQrisPending(item, info)
+                }
+                .onFailure {
+                    showMessage(it.message ?: "Gagal memuat QRIS")
+                }
+        }
+    }
+
+    private fun tampilkanDialogQrisPending(item: ItemBaris, info: RepositoriFirebaseUtama.QrisPendingInfo) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(32, 24, 32, 8)
+        }
+
+        val totalText = TextView(this).apply {
+            text = Formatter.currency(info.totalBelanja)
+            textSize = 24f
+            setTextColor(Color.BLACK)
+            gravity = Gravity.CENTER
+        }
+
+        val caption = TextView(this).apply {
+            text = "Scan QRIS Xendit ini. Transaksi masih pending dan belum mengurangi stok."
+            textSize = 14f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 8, 0, 16)
+        }
+
+        val qrImage = ImageView(this).apply {
+            setImageBitmap(PembuatQrBitmap.buat(info.paymentQrString, 1000))
+            adjustViewBounds = true
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundColor(Color.WHITE)
+            setPadding(12, 12, 12, 12)
+        }
+
+        val waktuText = TextView(this).apply {
+            val sisa = if (info.paymentQrExpiresAtMillis > 0L) {
+                info.paymentQrExpiresAtMillis - System.currentTimeMillis()
+            } else {
+                0L
+            }
+            text = buildString {
+                append("Order: ${info.paymentOrderId}\n")
+                append("QR ID: ${info.paymentQrId.ifBlank { "-" }}\n")
+                append(if (sisa > 0L) "Sisa waktu: ${formatDurasiRiwayat(sisa)}" else "Status waktu: cek status / batalkan jika belum dibayar")
+            }
+            textSize = 12f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 16, 0, 0)
+        }
+
+        container.addView(totalText)
+        container.addView(caption)
+        container.addView(qrImage)
+        container.addView(waktuText)
+
+        val scrollView = ScrollView(this).apply { addView(container) }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("QRIS Pending")
+            .setView(scrollView)
+            .setPositiveButton("Cek Status") { _, _ -> cekStatusQrisPending(item) }
+            .setNegativeButton("Tutup", null)
+            .setNeutralButton("Batalkan") { _, _ -> confirmCancel(item) }
+            .show()
+    }
+
+    private fun formatDurasiRiwayat(ms: Long): String {
+        val safeMs = ms.coerceAtLeast(0L)
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(safeMs)
+        val seconds = TimeUnit.MILLISECONDS.toSeconds(safeMs) % 60
+        return String.format(Locale.US, "%02d:%02d", minutes, seconds)
+    }
+
+    private fun cekStatusQrisPending(item: ItemBaris) {
+        lifecycleScope.launch {
+            runCatching {
+                val info = RepositoriFirebaseUtama.muatInfoQrisPending(item.id)
+                require(info.paymentOrderId.isNotBlank()) { "Order ID QRIS belum tercatat" }
+                val status = bacaStatusXendit(info.paymentOrderId, info.totalBelanja)
+                if (status.paid && status.status.equals("COMPLETED", ignoreCase = true)) {
+                    val products = RepositoriFirebaseUtama.muatProdukKasir()
+                    val saleId = RepositoriFirebaseUtama.selesaikanPenjualanQrisPending(
+                        id = item.id,
+                        userAuthId = currentUserId(),
+                        products = products,
+                        paymentStatus = status.status.uppercase(Locale.US),
+                        paymentSource = status.source,
+                        paymentReferenceId = status.receiptId.ifBlank { status.paymentId },
+                        paymentPaidAt = status.paidAt,
+                        paymentAmount = status.amount
+                    )
+                    RepositoriFirebaseUtama.buildReceiptText(saleId)
+                } else {
+                    null
+                }
+            }.onSuccess { receipt ->
+                buildRows()
+                if (receipt != null) {
+                    showReceiptModal("QRIS sudah dibayar", receipt)
+                } else {
+                    showMessage("Pembayaran QRIS masih pending")
+                }
+            }.onFailure {
+                showMessage(it.message ?: "Gagal cek status QRIS")
+            }
+        }
+    }
+
+    private suspend fun bacaStatusXendit(externalId: String, fallbackAmount: Long): StatusXenditGateway = withContext(Dispatchers.IO) {
+        val response = postJsonRiwayat(
+            path = "/api/cek-status-xendit",
+            body = JSONObject().put("externalId", externalId)
+        )
+        val json = JSONObject(response)
+        val payment = json.optJSONObject("payment")
+        val details = payment?.optJSONObject("payment_details")
+        StatusXenditGateway(
+            paid = json.optBoolean("paid", false),
+            status = json.optString("status", "PENDING"),
+            paymentId = payment?.optString("id").orEmpty(),
+            source = details?.optString("source").orEmpty(),
+            receiptId = details?.optString("receipt_id").orEmpty(),
+            paidAt = payment?.optString("created").orEmpty(),
+            amount = payment?.optLong("amount", fallbackAmount) ?: fallbackAmount
+        )
+    }
+
+    private suspend fun postJsonRiwayat(path: String, body: JSONObject): String = withContext(Dispatchers.IO) {
+        val url = URL(XENDIT_API_BASE_RIWAYAT.trimEnd('/') + path)
+        val connection = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 20_000
+            readTimeout = 30_000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            connection.outputStream.use { output ->
+                output.write(body.toString().toByteArray(Charsets.UTF_8))
+            }
+            val stream = if (connection.responseCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream ?: connection.inputStream
+            }
+            val responseText = BufferedReader(InputStreamReader(stream)).use { it.readText() }
+            if (connection.responseCode !in 200..299) {
+                val message = runCatching {
+                    val json = JSONObject(responseText)
+                    json.optString("message")
+                        .ifBlank { json.optJSONObject("xendit")?.optString("message").orEmpty() }
+                        .ifBlank { responseText }
+                }.getOrElse { responseText }
+                throw IllegalStateException(message)
+            }
+            responseText
+        } finally {
+            connection.disconnect()
+        }
+    }
     private fun confirmCancel(item: ItemBaris) {
         showInputModal(
             title = "Batalkan penjualan",
@@ -514,6 +730,16 @@ class AktivitasRiwayatPenjualan : AktivitasDaftarDasar() {
         }
     }
 }
+
+private data class StatusXenditGateway(
+    val paid: Boolean,
+    val status: String,
+    val paymentId: String,
+    val source: String,
+    val receiptId: String,
+    val paidAt: String,
+    val amount: Long
+)
 
 data class RiwayatPenjualanUiRow(
     val tanggalIso: String,

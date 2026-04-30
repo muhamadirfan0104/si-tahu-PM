@@ -69,6 +69,19 @@ object RepositoriFirebaseUtama {
         val statusPenjualan: String
     )
 
+    data class QrisPendingInfo(
+        val saleId: String,
+        val nomorPenjualan: String,
+        val paymentOrderId: String,
+        val paymentQrId: String,
+        val paymentQrString: String,
+        val paymentQrCreatedAtMillis: Long,
+        val paymentQrExpiresAtMillis: Long,
+        val totalBelanja: Long,
+        val statusPembayaran: String,
+        val statusPenjualan: String
+    )
+
     data class RingkasanDashboard(
         val namaUsaha: String,
         val tanggalRingkasan: String,
@@ -1383,14 +1396,21 @@ object RepositoriFirebaseUtama {
         products: List<Produk>,
         paymentGateway: String = "",
         paymentOrderId: String = "",
-        paymentUrl: String = "",
-        statusPembayaran: String = ""
+        paymentQrId: String = "",
+        paymentQrString: String = "",
+        paymentQrCreatedAtMillis: Long = 0L,
+        paymentQrExpiresAtMillis: Long = 0L,
+        paymentStatus: String = "",
+        paymentSource: String = "",
+        paymentReferenceId: String = "",
+        paymentPaidAt: String = "",
+        paymentAmount: Long = 0L
     ): String {
         require(cartItems.isNotEmpty()) { "Keranjang masih kosong" }
 
-        val metode = when (metodePembayaranUi.trim().uppercase()) {
+        val metode = when (metodePembayaranUi.uppercase()) {
             "TUNAI" -> "TUNAI"
-            "QRIS", "PAYMENT LINK", "PAYMENT_LINK", "MIDTRANS" -> "QRIS"
+            "QRIS" -> "QRIS"
             "TRANSFER" -> "TRANSFER"
             else -> "TUNAI"
         }
@@ -1399,6 +1419,19 @@ object RepositoriFirebaseUtama {
         if (metode == "TUNAI" && uangDiterima < total) {
             throw IllegalArgumentException("Uang diterima kurang dari total belanja")
         }
+        if (metode == "QRIS") {
+            require(paymentGateway.isNotBlank()) { "Gateway QRIS belum tercatat" }
+            require(paymentOrderId.isNotBlank()) { "Order ID QRIS belum tercatat" }
+            require(paymentStatus.equals("COMPLETED", ignoreCase = true)) {
+                "Pembayaran QRIS belum selesai"
+            }
+        }
+        val statusPembayaranFinal = when {
+            paymentStatus.equals("COMPLETED", ignoreCase = true) -> "PAID"
+            paymentStatus.isNotBlank() -> paymentStatus.uppercase()
+            else -> "PAID"
+        }
+        val amountTerbayar = if (paymentAmount > 0L) paymentAmount else if (metode == "TUNAI") uangDiterima else total
 
         val saleRef = firestore.collection("Penjualan").document(newId("pjl"))
         val user = cariPengguna(userAuthId)
@@ -1493,11 +1526,20 @@ object RepositoriFirebaseUtama {
                     "totalBelanja" to total,
                     "uangDiterima" to if (metode == "TUNAI") uangDiterima else total,
                     "uangKembalian" to if (metode == "TUNAI") (uangDiterima - total).coerceAtLeast(0L) else 0L,
-                    "statusPenjualan" to "SELESAI",
-                    "statusPembayaran" to statusPembayaran.ifBlank { "PAID" },
                     "paymentGateway" to paymentGateway,
                     "paymentOrderId" to paymentOrderId,
-                    "paymentUrl" to paymentUrl,
+                    "paymentQrId" to paymentQrId,
+                    "paymentQrString" to paymentQrString,
+                    "paymentQrCreatedAtMillis" to paymentQrCreatedAtMillis,
+                    "paymentQrExpiresAtMillis" to paymentQrExpiresAtMillis,
+                    "paymentStatus" to paymentStatus.uppercase(),
+                    "paymentSource" to paymentSource,
+                    "paymentReferenceId" to paymentReferenceId,
+                    "paymentPaidAt" to paymentPaidAt,
+                    "paymentAmount" to amountTerbayar,
+                    "statusPembayaran" to statusPembayaranFinal,
+                    "statusTransaksiKasir" to "CLOSED",
+                    "statusPenjualan" to "SELESAI",
                     "alasanPembatalan" to "",
                     "dibatalkanOlehId" to "",
                     "dibatalkanOlehNama" to "",
@@ -1548,6 +1590,260 @@ object RepositoriFirebaseUtama {
         return saleRef.id
     }
 
+
+    suspend fun buatPenjualanQrisPending(
+        userAuthId: String,
+        cartItems: List<ItemKeranjang>,
+        products: List<Produk>,
+        paymentGateway: String,
+        paymentOrderId: String,
+        paymentQrId: String,
+        paymentQrString: String,
+        paymentQrCreatedAtMillis: Long,
+        paymentQrExpiresAtMillis: Long,
+        paymentStatus: String,
+        paymentAmount: Long
+    ): String {
+        require(cartItems.isNotEmpty()) { "Keranjang masih kosong" }
+        require(paymentGateway.isNotBlank()) { "Gateway QRIS belum tercatat" }
+        require(paymentOrderId.isNotBlank()) { "Order ID QRIS belum tercatat" }
+
+        val total = cartItems.sumOf { it.qty.toLong() * it.price }
+        val saleRef = firestore.collection("Penjualan").document(newId("pjl"))
+        val user = cariPengguna(userAuthId)
+        val dibuatPada = nowTimestamp()
+        val kunciTanggal = Formatter.currentDateOnly()
+        val tanggalPenjualan = dibuatPada
+        val nomorPenjualan = "PJL-${kunciTanggal.replace("-", "")}-${saleRef.id.takeLast(4).uppercase()}"
+
+        firestore.runTransaction { trx ->
+            val produkSnapshots = cartItems.associate { item ->
+                val ref = produkRef(item.productId)
+                item.productId to trx.get(ref)
+            }
+
+            cartItems.forEach { item ->
+                val produk = products.firstOrNull { it.id == item.productId }
+                    ?: throw IllegalStateException("Produk keranjang tidak ditemukan")
+                val snap = produkSnapshots[item.productId]
+                    ?: throw IllegalStateException("Snapshot produk tidak ditemukan")
+                val stok = snap.getLong("stokSaatIni") ?: 0L
+                check(stok >= item.qty) { "Stok ${produk.name} tidak mencukupi" }
+                val stokLayakJual = produk.safeStock + produk.nearExpiredStock
+                check(stokLayakJual >= item.qty) {
+                    "Stok layak jual ${produk.name} tidak mencukupi. Stok kadaluarsa tidak bisa dijual."
+                }
+            }
+
+            trx.set(
+                saleRef,
+                mapOf(
+                    "nomorPenjualan" to nomorPenjualan,
+                    "tanggalPenjualan" to tanggalPenjualan,
+                    "kunciTanggal" to kunciTanggal,
+                    "sumberTransaksi" to "KASIR",
+                    "metodePembayaran" to "QRIS",
+                    "totalItem" to cartItems.sumOf { it.qty },
+                    "totalBelanja" to total,
+                    "uangDiterima" to 0L,
+                    "uangKembalian" to 0L,
+                    "paymentGateway" to paymentGateway,
+                    "paymentOrderId" to paymentOrderId,
+                    "paymentQrId" to paymentQrId,
+                    "paymentQrString" to paymentQrString,
+                    "paymentQrCreatedAtMillis" to paymentQrCreatedAtMillis,
+                    "paymentQrExpiresAtMillis" to paymentQrExpiresAtMillis,
+                    "paymentStatus" to paymentStatus.uppercase(),
+                    "paymentSource" to "",
+                    "paymentReferenceId" to "",
+                    "paymentPaidAt" to "",
+                    "paymentAmount" to paymentAmount,
+                    "statusPembayaran" to "PENDING_PAYMENT",
+                    "statusTransaksiKasir" to "PENDING_PAYMENT",
+                    "statusPenjualan" to "PENDING",
+                    "alasanPembatalan" to "",
+                    "dibatalkanOlehId" to "",
+                    "dibatalkanOlehNama" to "",
+                    "dibatalkanPada" to null,
+                    "catatanPenjualan" to "QRIS dibuat dan menunggu pembayaran",
+                    "idKasir" to (user?.idDokumen ?: userAuthId),
+                    "namaKasir" to (user?.nama ?: "Kasir"),
+                    "dibuatPada" to dibuatPada,
+                    "diperbaruiPada" to dibuatPada
+                )
+            )
+
+            cartItems.forEachIndexed { index, item ->
+                val produk = products.first { it.id == item.productId }
+                trx.set(
+                    saleRef.collection("rincian").document("rnc_${index + 1}"),
+                    mapOf(
+                        "idProduk" to produk.id,
+                        "kodeProduk" to produk.code,
+                        "namaProduk" to produk.name,
+                        "jumlah" to item.qty,
+                        "satuan" to produk.unit,
+                        "hargaSatuan" to item.price,
+                        "kanalHarga" to "Rumahan",
+                        "subtotal" to item.qty.toLong() * item.price
+                    )
+                )
+            }
+        }.await()
+
+        return saleRef.id
+    }
+
+    suspend fun muatInfoQrisPending(id: String): QrisPendingInfo {
+        val doc = firestore.collection("Penjualan").document(id).get().await()
+        if (!doc.exists()) throw IllegalStateException("Data penjualan tidak ditemukan")
+        return QrisPendingInfo(
+            saleId = doc.id,
+            nomorPenjualan = doc.getString("nomorPenjualan").orEmpty().ifBlank { doc.id },
+            paymentOrderId = doc.getString("paymentOrderId").orEmpty(),
+            paymentQrId = doc.getString("paymentQrId").orEmpty(),
+            paymentQrString = doc.getString("paymentQrString").orEmpty(),
+            paymentQrCreatedAtMillis = doc.getLong("paymentQrCreatedAtMillis") ?: 0L,
+            paymentQrExpiresAtMillis = doc.getLong("paymentQrExpiresAtMillis") ?: 0L,
+            totalBelanja = doc.getLong("totalBelanja") ?: 0L,
+            statusPembayaran = doc.getString("statusPembayaran").orEmpty(),
+            statusPenjualan = doc.getString("statusPenjualan").orEmpty().ifBlank { "SELESAI" }
+        )
+    }
+
+    suspend fun selesaikanPenjualanQrisPending(
+        id: String,
+        userAuthId: String,
+        products: List<Produk>,
+        paymentStatus: String,
+        paymentSource: String,
+        paymentReferenceId: String,
+        paymentPaidAt: String,
+        paymentAmount: Long
+    ): String {
+        val saleRef = firestore.collection("Penjualan").document(id)
+        val saleDoc = saleRef.get().await()
+        if (!saleDoc.exists()) throw IllegalStateException("Data penjualan tidak ditemukan")
+
+        val statusPenjualan = saleDoc.getString("statusPenjualan").orEmpty().ifBlank { "SELESAI" }
+        val statusPembayaran = saleDoc.getString("statusPembayaran").orEmpty()
+        if (!statusPenjualan.equals("PENDING", true) && !statusPembayaran.equals("PENDING_PAYMENT", true)) {
+            if (statusPenjualan.equals("SELESAI", true)) return saleRef.id
+            throw IllegalStateException("Transaksi QRIS ini tidak dalam status pending")
+        }
+        if (!paymentStatus.equals("COMPLETED", ignoreCase = true)) {
+            throw IllegalStateException("Pembayaran QRIS belum selesai")
+        }
+
+        val detailSnapshot = saleRef.collection("rincian").get().await()
+        if (detailSnapshot.isEmpty) throw IllegalStateException("Rincian penjualan tidak ditemukan")
+
+        val user = cariPengguna(userAuthId)
+        val dibuatPada = nowTimestamp()
+        val tanggalPenjualan = saleDoc.getTimestamp("tanggalPenjualan") ?: dibuatPada
+        val kunciTanggal = saleDoc.getString("kunciTanggal").orEmpty()
+            .ifBlank { dayKeyFromTimestamp(tanggalPenjualan) }
+        val nomorPenjualan = saleDoc.getString("nomorPenjualan").orEmpty().ifBlank { saleRef.id }
+        val metode = "QRIS"
+        val batchRefsByProduct = muatBatchStokFefoRefs(detailSnapshot.documents.map { it.getString("idProduk").orEmpty() })
+        val total = saleDoc.getLong("totalBelanja") ?: 0L
+        var riwayatDrafts: List<DraftRiwayatStok> = emptyList()
+
+        firestore.runTransaction { trx ->
+            val produkSnapshots = detailSnapshot.documents.associate { detail ->
+                val productId = detail.getString("idProduk").orEmpty()
+                if (productId.isBlank()) throw IllegalStateException("Produk pada rincian penjualan tidak valid")
+                productId to trx.get(produkRef(productId))
+            }
+
+            val localRiwayat = mutableListOf<DraftRiwayatStok>()
+            val localAlokasiBatch = mutableMapOf<String, List<AlokasiBatch>>()
+
+            detailSnapshot.documents.forEach { detail ->
+                val productId = detail.getString("idProduk").orEmpty()
+                val qty = detail.getLong("jumlah") ?: 0L
+                val namaProdukDetail = detail.getString("namaProduk").orEmpty().ifBlank { productId }
+                val produk = products.firstOrNull { it.id == productId }
+                    ?: throw IllegalStateException("Produk $namaProdukDetail tidak ditemukan")
+                val snap = produkSnapshots[productId]
+                    ?: throw IllegalStateException("Snapshot produk tidak ditemukan")
+                val stok = snap.getLong("stokSaatIni") ?: 0L
+                check(stok >= qty) { "Stok ${produk.name} tidak mencukupi" }
+                val stokLayakJual = produk.safeStock + produk.nearExpiredStock
+                check(stokLayakJual >= qty) {
+                    "Stok layak jual ${produk.name} tidak mencukupi. Stok kadaluarsa tidak bisa dijual."
+                }
+
+                val alokasiBatch = siapkanAlokasiBatchFefo(
+                    trx = trx,
+                    productId = produk.id,
+                    productName = produk.name,
+                    qtyDiminta = qty,
+                    batchRefsByProduct = batchRefsByProduct
+                )
+                localAlokasiBatch[produk.id] = alokasiBatch
+
+                localRiwayat += DraftRiwayatStok(
+                    tanggalMutasi = tanggalPenjualan,
+                    kunciTanggal = kunciTanggal,
+                    idProduk = produk.id,
+                    kodeProduk = produk.code,
+                    namaProduk = produk.name,
+                    jenisMutasi = "PENJUALAN_RUMAHAN",
+                    sumberMutasi = "Penjualan",
+                    referensiId = saleRef.id,
+                    qtyMasuk = 0L,
+                    qtyKeluar = qty,
+                    stokSebelum = stok,
+                    stokSesudah = stok - qty,
+                    catatan = "$nomorPenjualan • ${labelMetodePembayaran(metode)}",
+                    idPembuat = user?.idDokumen ?: userAuthId,
+                    namaPembuat = user?.nama ?: "Kasir"
+                )
+            }
+
+            terapkanAlokasiBatchFefo(trx, localAlokasiBatch.values.flatten(), dibuatPada)
+
+            detailSnapshot.documents.forEach { detail ->
+                val productId = detail.getString("idProduk").orEmpty()
+                val qty = detail.getLong("jumlah") ?: 0L
+                val snap = produkSnapshots[productId]
+                    ?: throw IllegalStateException("Snapshot produk tidak ditemukan")
+                val stok = snap.getLong("stokSaatIni") ?: 0L
+                trx.update(
+                    produkRef(productId),
+                    mapOf(
+                        "stokSaatIni" to (stok - qty),
+                        "diperbaruiPada" to dibuatPada
+                    )
+                )
+            }
+
+            trx.update(
+                saleRef,
+                mapOf(
+                    "uangDiterima" to total,
+                    "uangKembalian" to 0L,
+                    "paymentStatus" to paymentStatus.uppercase(),
+                    "paymentSource" to paymentSource,
+                    "paymentReferenceId" to paymentReferenceId,
+                    "paymentPaidAt" to paymentPaidAt,
+                    "paymentAmount" to if (paymentAmount > 0L) paymentAmount else total,
+                    "statusPembayaran" to "PAID",
+                    "statusTransaksiKasir" to "CLOSED",
+                    "statusPenjualan" to "SELESAI",
+                    "catatanPenjualan" to "QRIS sudah dibayar",
+                    "diperbaruiPada" to dibuatPada
+                )
+            )
+
+            riwayatDrafts = localRiwayat
+        }.await()
+
+        catatRiwayatStok(riwayatDrafts)
+        perbaruiRingkasanHarian(kunciTanggal)
+        return saleRef.id
+    }
     suspend fun simpanRekapPasar(
         dateOnly: String,
         timeOnly: String,
@@ -1874,10 +2170,20 @@ object RepositoriFirebaseUtama {
         val statusRaw = saleDoc.getString("statusPenjualan").orEmpty().ifBlank { "SELESAI" }
         val statusLabel = when (statusRaw.uppercase()) {
             "SELESAI" -> "Selesai"
+            "PENDING" -> "Pending QRIS"
             "BATAL" -> "Dibatalkan"
             else -> statusRaw
         }
         val metodeLabel = labelMetodePembayaran(saleDoc.getString("metodePembayaran"))
+        val paymentGateway = saleDoc.getString("paymentGateway").orEmpty()
+        val paymentOrderId = saleDoc.getString("paymentOrderId").orEmpty()
+        val paymentStatus = saleDoc.getString("statusPembayaran").orEmpty()
+            .ifBlank { saleDoc.getString("paymentStatus").orEmpty() }
+        val gatewayStatus = saleDoc.getString("paymentStatus").orEmpty()
+        val paymentSource = saleDoc.getString("paymentSource").orEmpty()
+        val paymentReferenceId = saleDoc.getString("paymentReferenceId").orEmpty()
+        val paymentPaidAt = saleDoc.getString("paymentPaidAt").orEmpty()
+        val paymentAmount = saleDoc.getLong("paymentAmount") ?: 0L
 
         val detailText = if (detailSnapshot.isEmpty) {
             "Tidak ada rincian item"
@@ -1903,9 +2209,6 @@ object RepositoriFirebaseUtama {
         val total = saleDoc.getLong("totalBelanja") ?: 0L
         val uangDiterima = saleDoc.getLong("uangDiterima") ?: 0L
         val uangKembalian = saleDoc.getLong("uangKembalian") ?: 0L
-        val statusPembayaran = saleDoc.getString("statusPembayaran").orEmpty()
-        val paymentGateway = saleDoc.getString("paymentGateway").orEmpty()
-        val paymentOrderId = saleDoc.getString("paymentOrderId").orEmpty()
         val namaUsaha = settingDoc?.getString("namaTampilanToko").orEmpty().ifBlank { "SI Tahu" }
         val alamat = settingDoc?.getString("alamatToko").orEmpty().ifBlank { "-" }
         val telepon = settingDoc?.getString("nomorTelepon").orEmpty().ifBlank { "-" }
@@ -1915,14 +2218,19 @@ object RepositoriFirebaseUtama {
         val timestampBatal = saleDoc.getTimestamp("dibatalkanPada")
         val tanggalBatal = timestampBatal?.let { Formatter.readableDateTime(isoFromTimestamp(it)) }.orEmpty()
 
-        val infoGateway = if (paymentGateway.isNotBlank() || paymentOrderId.isNotBlank()) {
+        val gatewayBlock = if (paymentGateway.isNotBlank() || paymentOrderId.isNotBlank()) {
             """
-Status Bayar   : ${statusPembayaran.ifBlank { "PAID" }}
-Gateway        : ${paymentGateway.ifBlank { "-" }}
-Order ID       : ${paymentOrderId.ifBlank { "-" }}
+Gateway       : ${paymentGateway.ifBlank { "-" }}
+Order Gateway : ${paymentOrderId.ifBlank { "-" }}
+Status Bayar  : ${paymentStatus.ifBlank { "-" }}
+Status Gateway: ${gatewayStatus.ifBlank { "-" }}
+Nominal Bayar : ${if (paymentAmount > 0L) Formatter.currency(paymentAmount) else "-"}
+Sumber Bayar  : ${paymentSource.ifBlank { "-" }}
+Ref Bayar     : ${paymentReferenceId.ifBlank { "-" }}
+Waktu Gateway : ${paymentPaidAt.ifBlank { "-" }}
             """.trimIndent()
         } else {
-            "Status Bayar   : ${statusPembayaran.ifBlank { "PAID" }}"
+            ""
         }
 
         val pembayaranText = if (metodeLabel.equals("Rekap", true)) {
@@ -1930,7 +2238,6 @@ Order ID       : ${paymentOrderId.ifBlank { "-" }}
 RINGKASAN PEMBAYARAN
 Total          : ${Formatter.currency(total)}
 Nilai Rekap    : ${Formatter.currency(total)}
-$infoGateway
             """.trimIndent()
         } else {
             """
@@ -1938,7 +2245,6 @@ RINGKASAN PEMBAYARAN
 Total          : ${Formatter.currency(total)}
 Dibayar        : ${Formatter.currency(uangDiterima)}
 Kembalian      : ${Formatter.currency(uangKembalian)}
-$infoGateway
             """.trimIndent()
         }
 
@@ -1969,7 +2275,8 @@ Kasir/Admin    : ${saleDoc.getString("namaKasir").orEmpty().ifBlank { "-" }}
 DETAIL ITEM
 $detailText
 ────────────────────────
-$pembayaranText$pembatalanBlock
+$pembayaranText
+$gatewayBlock$pembatalanBlock
 Catatan        : ${saleDoc.getString("catatanPenjualan").orEmpty().ifBlank { "-" }}
 ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
         """.trimIndent()
@@ -1987,8 +2294,28 @@ ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
         }
 
         val status = saleDoc.getString("statusPenjualan").orEmpty().ifBlank { "SELESAI" }
+        val dibuatPada = nowTimestamp()
+        val user = cariPengguna(userAuthId)
+
+        if (status.equals("PENDING", ignoreCase = true)) {
+            saleRef.update(
+                mapOf(
+                    "statusPenjualan" to "BATAL",
+                    "statusPembayaran" to "CANCELLED",
+                    "statusTransaksiKasir" to "CANCELLED",
+                    "paymentStatus" to "CANCELLED",
+                    "alasanPembatalan" to alasan.trim(),
+                    "dibatalkanOlehId" to (user?.idDokumen ?: userAuthId),
+                    "dibatalkanOlehNama" to (user?.nama ?: "Pengguna"),
+                    "dibatalkanPada" to dibuatPada,
+                    "diperbaruiPada" to dibuatPada
+                )
+            ).await()
+            return
+        }
+
         if (status != "SELESAI") {
-            throw IllegalStateException("Hanya transaksi selesai yang bisa dibatalkan")
+            throw IllegalStateException("Hanya transaksi selesai atau pending QRIS yang bisa dibatalkan")
         }
 
         val detailSnapshot = saleRef.collection("rincian").get().await()
@@ -1998,8 +2325,6 @@ ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
 
         val kunciTanggal = saleDoc.getString("kunciTanggal").orEmpty()
             .ifBlank { dayKeyFromTimestamp(saleDoc.getTimestamp("tanggalPenjualan")) }
-        val dibuatPada = nowTimestamp()
-        val user = cariPengguna(userAuthId)
 
         firestore.runTransaction { trx ->
             val produkSnapshots = detailSnapshot.documents.associate { detail ->

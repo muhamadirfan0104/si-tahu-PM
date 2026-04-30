@@ -1,10 +1,16 @@
 package muhamad.irfan.si_tahu.ui.penjualan
 
-import android.content.Intent
-import android.net.Uri
+import android.graphics.Color
 import android.os.Bundle
+import android.os.CountDownTimer
+import android.view.Gravity
 import android.view.View
 import android.widget.AdapterView
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
@@ -23,9 +29,18 @@ import muhamad.irfan.si_tahu.ui.umum.AdapterKeranjang
 import muhamad.irfan.si_tahu.util.AdapterSpinner
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.InputRupiah
+import muhamad.irfan.si_tahu.util.PembuatQrBitmap
 import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+
+private const val XENDIT_API_BASE = "https://xendit-sitahu-api.vercel.app"
+private const val XENDIT_TEST_MODE = false
+private const val QRIS_EXPIRE_MS = 15 * 60 * 1000L
 
 class AktivitasCheckoutRumahan : AktivitasDasar() {
 
@@ -33,9 +48,11 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
     private lateinit var cartAdapter: AdapterKeranjang
 
     private var products: List<Produk> = emptyList()
-    private var paymentPending: PaymentLinkDraft? = null
-    private var paymentPendingItems: List<ItemKeranjang> = emptyList()
-    private var processingPayment = false
+    private var pendingQris: XenditQris? = null
+    private var pendingItems: List<ItemKeranjang> = emptyList()
+    private var sedangProses = false
+    private var qrisDialog: AlertDialog? = null
+    private var qrisCountdown: CountDownTimer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,7 +60,7 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
 
         binding = ActivityCashierCheckoutBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        bindToolbar(binding.toolbar, "Checkout Rumahan", "Review keranjang dan pembayaran")
+        bindToolbar(binding.toolbar, "Checkout Kasir", "Tunai dan QRIS Xendit")
 
         setupAdapter()
         setupView()
@@ -52,37 +69,40 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
 
     override fun onResume() {
         super.onResume()
-        if (this::binding.isInitialized) {
-            renderCheckout()
-        }
+        renderCheckout()
+    }
+
+    override fun onDestroy() {
+        hentikanCountdownQris()
+        qrisDialog?.dismiss()
+        qrisDialog = null
+        super.onDestroy()
     }
 
     private fun setupAdapter() {
         cartAdapter = AdapterKeranjang(
             onIncrease = { item ->
-                if (!bolehUbahKeranjang()) return@AdapterKeranjang
+                if (tahanPerubahanKeranjang()) return@AdapterKeranjang
                 val product = products.firstOrNull { it.id == item.productId } ?: return@AdapterKeranjang
-                val success = SessionKeranjangRumahan.changeQty(item.productId, 1, product.stock)
+                val success = SessionKeranjangRumahan.changeQty(item.productId, 1, stokLayakJual(product))
                 if (!success) {
-                    showMessage("Stok ${product.name} tidak mencukupi")
+                    showMessage("Stok layak jual ${product.name} tidak mencukupi")
                     return@AdapterKeranjang
                 }
                 renderCheckout()
             },
             onDecrease = { item ->
-                if (!bolehUbahKeranjang()) return@AdapterKeranjang
+                if (tahanPerubahanKeranjang()) return@AdapterKeranjang
                 val product = products.firstOrNull { it.id == item.productId } ?: return@AdapterKeranjang
-                SessionKeranjangRumahan.changeQty(item.productId, -1, product.stock)
+                SessionKeranjangRumahan.changeQty(item.productId, -1, stokLayakJual(product))
                 renderCheckout()
             },
             onRemove = { item ->
-                if (!bolehUbahKeranjang()) return@AdapterKeranjang
+                if (tahanPerubahanKeranjang()) return@AdapterKeranjang
                 SessionKeranjangRumahan.remove(item.productId)
                 renderCheckout()
             },
-            getProduk = { productId ->
-                products.firstOrNull { it.id == productId }
-            }
+            getProduk = { productId -> products.firstOrNull { it.id == productId } }
         )
     }
 
@@ -90,44 +110,23 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
         binding.rvCart.layoutManager = LinearLayoutManager(this)
         binding.rvCart.adapter = cartAdapter
 
-        binding.spPayment.adapter =
-            AdapterSpinner.stringAdapter(this, listOf("Tunai", "QRIS", "Transfer"))
-
-        binding.spPayment.onItemSelectedListener = CheckoutSpinnerListener {
-            renderCheckout()
-        }
+        binding.spPayment.adapter = AdapterSpinner.stringAdapter(this, listOf("Tunai", "QRIS"))
+        binding.spPayment.onItemSelectedListener = CheckoutSpinnerListener { renderCheckout() }
 
         InputRupiah.pasang(binding.etCashPaid)
+        binding.etCashPaid.addTextChangedListener { renderCheckout() }
 
-        binding.etCashPaid.addTextChangedListener {
-            renderCheckout()
+        binding.btnSaveTransaction.setOnClickListener { saveTransaction() }
+        binding.btnXenditShowQris.setOnClickListener {
+            pendingQris?.let { tampilkanDialogQris(it) } ?: showMessage("QRIS belum dibuat")
         }
-
-        binding.btnSaveTransaction.setOnClickListener {
-            saveTransaction()
+        binding.ivXenditQr.setOnClickListener {
+            pendingQris?.let { tampilkanDialogQris(it) }
         }
-
-        binding.btnOpenPaymentLink.setOnClickListener {
-            val payment = paymentPending
-            if (payment == null) {
-                showMessage("Belum ada link pembayaran")
-            } else {
-                bukaPaymentLink(payment.paymentUrl)
-            }
-        }
-
-        binding.btnCheckPaymentStatus.setOnClickListener {
-            val payment = paymentPending
-            if (payment == null) {
-                showMessage("Belum ada pembayaran yang perlu dicek")
-            } else {
-                cekStatusDanSimpanPaymentLink(payment)
-            }
-        }
-
-        binding.btnCancelPaymentLink.setOnClickListener {
-            konfirmasiBatalkanPaymentLink()
-        }
+        binding.btnXenditCheckStatus.setOnClickListener { cekStatusQrisXendit() }
+        binding.btnXenditCancel.setOnClickListener { konfirmasiBatalkanQris() }
+        binding.btnXenditSimulate.isVisible = XENDIT_TEST_MODE
+        binding.btnXenditSimulate.setOnClickListener { simulasiBayarXendit() }
     }
 
     private fun loadProducts() {
@@ -145,22 +144,27 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
         }
     }
 
-    private fun currentItems() = SessionKeranjangRumahan.getItems()
+    private fun currentItems(): List<ItemKeranjang> = SessionKeranjangRumahan.getItems()
 
     private fun totalAmount(): Long = SessionKeranjangRumahan.totalAmount()
 
     private fun totalQty(): Int = SessionKeranjangRumahan.totalQty()
 
+    private fun stokLayakJual(product: Produk): Int = product.safeStock + product.nearExpiredStock
+
     private fun renderCheckout() {
+        if (!::binding.isInitialized) return
+
         val items = currentItems()
         val total = totalAmount()
         val qty = totalQty()
-        val method = selectedPaymentMethod()
+        val method = binding.spPayment.selectedItem?.toString().orEmpty().ifBlank { "Tunai" }
         val paid = InputRupiah.ambilNilai(binding.etCashPaid)
         val change = (paid - total).coerceAtLeast(0L)
         val emptyCart = items.isEmpty()
-        val tunai = method == "Tunai"
-        val qris = method == "QRIS"
+        val qris = pendingQris
+        val qrisAktif = qris != null
+        val qrisKedaluwarsa = qris?.isExpired() == true
 
         cartAdapter.submitList(items)
 
@@ -169,58 +173,92 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
         } else {
             "${Formatter.ribuan(qty.toLong())} item • ${Formatter.ribuan(items.size.toLong())} baris"
         }
-
         binding.tvTotalBelanja.text = Formatter.currency(total)
-        binding.tvKembalian.text = if (tunai) Formatter.currency(change) else Formatter.currency(0)
+        binding.tvKembalian.text = if (method == "Tunai") Formatter.currency(change) else Formatter.currency(0)
 
-        binding.tilCashPaid.isVisible = tunai
-        binding.tvPaidLabel.isVisible = tunai
-        binding.tvPaidAmount.isVisible = tunai
+        binding.tilCashPaid.isVisible = method == "Tunai"
+        binding.tvPaidLabel.isVisible = method == "Tunai"
+        binding.tvPaidAmount.isVisible = method == "Tunai"
         binding.tvPaidAmount.text = Formatter.currency(paid)
 
-        if (!tunai) {
-            isiUangDiterimaDenganTotal(total)
+        if (method != "Tunai") {
+            if (total > 0L) {
+                val totalText = Formatter.ribuan(total)
+                if (binding.etCashPaid.text?.toString() != totalText) {
+                    binding.etCashPaid.setText(totalText)
+                    binding.etCashPaid.setSelection(binding.etCashPaid.text?.length ?: 0)
+                }
+            } else if (binding.etCashPaid.text?.isNotEmpty() == true) {
+                binding.etCashPaid.setText("")
+            }
         }
 
-        binding.tvPaymentHint.text = when (method) {
-            "Tunai" -> "Input uang diterima, lalu sistem menghitung kembalian otomatis."
-            "QRIS" -> "Midtrans Payment Link akan dibuat sesuai total belanja. Transaksi baru disimpan setelah status pembayaran berhasil."
-            "Transfer" -> "Transfer dicatat manual. Pastikan kasir sudah menerima bukti transfer sebelum menyimpan transaksi."
-            else -> "Pilih metode pembayaran untuk menyelesaikan transaksi."
+        binding.spPayment.isEnabled = !qrisAktif && !sedangProses
+        binding.rvCart.alpha = if (qrisAktif) 0.55f else 1f
+        binding.cardXenditQris.isVisible = method == "QRIS" || qrisAktif
+        binding.tvKasirHint.text = when {
+            qrisAktif -> "Menunggu pembayaran QRIS. Keranjang dikunci sementara."
+            method == "QRIS" -> "Tekan Buat QRIS untuk menampilkan kode pembayaran."
+            else -> "Masukkan uang diterima, lalu simpan transaksi tunai."
         }
 
-        val adaPendingPayment = paymentPending != null
+        renderPanelQris(qris, qrisKedaluwarsa, total)
+
         binding.btnSaveTransaction.text = when {
-            emptyCart -> "Keranjang Kosong"
-            adaPendingPayment -> "Selesaikan Pembayaran"
-            qris -> "Buat Link Pembayaran"
-            else -> "Simpan Transaksi"
+            sedangProses -> "Memproses..."
+            method == "QRIS" && qris == null -> "Buat QRIS"
+            method == "QRIS" && qris != null -> "Cek Status QRIS"
+            else -> "Simpan Tunai"
         }
-        binding.btnSaveTransaction.isEnabled = !emptyCart && !adaPendingPayment && !processingPayment
-        binding.btnSaveTransaction.alpha = if (binding.btnSaveTransaction.isEnabled) 1f else 0.5f
-
-        renderPaymentPanel()
+        binding.btnSaveTransaction.isEnabled = !emptyCart && !sedangProses
+        binding.btnSaveTransaction.alpha = if (emptyCart || sedangProses) 0.5f else 1f
     }
 
-    private fun renderPaymentPanel() {
-        val payment = paymentPending
-        val visible = payment != null
-        binding.cardPaymentProgress.isVisible = visible
-        if (payment == null) return
+    private fun renderPanelQris(qris: XenditQris?, qrisKedaluwarsa: Boolean, total: Long) {
+        binding.tvXenditTotal.text = Formatter.currency(qris?.total ?: total)
+        binding.btnXenditShowQris.isVisible = false
 
-        binding.tvPaymentStatus.text = payment.statusLabel()
-        binding.tvPaymentOrder.text = "Order ID: ${payment.orderId}"
-        binding.tvPaymentAmount.text = "Total: ${Formatter.currency(payment.total)}"
-        binding.tvPaymentInstruction.text = when (payment.statusLower()) {
-            "settlement", "capture" -> "Pembayaran berhasil. Menyimpan transaksi..."
-            "expire", "cancel", "deny", "failure" -> "Pembayaran tidak berhasil. Batalkan draft ini, lalu buat transaksi baru bila diperlukan."
-            else -> "Link sudah dibuat. Buka link di perangkat pelanggan/kasir, selesaikan pembayaran, lalu tekan Cek Status."
+        if (qris == null) {
+            binding.tvXenditStatus.text = "Pembayaran non-tunai"
+            binding.tvXenditTimer.isVisible = false
+            binding.tvXenditOrderId.isVisible = false
+            binding.tvXenditOrderId.text = ""
+            binding.ivXenditQr.isVisible = false
+            binding.ivXenditQr.tag = null
+            binding.rowXenditActions.isVisible = false
+            binding.btnXenditCheckStatus.isEnabled = false
+            binding.btnXenditCancel.isEnabled = false
+            binding.btnXenditSimulate.isVisible = false
+            binding.btnXenditSimulate.isEnabled = false
+            return
         }
 
-        binding.btnOpenPaymentLink.isEnabled = !processingPayment
-        binding.btnCheckPaymentStatus.isEnabled = !processingPayment
-        binding.btnCancelPaymentLink.isEnabled = !processingPayment
+        binding.ivXenditQr.isVisible = true
+        if (binding.ivXenditQr.tag != qris.externalId) {
+            binding.ivXenditQr.setImageBitmap(PembuatQrBitmap.buat(qris.qrString, 900))
+            binding.ivXenditQr.tag = qris.externalId
+        }
+
+        binding.tvXenditStatus.text = if (qrisKedaluwarsa) {
+            "Kedaluwarsa"
+        } else {
+            "Menunggu pembayaran"
+        }
+        binding.tvXenditOrderId.isVisible = true
+        binding.tvXenditOrderId.text = "Order: ${qris.externalId}"
+        binding.tvXenditTimer.isVisible = true
+        binding.tvXenditTimer.text = if (qrisKedaluwarsa) {
+            "Kedaluwarsa"
+        } else {
+            formatDurasi(qris.remainingMs())
+        }
+        binding.rowXenditActions.isVisible = true
+        binding.btnXenditCheckStatus.isEnabled = !sedangProses
+        binding.btnXenditCancel.isEnabled = !sedangProses
+        binding.btnXenditSimulate.isVisible = XENDIT_TEST_MODE
+        binding.btnXenditSimulate.isEnabled = XENDIT_TEST_MODE && !sedangProses
     }
+
 
     private fun saveTransaction() {
         val items = currentItems()
@@ -229,337 +267,464 @@ class AktivitasCheckoutRumahan : AktivitasDasar() {
             return
         }
 
-        if (paymentPending != null) {
-            showMessage("Selesaikan atau batalkan pembayaran Midtrans dulu")
-            return
-        }
-
-        val method = selectedPaymentMethod()
+        val method = binding.spPayment.selectedItem?.toString().orEmpty().ifBlank { "Tunai" }
         val total = totalAmount()
         val cash = InputRupiah.ambilNilai(binding.etCashPaid)
 
-        if (method == "Tunai" && cash < total) {
-            showMessage("Uang dibayar masih kurang")
+        validasiKeranjang(items)?.let { pesan ->
+            showMessage(pesan)
+            return
+        }
+
+        if (method == "Tunai") {
+            if (cash < total) {
+                showMessage("Uang dibayar masih kurang")
+                return
+            }
+            simpanTransaksiFinal(
+                metode = "Tunai",
+                uangDiterima = cash,
+                items = items,
+                paymentGateway = "",
+                paymentOrderId = "",
+                paymentQrId = "",
+                paymentStatus = "PAID",
+                paymentSource = "",
+                paymentReferenceId = "",
+                paymentPaidAt = "",
+                paymentAmount = total
+            )
             return
         }
 
         if (method == "QRIS") {
-            mulaiPaymentLinkMidtrans(items, total)
+            if (pendingQris == null) buatQrisXendit(items, total) else cekStatusQrisXendit()
+        }
+    }
+
+    private fun buatQrisXendit(items: List<ItemKeranjang>, total: Long) {
+        if (total < 1500L) {
+            showMessage("Minimal pembayaran QRIS Xendit Rp1.500")
+            return
+        }
+
+        validasiKeranjang(items)?.let { pesan ->
+            showMessage(pesan)
             return
         }
 
         lifecycleScope.launch {
-            setProcessing(true)
-
+            setBusy(true)
             runCatching {
-                val saleId = RepositoriFirebaseUtama.simpanPenjualanRumahan(
+                val response = postJson(
+                    path = "/api/buat-qris-xendit",
+                    body = JSONObject().put("total", total)
+                )
+                val json = JSONObject(response)
+                val now = System.currentTimeMillis()
+                val qrisDraft = XenditQris(
+                    saleId = "",
+                    externalId = json.getString("externalId"),
+                    qrId = json.optString("qrId"),
+                    total = json.optLong("total", total),
+                    status = json.optString("status", "ACTIVE"),
+                    qrString = json.getString("qrString"),
+                    createdAtMillis = now,
+                    expiresAtMillis = now + QRIS_EXPIRE_MS
+                )
+                val saleId = RepositoriFirebaseUtama.buatPenjualanQrisPending(
                     userAuthId = currentUserId(),
-                    metodePembayaranUi = method,
-                    uangDiterima = cash,
                     cartItems = items,
                     products = products,
-                    statusPembayaran = "PAID"
+                    paymentGateway = "XENDIT",
+                    paymentOrderId = qrisDraft.externalId,
+                    paymentQrId = qrisDraft.qrId,
+                    paymentQrString = qrisDraft.qrString,
+                    paymentQrCreatedAtMillis = qrisDraft.createdAtMillis,
+                    paymentQrExpiresAtMillis = qrisDraft.expiresAtMillis,
+                    paymentStatus = qrisDraft.status.ifBlank { "ACTIVE" },
+                    paymentAmount = qrisDraft.total
+                )
+                qrisDraft.copy(saleId = saleId)
+            }.onSuccess { qris ->
+                pendingQris = qris
+                pendingItems = items.map { it.copy() }
+                mulaiCountdownQris(qris)
+                renderCheckout()
+                showMessage("QRIS berhasil dibuat dan masuk riwayat sebagai Pending.")
+            }.onFailure {
+                showMessage(it.message ?: "Gagal membuat QRIS Xendit")
+            }
+            setBusy(false)
+        }
+    }
+
+    private fun cekStatusQrisXendit() {
+        val qris = pendingQris
+        if (qris == null) {
+            showMessage("QRIS belum dibuat")
+            return
+        }
+
+        lifecycleScope.launch {
+            setBusy(true)
+            runCatching {
+                val response = postJson(
+                    path = "/api/cek-status-xendit",
+                    body = JSONObject().put("externalId", qris.externalId)
+                )
+                val json = JSONObject(response)
+                val payment = json.optJSONObject("payment")
+                val details = payment?.optJSONObject("payment_details")
+                XenditStatus(
+                    paid = json.optBoolean("paid", false),
+                    status = json.optString("status", "PENDING"),
+                    paymentId = payment?.optString("id").orEmpty(),
+                    source = details?.optString("source").orEmpty(),
+                    receiptId = details?.optString("receipt_id").orEmpty(),
+                    paidAt = payment?.optString("created").orEmpty(),
+                    amount = payment?.optLong("amount", qris.total) ?: qris.total
+                )
+            }.onSuccess { status ->
+                if (status.paid && status.status.equals("COMPLETED", ignoreCase = true)) {
+                    selesaikanTransaksiQrisPending(status)
+                } else {
+                    val tambahan = if (qris.isExpired()) " Jika belum dibayar, buat QRIS baru." else ""
+                    showMessage("Pembayaran belum masuk. Status: ${status.status.ifBlank { "PENDING" }}.$tambahan")
+                }
+            }.onFailure {
+                showMessage(it.message ?: "Gagal cek status Xendit")
+            }
+            setBusy(false)
+        }
+    }
+
+
+    private fun selesaikanTransaksiQrisPending(status: XenditStatus) {
+        val qris = pendingQris
+        if (qris == null) {
+            showMessage("QRIS belum dibuat")
+            return
+        }
+
+        lifecycleScope.launch {
+            setBusy(true)
+            runCatching {
+                val saleId = RepositoriFirebaseUtama.selesaikanPenjualanQrisPending(
+                    id = qris.saleId,
+                    userAuthId = currentUserId(),
+                    products = products,
+                    paymentStatus = status.status.uppercase(Locale.US),
+                    paymentSource = status.source,
+                    paymentReferenceId = status.receiptId.ifBlank { status.paymentId },
+                    paymentPaidAt = status.paidAt,
+                    paymentAmount = status.amount
                 )
                 RepositoriFirebaseUtama.buildReceiptText(saleId)
             }.onSuccess { receipt ->
+                hentikanCountdownQris()
+                pendingQris = null
+                pendingItems = emptyList()
+                qrisDialog?.dismiss()
+                SessionKeranjangRumahan.clear()
+                renderCheckout()
+                showReceiptDialogAndFinish(receipt)
+            }.onFailure {
+                showMessage(it.message ?: "Gagal menyelesaikan transaksi QRIS")
+            }
+            setBusy(false)
+        }
+    }
+    private fun simulasiBayarXendit() {
+        val qris = pendingQris
+        if (qris == null) {
+            showMessage("QRIS belum dibuat")
+            return
+        }
+
+        lifecycleScope.launch {
+            setBusy(true)
+            runCatching {
+                postJson(
+                    path = "/api/simulasi-bayar-xendit",
+                    body = JSONObject()
+                        .put("externalId", qris.externalId)
+                        .put("amount", qris.total)
+                )
+            }.onSuccess {
+                showMessage("Simulasi pembayaran berhasil. Tekan Cek Status untuk menyelesaikan transaksi.")
+            }.onFailure {
+                showMessage(it.message ?: "Gagal simulasi pembayaran Xendit")
+            }
+            setBusy(false)
+        }
+    }
+
+    private fun simpanTransaksiFinal(
+        metode: String,
+        uangDiterima: Long,
+        items: List<ItemKeranjang>,
+        paymentGateway: String,
+        paymentOrderId: String,
+        paymentQrId: String,
+        paymentStatus: String,
+        paymentSource: String,
+        paymentReferenceId: String,
+        paymentPaidAt: String,
+        paymentAmount: Long
+    ) {
+        lifecycleScope.launch {
+            setBusy(true)
+            runCatching {
+                val saleId = RepositoriFirebaseUtama.simpanPenjualanRumahan(
+                    userAuthId = currentUserId(),
+                    metodePembayaranUi = metode,
+                    uangDiterima = uangDiterima,
+                    cartItems = items,
+                    products = products,
+                    paymentGateway = paymentGateway,
+                    paymentOrderId = paymentOrderId,
+                    paymentQrId = paymentQrId,
+                    paymentStatus = paymentStatus,
+                    paymentSource = paymentSource,
+                    paymentReferenceId = paymentReferenceId,
+                    paymentPaidAt = paymentPaidAt,
+                    paymentAmount = paymentAmount
+                )
+                RepositoriFirebaseUtama.buildReceiptText(saleId)
+            }.onSuccess { receipt ->
+                hentikanCountdownQris()
+                pendingQris = null
+                pendingItems = emptyList()
+                qrisDialog?.dismiss()
                 SessionKeranjangRumahan.clear()
                 renderCheckout()
                 showReceiptDialogAndFinish(receipt)
             }.onFailure {
                 showMessage(it.message ?: "Gagal menyimpan transaksi")
-                setProcessing(false)
             }
+            setBusy(false)
         }
     }
 
-    private fun mulaiPaymentLinkMidtrans(items: List<ItemKeranjang>, total: Long) {
-        lifecycleScope.launch {
-            setProcessing(true)
+    private fun tampilkanDialogQris(qris: XenditQris) {
+        qrisDialog?.dismiss()
 
-            runCatching {
-                buatPaymentLinkMidtrans(total)
-            }.onSuccess { hasil ->
-                paymentPending = hasil
-                paymentPendingItems = items.map { it.copy() }
-                setProcessing(false)
-                bukaPaymentLink(hasil.paymentUrl)
-                showMessage("Link pembayaran Midtrans berhasil dibuat")
-            }.onFailure {
-                showMessage(it.message ?: "Gagal membuat Payment Link Midtrans")
-                setProcessing(false)
-            }
-        }
-    }
-
-    private fun cekStatusDanSimpanPaymentLink(payment: PaymentLinkDraft) {
-        lifecycleScope.launch {
-            setProcessing(true)
-
-            runCatching {
-                cekStatusPaymentLink(payment.orderId)
-            }.onSuccess { status ->
-                val updatedPayment = payment.copy(
-                    statusPembayaran = status.transactionStatus.ifBlank { "pending" },
-                    fraudStatus = status.fraudStatus
-                )
-                paymentPending = updatedPayment
-
-                when {
-                    status.berhasil -> {
-                        simpanTransaksiSetelahPaymentLinkBerhasil(updatedPayment, status)
-                    }
-                    status.gagal -> {
-                        showMessage("Pembayaran ${status.label()}. Batalkan draft bila ingin membuat link baru.")
-                        setProcessing(false)
-                    }
-                    else -> {
-                        showMessage("Pembayaran belum selesai. Status: ${status.label()}")
-                        setProcessing(false)
-                    }
-                }
-            }.onFailure {
-                showMessage(it.message ?: "Gagal cek status pembayaran")
-                setProcessing(false)
-            }
-        }
-    }
-
-    private suspend fun simpanTransaksiSetelahPaymentLinkBerhasil(
-        payment: PaymentLinkDraft,
-        status: StatusPaymentLink
-    ) {
-        val snapshotItems = paymentPendingItems.map { it.copy() }
-        if (snapshotItems.isEmpty()) {
-            showMessage("Item pembayaran tidak ditemukan. Cek riwayat Midtrans sebelum membuat transaksi baru.")
-            setProcessing(false)
-            return
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(32, 24, 32, 8)
         }
 
-        runCatching {
-            val freshProducts = RepositoriFirebaseUtama.muatProdukKasir()
-            val saleId = RepositoriFirebaseUtama.simpanPenjualanRumahan(
-                userAuthId = currentUserId(),
-                metodePembayaranUi = "QRIS",
-                uangDiterima = payment.total,
-                cartItems = snapshotItems,
-                products = freshProducts,
-                paymentGateway = "MIDTRANS_PAYMENT_LINK",
-                paymentOrderId = payment.orderId,
-                paymentUrl = payment.paymentUrl,
-                statusPembayaran = status.transactionStatus.uppercase().ifBlank { "SETTLEMENT" }
+        val totalText = TextView(this).apply {
+            text = Formatter.currency(qris.total)
+            textSize = 24f
+            setTextColor(Color.BLACK)
+            gravity = Gravity.CENTER
+        }
+        val caption = TextView(this).apply {
+            text = "Scan QRIS Xendit ini dari aplikasi e-wallet/bank pelanggan."
+            textSize = 14f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 8, 0, 16)
+        }
+        val qrImage = ImageView(this).apply {
+            setImageBitmap(PembuatQrBitmap.buat(qris.qrString, 1000))
+            adjustViewBounds = true
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            products = freshProducts
-            RepositoriFirebaseUtama.buildReceiptText(saleId)
-        }.onSuccess { receipt ->
-            paymentPending = null
-            paymentPendingItems = emptyList()
-            processingPayment = false
-            SessionKeranjangRumahan.clear()
-            renderCheckout()
-            showReceiptDialogAndFinish(receipt)
-        }.onFailure {
-            showMessage(it.message ?: "Pembayaran berhasil, tapi transaksi gagal disimpan")
-            setProcessing(false)
+            setBackgroundColor(Color.WHITE)
+            setPadding(12, 12, 12, 12)
         }
+        val orderText = TextView(this).apply {
+            text = "Order: ${qris.externalId}\nSisa waktu: ${formatDurasi(qris.remainingMs())}"
+            textSize = 12f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 16, 0, 0)
+        }
+
+        container.addView(totalText)
+        container.addView(caption)
+        container.addView(qrImage)
+        container.addView(orderText)
+
+        val scrollView = ScrollView(this).apply { addView(container) }
+
+        qrisDialog = MaterialAlertDialogBuilder(this)
+            .setTitle("QRIS Xendit")
+            .setView(scrollView)
+            .setPositiveButton("Cek Status") { _, _ -> cekStatusQrisXendit() }
+            .setNegativeButton("Tutup", null)
+            .create()
+            .also { it.show() }
     }
 
-    private fun konfirmasiBatalkanPaymentLink() {
-        val payment = paymentPending
-        if (payment == null) {
-            showMessage("Tidak ada pembayaran yang sedang diproses")
-            return
-        }
-
+    private fun konfirmasiBatalkanQris() {
+        if (pendingQris == null) return
         MaterialAlertDialogBuilder(this)
-            .setTitle("Batalkan pembayaran ini?")
-            .setMessage(
-                "Draft pembayaran ${payment.orderId} akan dihapus dari layar kasir. " +
-                    "Pastikan pelanggan belum membayar link ini sebelum membatalkan."
-            )
+            .setTitle("Batalkan QRIS?")
+            .setMessage("Pembayaran belum disimpan. Pastikan pelanggan belum membayar sebelum membatalkan QRIS ini.")
+            .setPositiveButton("Batalkan QRIS") { _, _ -> batalkanQrisPending() }
             .setNegativeButton("Kembali", null)
-            .setPositiveButton("Batalkan") { _, _ ->
-                paymentPending = null
-                paymentPendingItems = emptyList()
-                showMessage("Draft pembayaran dibatalkan")
-                renderCheckout()
-            }
             .show()
     }
 
-    private fun bukaPaymentLink(paymentUrl: String) {
-        runCatching {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(paymentUrl)))
-        }.onFailure {
-            showMessage("Tidak bisa membuka link pembayaran")
+    private fun batalkanQrisPending() {
+        val qris = pendingQris ?: return
+        lifecycleScope.launch {
+            setBusy(true)
+            runCatching {
+                RepositoriFirebaseUtama.batalkanPenjualan(
+                    id = qris.saleId,
+                    alasan = "Pembayaran QRIS dibatalkan kasir",
+                    userAuthId = currentUserId()
+                )
+            }.onSuccess {
+                pendingQris = null
+                pendingItems = emptyList()
+                hentikanCountdownQris()
+                qrisDialog?.dismiss()
+                binding.ivXenditQr.tag = null
+                showMessage("QRIS dibatalkan dan riwayat ditandai Batal")
+                renderCheckout()
+            }.onFailure {
+                showMessage(it.message ?: "Gagal membatalkan QRIS")
+            }
+            setBusy(false)
         }
     }
 
-    private suspend fun buatPaymentLinkMidtrans(total: Long): PaymentLinkDraft {
-        val response = postJson(
-            endpoint = "$MIDTRANS_API_BASE/api/buat-payment-link",
-            payload = JSONObject().put("total", total)
-        )
+    private fun mulaiCountdownQris(qris: XenditQris) {
+        hentikanCountdownQris()
+        qrisCountdown = object : CountDownTimer(qris.remainingMs().coerceAtLeast(1_000L), 1_000L) {
+            override fun onTick(millisUntilFinished: Long) {
+                if (::binding.isInitialized) {
+                    binding.tvXenditTimer.text = formatDurasi(millisUntilFinished)
+                }
+            }
 
-        val orderId = response.optString("orderId")
-        val paymentUrl = response.optString("paymentUrl")
-
-        if (orderId.isBlank()) throw IllegalStateException("Order ID Midtrans kosong")
-        if (paymentUrl.isBlank()) throw IllegalStateException("Payment URL Midtrans kosong")
-
-        return PaymentLinkDraft(
-            orderId = orderId,
-            total = response.optLong("total", total),
-            paymentUrl = paymentUrl,
-            statusPembayaran = "pending",
-            fraudStatus = ""
-        )
+            override fun onFinish() {
+                renderCheckout()
+            }
+        }.start()
     }
 
-    private suspend fun cekStatusPaymentLink(orderId: String): StatusPaymentLink {
-        val response = postJson(
-            endpoint = "$MIDTRANS_API_BASE/api/cek-status",
-            payload = JSONObject().put("orderId", orderId)
-        )
-
-        return StatusPaymentLink(
-            transactionStatus = response.optString("transactionStatus").ifBlank { "pending" },
-            fraudStatus = response.optString("fraudStatus")
-        )
+    private fun hentikanCountdownQris() {
+        qrisCountdown?.cancel()
+        qrisCountdown = null
     }
 
-    private suspend fun postJson(endpoint: String, payload: JSONObject): JSONObject = withContext(Dispatchers.IO) {
-        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+    private fun validasiKeranjang(items: List<ItemKeranjang>): String? {
+        items.forEach { item ->
+            val produk = products.firstOrNull { it.id == item.productId }
+                ?: return "Produk di keranjang tidak ditemukan"
+            if (item.qty <= 0) return "Jumlah ${produk.name} tidak valid"
+            if (item.price <= 0L) return "Harga ${produk.name} belum valid"
+            val stokLayak = stokLayakJual(produk)
+            if (stokLayak < item.qty) {
+                return "Stok layak jual ${produk.name} tidak cukup. Tersedia $stokLayak, diminta ${item.qty}."
+            }
+        }
+        return null
+    }
+
+    private fun tahanPerubahanKeranjang(): Boolean {
+        return if (pendingQris != null) {
+            showMessage("Selesaikan atau batalkan pembayaran QRIS dulu")
+            true
+        } else {
+            false
+        }
+    }
+
+    private fun setBusy(value: Boolean) {
+        sedangProses = value
+        renderCheckout()
+    }
+
+    private suspend fun postJson(path: String, body: JSONObject): String = withContext(Dispatchers.IO) {
+        val url = URL(XENDIT_API_BASE.trimEnd('/') + path)
+        val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 20_000
-            readTimeout = 20_000
+            readTimeout = 30_000
             doOutput = true
+            setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Accept", "application/json")
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
         }
 
         try {
-            connection.outputStream.use { stream ->
-                stream.write(payload.toString().toByteArray(Charsets.UTF_8))
+            connection.outputStream.use { output ->
+                output.write(body.toString().toByteArray(Charsets.UTF_8))
             }
 
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            val json = parseJsonResponse(text)
+            val stream = if (connection.responseCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream ?: connection.inputStream
+            }
+            val responseText = BufferedReader(InputStreamReader(stream)).use { it.readText() }
 
-            if (code !in 200..299) {
-                val pesan = json.optString("message")
-                    .ifBlank { json.optString("status_message") }
-                    .ifBlank { text.ifBlank { "HTTP $code" } }
-                throw IllegalStateException(pesan)
+            if (connection.responseCode !in 200..299) {
+                val message = runCatching {
+                    val json = JSONObject(responseText)
+                    json.optString("message")
+                        .ifBlank { json.optJSONObject("xendit")?.optString("message").orEmpty() }
+                        .ifBlank { responseText }
+                }.getOrElse { responseText }
+                throw IllegalStateException(message)
             }
 
-            json
+            responseText
         } finally {
             connection.disconnect()
         }
     }
 
-    private fun parseJsonResponse(text: String): JSONObject {
-        if (text.isBlank()) return JSONObject()
-        return runCatching { JSONObject(text) }.getOrElse {
-            JSONObject().put("message", text.take(180))
-        }
-    }
-
-    private fun selectedPaymentMethod(): String =
-        binding.spPayment.selectedItem?.toString().orEmpty().ifBlank { "Tunai" }
-
-    private fun isiUangDiterimaDenganTotal(total: Long) {
-        if (total > 0L) {
-            val totalText = Formatter.ribuan(total)
-            if (binding.etCashPaid.text?.toString() != totalText) {
-                binding.etCashPaid.setText(totalText)
-                binding.etCashPaid.setSelection(binding.etCashPaid.text?.length ?: 0)
-            }
-        } else if (binding.etCashPaid.text?.isNotEmpty() == true) {
-            binding.etCashPaid.setText("")
-        }
-    }
-
-    private fun bolehUbahKeranjang(): Boolean {
-        if (paymentPending == null) return true
-        showMessage("Selesaikan atau batalkan pembayaran Midtrans dulu")
-        return false
-    }
-
-    private fun setProcessing(processing: Boolean) {
-        processingPayment = processing
-        renderCheckout()
+    private fun formatDurasi(ms: Long): String {
+        val safeMs = ms.coerceAtLeast(0L)
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(safeMs)
+        val seconds = TimeUnit.MILLISECONDS.toSeconds(safeMs) % 60
+        return String.format(Locale.US, "%02d:%02d", minutes, seconds)
     }
 
     private fun showReceiptDialogAndFinish(receipt: String) {
-        showReceiptModal("Transaksi berhasil", receipt) {
-            finish()
-        }
-    }
-
-    private data class PaymentLinkDraft(
-        val orderId: String,
-        val total: Long,
-        val paymentUrl: String,
-        val statusPembayaran: String,
-        val fraudStatus: String
-    ) {
-        fun statusLower(): String = statusPembayaran.lowercase()
-
-        fun statusLabel(): String = when (statusLower()) {
-            "settlement" -> "Pembayaran berhasil"
-            "capture" -> "Pembayaran berhasil"
-            "pending" -> "Menunggu pembayaran"
-            "expire" -> "Pembayaran kedaluwarsa"
-            "cancel" -> "Pembayaran dibatalkan"
-            "deny" -> "Pembayaran ditolak"
-            "failure" -> "Pembayaran gagal"
-            else -> "Status: ${statusPembayaran.ifBlank { "pending" }}"
-        }
-    }
-
-    private data class StatusPaymentLink(
-        val transactionStatus: String,
-        val fraudStatus: String
-    ) {
-        val berhasil: Boolean
-            get() {
-                val status = transactionStatus.lowercase()
-                val fraud = fraudStatus.lowercase()
-                return status == "settlement" || (status == "capture" && (fraud.isBlank() || fraud == "accept"))
-            }
-
-        val gagal: Boolean
-            get() = transactionStatus.lowercase() in setOf("expire", "cancel", "deny", "failure")
-
-        fun label(): String = when (transactionStatus.lowercase()) {
-            "settlement" -> "berhasil"
-            "capture" -> "berhasil"
-            "pending" -> "pending"
-            "expire" -> "kedaluwarsa"
-            "cancel" -> "dibatalkan"
-            "deny" -> "ditolak"
-            "failure" -> "gagal"
-            else -> transactionStatus.ifBlank { "pending" }
-        }
-    }
-
-    companion object {
-        private const val MIDTRANS_API_BASE = "https://midtrans-sitahu-api.vercel.app"
+        showReceiptModal("Transaksi berhasil", receipt) { finish() }
     }
 }
+
+private data class XenditQris(
+    val saleId: String,
+    val externalId: String,
+    val qrId: String,
+    val total: Long,
+    val status: String,
+    val qrString: String,
+    val createdAtMillis: Long,
+    val expiresAtMillis: Long
+) {
+    fun remainingMs(): Long = expiresAtMillis - System.currentTimeMillis()
+    fun isExpired(): Boolean = remainingMs() <= 0L
+}
+
+private data class XenditStatus(
+    val paid: Boolean,
+    val status: String,
+    val paymentId: String,
+    val source: String,
+    val receiptId: String,
+    val paidAt: String,
+    val amount: Long
+)
 
 private class CheckoutSpinnerListener(
     private val onSelected: () -> Unit
 ) : AdapterView.OnItemSelectedListener {
-    override fun onItemSelected(
-        parent: AdapterView<*>?,
-        view: View?,
-        position: Int,
-        id: Long
-    ) {
+    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
         onSelected()
     }
 

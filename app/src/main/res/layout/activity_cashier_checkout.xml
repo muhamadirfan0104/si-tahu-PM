@@ -15,6 +15,7 @@
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:clipToPadding="false"
         android:fillViewport="true">
 
         <LinearLayout
@@ -67,13 +68,24 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
                         android:text="Rp0,00"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleLarge"
+                        android:textAppearance="@style/TextAppearance.Material3.DisplaySmall"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/tvKasirHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/bg_tone_blue"
+                        android:padding="12dp"
+                        android:text="Masukkan uang diterima, lalu simpan transaksi tunai."
+                        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
                         android:textColor="@color/text_primary" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
+                        android:layout_marginTop="14dp"
                         android:text="Metode pembayaran"
                         android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
                         android:textColor="@color/text_secondary" />
@@ -83,16 +95,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp" />
-
-                    <TextView
-                        android:id="@+id/tvPaymentHint"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:lineSpacingExtra="2dp"
-                        android:text="Pilih metode pembayaran untuk menyelesaikan transaksi."
-                        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                        android:textColor="@color/text_secondary" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/tilCashPaid"
@@ -104,29 +106,27 @@
                             android:id="@+id/etCashPaid"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:hint="Uang dibayar"
+                            android:hint="Uang diterima"
                             android:inputType="number" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <LinearLayout
-                        android:id="@+id/rowPaidChange"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:baselineAligned="false"
+                        android:layout_marginTop="12dp"
                         android:orientation="horizontal">
 
                         <LinearLayout
+                            android:id="@+id/tvPaidLabel"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:orientation="vertical">
 
                             <TextView
-                                android:id="@+id/tvPaidLabel"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Uang dibayar"
+                                android:text="Uang diterima"
                                 android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
                                 android:textColor="@color/text_secondary" />
 
@@ -163,108 +163,145 @@
                                 android:textColor="@color/text_primary" />
                         </LinearLayout>
                     </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
-                    <com.google.android.material.card.MaterialCardView
-                        android:id="@+id/cardPaymentProgress"
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardXenditQris"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/card_surface"
+                app:cardCornerRadius="20dp"
+                app:strokeColor="@color/line_color"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:visibility="gone"
-                        app:cardBackgroundColor="@color/blue_soft"
-                        app:cardCornerRadius="18dp"
-                        app:strokeColor="@color/line_color"
-                        app:strokeWidth="1dp">
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
                         <LinearLayout
-                            android:layout_width="match_parent"
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:padding="14dp">
+                            android:layout_weight="1"
+                            android:orientation="vertical">
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Midtrans Payment Link"
-                                android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                                android:text="QRIS"
+                                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                                 android:textColor="@color/text_primary" />
 
                             <TextView
-                                android:id="@+id/tvPaymentStatus"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="6dp"
-                                android:text="Menunggu pembayaran"
-                                android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
-                                android:textColor="@color/text_primary" />
-
-                            <TextView
-                                android:id="@+id/tvPaymentOrder"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="6dp"
-                                android:text="Order ID: -"
-                                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                                android:textColor="@color/text_secondary" />
-
-                            <TextView
-                                android:id="@+id/tvPaymentAmount"
+                                android:id="@+id/tvXenditStatus"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="2dp"
-                                android:text="Total: Rp0,00"
+                                android:text="Pembayaran non-tunai"
                                 android:textAppearance="@style/TextAppearance.Material3.BodySmall"
                                 android:textColor="@color/text_secondary" />
-
-                            <TextView
-                                android:id="@+id/tvPaymentInstruction"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="8dp"
-                                android:lineSpacingExtra="2dp"
-                                android:text="Link sudah dibuat. Setelah pelanggan selesai membayar, tekan Cek Status."
-                                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                                android:textColor="@color/text_secondary" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnCheckPaymentStatus"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="12dp"
-                                android:minHeight="48dp"
-                                android:text="Cek Status Pembayaran" />
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="8dp"
-                                android:orientation="horizontal">
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btnOpenPaymentLink"
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginEnd="6dp"
-                                    android:layout_weight="1"
-                                    android:minHeight="48dp"
-                                    android:text="Buka Link"
-                                    app:strokeColor="@color/green_primary"
-                                    app:strokeWidth="1dp" />
-
-                                <com.google.android.material.button.MaterialButton
-                                    android:id="@+id/btnCancelPaymentLink"
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginStart="6dp"
-                                    android:layout_weight="1"
-                                    android:minHeight="48dp"
-                                    android:text="Batalkan"
-                                    app:strokeColor="@color/line_color"
-                                    app:strokeWidth="1dp" />
-                            </LinearLayout>
                         </LinearLayout>
-                    </com.google.android.material.card.MaterialCardView>
+
+                        <TextView
+                            android:id="@+id/tvXenditTimer"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_tone_green"
+                            android:paddingHorizontal="10dp"
+                            android:paddingVertical="5dp"
+                            android:text="15:00"
+                            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+                            android:textColor="@color/text_primary"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvXenditTotal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Rp0,00"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleLarge"
+                        android:textColor="@color/text_primary" />
+
+                    <ImageView
+                        android:id="@+id/ivXenditQr"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:adjustViewBounds="true"
+                        android:background="@android:color/white"
+                        android:contentDescription="QRIS Xendit"
+                        android:padding="10dp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tvXenditOrderId"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Order: -"
+                        android:textAppearance="@style/TextAppearance.Material3.LabelSmall"
+                        android:textColor="@color/text_secondary"
+                        android:visibility="gone" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnXenditShowQris"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Perbesar QR"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:id="@+id/rowXenditActions"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnXenditCheckStatus"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Cek Status" />
+
+                        <Space
+                            android:layout_width="8dp"
+                            android:layout_height="1dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnXenditCancel"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Batalkan" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnXenditSimulate"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Simulasi Bayar"
+                        android:visibility="gone" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -288,14 +325,6 @@
                         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                         android:textColor="@color/text_primary" />
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="Saat link Midtrans sudah dibuat, keranjang dikunci sampai pembayaran selesai atau dibatalkan."
-                        android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-                        android:textColor="@color/text_secondary" />
-
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/rvCart"
                         android:layout_width="match_parent"
@@ -307,11 +336,9 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="14dp"
-                        android:minHeight="52dp"
-                        android:text="Simpan Transaksi" />
+                        android:text="Simpan Tunai" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
-
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </LinearLayout>

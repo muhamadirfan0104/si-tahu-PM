@@ -1,15 +1,24 @@
 package muhamad.irfan.si_tahu.ui.utama
 
 import android.os.Bundle
+import android.graphics.Color
+import android.view.Gravity
 import android.view.View
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.datepicker.MaterialDatePicker
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import muhamad.irfan.si_tahu.R
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.databinding.FragmentCashierHistoryBinding
@@ -18,11 +27,20 @@ import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
+import muhamad.irfan.si_tahu.util.PembuatQrBitmap
 import muhamad.irfan.si_tahu.utilitas.PembantuFilterRiwayat
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
+
+private const val XENDIT_API_BASE_KASIR_HISTORY = "https://xendit-sitahu-api.vercel.app"
 
 class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
 
@@ -95,10 +113,10 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
                         .filter { it.badge.equals("Rumahan", ignoreCase = true) }
                         .sortedByDescending { it.tanggalIso }
                         .map {
-                            val statusLabel = if (it.statusPenjualan.equals("BATAL", true)) {
-                                FILTER_BATAL
-                            } else {
-                                FILTER_SELESAI
+                            val statusLabel = when {
+                                it.statusPenjualan.equals("BATAL", true) -> FILTER_BATAL
+                                it.statusPenjualan.equals("PENDING", true) -> FILTER_PENDING
+                                else -> FILTER_SELESAI
                             }
 
                             RiwayatKasirUiRow(
@@ -111,7 +129,11 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
                                     badge = it.badge,
                                     tone = WarnaBaris.GREEN,
                                     parameterStatus = statusLabel,
-                                    parameterTone = if (statusLabel == FILTER_BATAL) WarnaBaris.RED else WarnaBaris.GREEN,
+                                    parameterTone = when (statusLabel) {
+                                        FILTER_BATAL -> WarnaBaris.RED
+                                        FILTER_PENDING -> WarnaBaris.GOLD
+                                        else -> WarnaBaris.GREEN
+                                    },
                                     actionLabel = "⋮"
                                 )
                             )
@@ -146,6 +168,7 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
             val cocokStatus = when (statusAktif) {
                 FILTER_SELESAI -> item.parameterStatus.equals(FILTER_SELESAI, true)
                 FILTER_BATAL -> item.parameterStatus.equals(FILTER_BATAL, true)
+                FILTER_PENDING -> item.parameterStatus.equals(FILTER_PENDING, true)
                 else -> true
             }
 
@@ -184,7 +207,7 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
     private fun bukaFilter() {
         PembantuFilterRiwayat.show(
             activity = requireActivity() as AppCompatActivity,
-            kategori = listOf(FILTER_SEMUA, FILTER_SELESAI, FILTER_BATAL),
+            kategori = listOf(FILTER_SEMUA, FILTER_SELESAI, FILTER_PENDING, FILTER_BATAL),
             kategoriTerpilih = statusAktif,
             tanggalLabel = labelDateRangeUntukField(),
             jumlahFilterAktif = jumlahFilterAktif(),
@@ -320,6 +343,14 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
     }
 
     private fun openDetail(item: ItemBaris) {
+        if (item.parameterStatus.equals(FILTER_PENDING, true)) {
+            tampilkanQrisPending(item)
+            return
+        }
+        tampilkanDetailPenjualan(item)
+    }
+
+    private fun tampilkanDetailPenjualan(item: ItemBaris) {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { RepositoriFirebaseUtama.buildReceiptText(item.id) }
                 .onSuccess { detail ->
@@ -335,14 +366,21 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
         PopupMenu(requireContext(), anchor).apply {
             menu.add("Lihat detail")
             menu.add("Bagikan")
-            if (!item.parameterStatus.equals(FILTER_BATAL, true)) {
+            if (item.parameterStatus.equals(FILTER_PENDING, true)) {
+                menu.add("Lihat QRIS")
+                menu.add("Cek status QRIS")
+                menu.add("Batalkan QRIS")
+            } else if (!item.parameterStatus.equals(FILTER_BATAL, true)) {
                 menu.add("Batalkan penjualan")
             }
 
             setOnMenuItemClickListener {
                 when (it.title.toString()) {
-                    "Lihat detail" -> openDetail(item)
+                    "Lihat detail" -> tampilkanDetailPenjualan(item)
                     "Bagikan" -> shareItem(item)
+                    "Lihat QRIS" -> tampilkanQrisPending(item)
+                    "Cek status QRIS" -> cekStatusQrisPending(item)
+                    "Batalkan QRIS" -> confirmCancel(item)
                     "Batalkan penjualan" -> confirmCancel(item)
                 }
                 true
@@ -362,6 +400,190 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
         }
     }
 
+
+    private fun tampilkanQrisPending(item: ItemBaris) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { RepositoriFirebaseUtama.muatInfoQrisPending(item.id) }
+                .onSuccess { info ->
+                    if (!info.statusPenjualan.equals("PENDING", true)) {
+                        showMessage(binding.root, "Transaksi ini tidak lagi pending")
+                        buildRows()
+                        return@onSuccess
+                    }
+                    if (info.paymentQrString.isBlank()) {
+                        showMessage(binding.root, "QRIS transaksi lama belum menyimpan data QR. Batalkan lalu buat QRIS baru.")
+                        return@onSuccess
+                    }
+                    tampilkanDialogQrisPending(item, info)
+                }
+                .onFailure {
+                    showMessage(binding.root, it.message ?: "Gagal memuat QRIS")
+                }
+        }
+    }
+
+    private fun tampilkanDialogQrisPending(item: ItemBaris, info: RepositoriFirebaseUtama.QrisPendingInfo) {
+        val context = requireContext()
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(32, 24, 32, 8)
+        }
+
+        val totalText = TextView(context).apply {
+            text = Formatter.currency(info.totalBelanja)
+            textSize = 24f
+            setTextColor(Color.BLACK)
+            gravity = Gravity.CENTER
+        }
+
+        val caption = TextView(context).apply {
+            text = "Scan QRIS Xendit ini. Transaksi masih pending dan belum mengurangi stok."
+            textSize = 14f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 8, 0, 16)
+        }
+
+        val qrImage = ImageView(context).apply {
+            setImageBitmap(PembuatQrBitmap.buat(info.paymentQrString, 1000))
+            adjustViewBounds = true
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundColor(Color.WHITE)
+            setPadding(12, 12, 12, 12)
+        }
+
+        val waktuText = TextView(context).apply {
+            val sisa = if (info.paymentQrExpiresAtMillis > 0L) {
+                info.paymentQrExpiresAtMillis - System.currentTimeMillis()
+            } else {
+                0L
+            }
+            text = buildString {
+                append("Order: ${info.paymentOrderId}\n")
+                append("QR ID: ${info.paymentQrId.ifBlank { "-" }}\n")
+                append(if (sisa > 0L) "Sisa waktu: ${formatDurasiRiwayat(sisa)}" else "Status waktu: cek status / batalkan jika belum dibayar")
+            }
+            textSize = 12f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, 16, 0, 0)
+        }
+
+        container.addView(totalText)
+        container.addView(caption)
+        container.addView(qrImage)
+        container.addView(waktuText)
+
+        val scrollView = ScrollView(context).apply { addView(container) }
+
+        MaterialAlertDialogBuilder(context)
+            .setTitle("QRIS Pending")
+            .setView(scrollView)
+            .setPositiveButton("Cek Status") { _, _ -> cekStatusQrisPending(item) }
+            .setNegativeButton("Tutup", null)
+            .setNeutralButton("Batalkan") { _, _ -> confirmCancel(item) }
+            .show()
+    }
+
+    private fun formatDurasiRiwayat(ms: Long): String {
+        val safeMs = ms.coerceAtLeast(0L)
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(safeMs)
+        val seconds = TimeUnit.MILLISECONDS.toSeconds(safeMs) % 60
+        return String.format(Locale.US, "%02d:%02d", minutes, seconds)
+    }
+
+    private fun cekStatusQrisPending(item: ItemBaris) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching {
+                val info = RepositoriFirebaseUtama.muatInfoQrisPending(item.id)
+                require(info.paymentOrderId.isNotBlank()) { "Order ID QRIS belum tercatat" }
+                val status = bacaStatusXendit(info.paymentOrderId, info.totalBelanja)
+                if (status.paid && status.status.equals("COMPLETED", ignoreCase = true)) {
+                    val products = RepositoriFirebaseUtama.muatProdukKasir()
+                    val saleId = RepositoriFirebaseUtama.selesaikanPenjualanQrisPending(
+                        id = item.id,
+                        userAuthId = currentUserId(),
+                        products = products,
+                        paymentStatus = status.status.uppercase(Locale.US),
+                        paymentSource = status.source,
+                        paymentReferenceId = status.receiptId.ifBlank { status.paymentId },
+                        paymentPaidAt = status.paidAt,
+                        paymentAmount = status.amount
+                    )
+                    RepositoriFirebaseUtama.buildReceiptText(saleId)
+                } else {
+                    null
+                }
+            }.onSuccess { receipt ->
+                buildRows()
+                if (receipt != null) {
+                    showReceiptModal("QRIS sudah dibayar", receipt)
+                } else {
+                    showMessage(binding.root, "Pembayaran QRIS masih pending")
+                }
+            }.onFailure {
+                showMessage(binding.root, it.message ?: "Gagal cek status QRIS")
+            }
+        }
+    }
+
+    private suspend fun bacaStatusXendit(externalId: String, fallbackAmount: Long): StatusXenditGatewayKasir = withContext(Dispatchers.IO) {
+        val response = postJsonKasirHistory(
+            path = "/api/cek-status-xendit",
+            body = JSONObject().put("externalId", externalId)
+        )
+        val json = JSONObject(response)
+        val payment = json.optJSONObject("payment")
+        val details = payment?.optJSONObject("payment_details")
+        StatusXenditGatewayKasir(
+            paid = json.optBoolean("paid", false),
+            status = json.optString("status", "PENDING"),
+            paymentId = payment?.optString("id").orEmpty(),
+            source = details?.optString("source").orEmpty(),
+            receiptId = details?.optString("receipt_id").orEmpty(),
+            paidAt = payment?.optString("created").orEmpty(),
+            amount = payment?.optLong("amount", fallbackAmount) ?: fallbackAmount
+        )
+    }
+
+    private suspend fun postJsonKasirHistory(path: String, body: JSONObject): String = withContext(Dispatchers.IO) {
+        val url = URL(XENDIT_API_BASE_KASIR_HISTORY.trimEnd('/') + path)
+        val connection = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 20_000
+            readTimeout = 30_000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            connection.outputStream.use { output ->
+                output.write(body.toString().toByteArray(Charsets.UTF_8))
+            }
+            val stream = if (connection.responseCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream ?: connection.inputStream
+            }
+            val responseText = BufferedReader(InputStreamReader(stream)).use { it.readText() }
+            if (connection.responseCode !in 200..299) {
+                val message = runCatching {
+                    val json = JSONObject(responseText)
+                    json.optString("message")
+                        .ifBlank { json.optJSONObject("xendit")?.optString("message").orEmpty() }
+                        .ifBlank { responseText }
+                }.getOrElse { responseText }
+                throw IllegalStateException(message)
+            }
+            responseText
+        } finally {
+            connection.disconnect()
+        }
+    }
     private fun confirmCancel(item: ItemBaris) {
         showInputModal(
             title = "Batalkan penjualan",
@@ -389,9 +611,20 @@ class FragmenKasirHistory : FragmenDasar(R.layout.fragment_cashier_history) {
     companion object {
         private const val FILTER_SEMUA = "Semua"
         private const val FILTER_SELESAI = "Selesai"
+        private const val FILTER_PENDING = "Pending"
         private const val FILTER_BATAL = "Batal"
     }
 }
+
+private data class StatusXenditGatewayKasir(
+    val paid: Boolean,
+    val status: String,
+    val paymentId: String,
+    val source: String,
+    val receiptId: String,
+    val paidAt: String,
+    val amount: Long
+)
 
 private data class RiwayatKasirUiRow(
     val tanggalIso: String,

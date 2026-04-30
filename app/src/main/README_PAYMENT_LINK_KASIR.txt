@@ -24,3 +24,11 @@ Catatan:
 - Untuk saat ini MIDTRANS_IS_PRODUCTION harus false karena masih memakai Midtrans Sandbox.
 - Kalau URL Vercel kamu berubah, ubah konstanta MIDTRANS_API_BASE di AktivitasCheckoutRumahan.kt.
 - Jika cek status sebelum pelanggan membuka/membayar link, status akan tetap pending.
+
+UPDATE WEBVIEW IN-APP PAYMENT
+- Payment Link Midtrans sekarang dibuka di dalam aplikasi lewat AktivitasMidtransPaymentWebView, bukan browser luar.
+- Kasir tetap berada di SI Tahu selama pembayaran.
+- Jika halaman Midtrans membuka deeplink e-wallet/aplikasi lain, WebView akan meneruskan ke aplikasi terkait.
+- Setelah pelanggan membayar, tekan "Cek Status Pembayaran" di halaman pembayaran atau panel checkout.
+- Activity baru: java/muhamad/irfan/si_tahu/ui/penjualan/AktivitasMidtransPaymentWebView.kt
+- Layout baru: res/layout/activity_midtrans_payment_webview.xml
