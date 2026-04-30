@@ -3,20 +3,12 @@ package muhamad.irfan.si_tahu.ui.dasar
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
-import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.auth.FirebaseAuth
-import muhamad.irfan.si_tahu.R
+import muhamad.irfan.si_tahu.databinding.ComposeToolbarState
 import muhamad.irfan.si_tahu.ui.masuk.AktivitasMasuk
 import muhamad.irfan.si_tahu.util.PembantuCetak
 import muhamad.irfan.si_tahu.util.PembantuModal
@@ -25,69 +17,31 @@ import java.io.File
 open class AktivitasDasar : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // KITA HAPUS setDefaultNightMode AGAR APLIKASI BISA MENGIKUTI HP
         super.onCreate(savedInstanceState)
-        window.statusBarColor = ContextCompat.getColor(this, R.color.screen_bg_light)
-        window.navigationBarColor = ContextCompat.getColor(this, R.color.card_surface)
-    }
 
-    override fun onContentChanged() {
-        super.onContentChanged()
-        applySystemBarInsets()
-    }
+        // Membiarkan konten aplikasi digambar hingga ke ujung layar (edge-to-edge)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
-    private fun applySystemBarInsets() {
-        val root = findViewById<View>(android.R.id.content) ?: return
-        val toolbar = root.findViewById<MaterialToolbar?>(R.id.toolbar)
-        val bottomNavigation = root.findViewById<BottomNavigationView?>(R.id.bottomNavigation)
-
-        if (toolbar != null) {
-            val initialTop = toolbar.paddingTop
-            ViewCompat.setOnApplyWindowInsetsListener(toolbar) { view, insets ->
-                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-                view.updatePadding(top = initialTop + systemBars.top)
-                insets
-            }
-            ViewCompat.requestApplyInsets(toolbar)
-        } else {
-            val initialTop = root.paddingTop
-            ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-                view.updatePadding(top = initialTop + systemBars.top)
-                insets
-            }
-            ViewCompat.requestApplyInsets(root)
-        }
-
-        if (bottomNavigation != null) {
-            val initialBottom = bottomNavigation.paddingBottom
-            ViewCompat.setOnApplyWindowInsetsListener(bottomNavigation) { view, insets ->
-                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-                view.updatePadding(bottom = initialBottom + systemBars.bottom)
-                insets
-            }
-            ViewCompat.requestApplyInsets(bottomNavigation)
-        }
+        // KITA HAPUS pewarnaan paksa statusBarColor dan navigationBarColor
+        // KITA HAPUS pemaksaan ikon hitam (isAppearanceLightStatusBars)
+        // Sekarang warnanya akan diatur otomatis oleh Theme XML (DayNight) dan Compose!
     }
 
     protected fun bindToolbar(
-        toolbar: MaterialToolbar,
+        toolbar: ComposeToolbarState,
         title: String,
         subtitle: String? = null,
         showBack: Boolean = true
     ) {
         toolbar.title = title
         toolbar.subtitle = subtitle
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(showBack)
-        toolbar.setNavigationOnClickListener {
-            if (showBack) onBackPressedDispatcher.onBackPressed()
-        }
+        toolbar.showBack = showBack
+        toolbar.onBack = { if (showBack) onBackPressedDispatcher.onBackPressed() }
     }
 
     protected fun showMessage(message: String) {
-        Snackbar.make(findViewById(android.R.id.content), message, Snackbar.LENGTH_LONG).show()
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
     protected fun currentUserId(): String {
@@ -106,6 +60,8 @@ open class AktivitasDasar : AppCompatActivity() {
     protected fun showDetailModal(
         title: String,
         message: String,
+        positiveLabel: String = "Tutup",
+        onPositive: (() -> Unit)? = null,
         neutralLabel: String? = null,
         onNeutral: (() -> Unit)? = null,
         negativeLabel: String? = null,
@@ -117,6 +73,8 @@ open class AktivitasDasar : AppCompatActivity() {
             context = this,
             title = title,
             message = message,
+            positiveLabel = positiveLabel,
+            onPositive = onPositive,
             neutralLabel = neutralLabel,
             onNeutral = onNeutral,
             negativeLabel = negativeLabel,
@@ -155,19 +113,37 @@ open class AktivitasDasar : AppCompatActivity() {
     protected fun showReceiptModal(
         title: String,
         receiptText: String,
-        pdfLabel: String = "Simpan PDF",
+        pdfLabel: String = "Download",
         onClosed: (() -> Unit)? = null
     ) {
-        showDetailModal(
-            title = title,
-            message = receiptText,
-            negativeLabel = "Bagikan",
-            onNegative = { sharePlainText(title, receiptText) },
-            neutralLabel = pdfLabel,
-            onNeutral = { PembantuCetak.printPlainText(this, title, receiptText) },
-            monospace = true,
-            onClosed = onClosed
-        )
+        if (isFinishing || isDestroyed) return
+        runCatching {
+            val showStrukActions = pdfLabel.isNotBlank()
+            showDetailModal(
+                title = title,
+                message = receiptText,
+                positiveLabel = if (showStrukActions) "Cetak" else "Tutup",
+                onPositive = if (showStrukActions) ({
+                    runCatching { PembantuCetak.printNota(this, title, receiptText) }
+                        .onFailure { showMessage(it.message ?: "Gagal mencetak nota") }
+                }) else null,
+                negativeLabel = "Share",
+                onNegative = {
+                    runCatching { PembantuCetak.shareStrukPdf(this, title, receiptText) }
+                        .onFailure { showMessage(it.message ?: "Gagal membagikan struk") }
+                },
+                neutralLabel = pdfLabel.takeIf { it.isNotBlank() },
+                onNeutral = if (showStrukActions) ({
+                    runCatching { PembantuCetak.downloadStrukPdf(this, title, receiptText) }
+                        .onFailure { showMessage(it.message ?: "Gagal download struk") }
+                }) else null,
+                monospace = true,
+                onClosed = onClosed
+            )
+        }.onFailure {
+            showMessage(it.message ?: "Gagal menampilkan detail")
+            onClosed?.invoke()
+        }
     }
 
     protected fun sharePlainText(title: String, text: String) {

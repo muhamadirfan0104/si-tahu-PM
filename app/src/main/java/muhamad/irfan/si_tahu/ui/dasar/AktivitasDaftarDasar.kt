@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.view.View
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
-import androidx.recyclerview.widget.LinearLayoutManager
 import muhamad.irfan.si_tahu.databinding.ActivityListScreenBinding
 import muhamad.irfan.si_tahu.ui.umum.AdapterBarisUmum
 import muhamad.irfan.si_tahu.ui.utama.PendengarPilihItemSederhana
@@ -28,7 +27,6 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         )
 
         rowAdapter.submitList(emptyList())
-        binding.rvList.layoutManager = LinearLayoutManager(this)
         binding.rvList.adapter = rowAdapter
 
         binding.etSearch.addTextChangedListener {
@@ -75,7 +73,7 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         binding.cardProductSelector.isVisible = true
         binding.tvProductSelectorLabel.text = label
         binding.tvSelectedProductName.text = productName.ifBlank { "Pilih produk" }
-        binding.tvSelectedProductInfo.text = productInfo.ifBlank { "Cari dan pilih produk yang ingin diatur" }
+        binding.tvSelectedProductInfo.text = productInfo.ifBlank { "Pilih produk" }
         binding.tvProductSelectorLeading.text = productName.firstOrNull()?.uppercaseChar()?.toString() ?: "P"
         binding.cardProductSelector.setOnClickListener(listener)
     }

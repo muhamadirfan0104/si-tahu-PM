@@ -1,66 +1,134 @@
 package muhamad.irfan.si_tahu.data
 
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+
 object SessionKeranjangRumahan {
 
-    private val items = mutableListOf<ItemKeranjang>()
+    private const val PREF_NAME = "si_tahu_keranjang_rumahan"
+    private const val KEY_ITEMS = "items"
+    private var appContext: Context? = null
+
+    // 1. Variabel internal keranjang
+    private val _items = mutableListOf<ItemKeranjang>()
+
+    // 2. Akses baca ke komponen UI
+    val items: List<ItemKeranjang> get() = _items.toList()
+
     private var lastTouchedProductId: String? = null
 
-    fun getItems(): List<ItemKeranjang> = items.toList()
+    // --- SISTEM LISTENER UNTUK MEMICU PEMBARUAN LAYAR KASIR ---
+    private val listeners = mutableListOf<() -> Unit>()
+    fun addListener(listener: () -> Unit) { listeners.add(listener) }
+    fun removeListener(listener: () -> Unit) { listeners.remove(listener) }
+    private fun triggerUIRefresh() { listeners.forEach { it.invoke() } }
+
+    fun init(context: Context) {
+        appContext = context.applicationContext
+        if (_items.isNotEmpty()) return
+        val json = appContext
+            ?.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            ?.getString(KEY_ITEMS, null)
+            .orEmpty()
+        if (json.isBlank()) return
+        runCatching {
+            val array = JSONArray(json)
+            _items.clear()
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                val productId = item.optString("productId")
+                val qty = item.optInt("qty", 0)
+                val price = item.optLong("price", 0L)
+                if (productId.isNotBlank() && qty > 0 && price > 0L) {
+                    _items += ItemKeranjang(productId, qty, price)
+                }
+            }
+            lastTouchedProductId = _items.lastOrNull()?.productId
+        }
+    }
+
+    private fun persist() {
+        val context = appContext ?: return
+        val array = JSONArray()
+        _items.forEach { item ->
+            array.put(
+                JSONObject()
+                    .put("productId", item.productId)
+                    .put("qty", item.qty)
+                    .put("price", item.price)
+            )
+        }
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ITEMS, array.toString())
+            .apply()
+    }
+    // ----------------------------------------------------------
 
     fun setItems(newItems: List<ItemKeranjang>) {
-        items.clear()
-        items.addAll(newItems.map { it.copy() })
-        lastTouchedProductId = items.lastOrNull()?.productId
+        _items.clear()
+        _items.addAll(newItems.map { it.copy() })
+        lastTouchedProductId = _items.lastOrNull()?.productId
+        persist()
+        triggerUIRefresh()
     }
 
     fun clear() {
-        items.clear()
+        _items.clear()
         lastTouchedProductId = null
+        persist()
+        triggerUIRefresh()
     }
 
-    fun isEmpty(): Boolean = items.isEmpty()
+    fun isEmpty(): Boolean = _items.isEmpty()
 
-    fun totalQty(): Int = items.sumOf { it.qty }
+    fun totalQty(): Int = _items.sumOf { it.qty }
 
-    fun totalAmount(): Long = items.sumOf { it.qty.toLong() * it.price }
+    fun totalAmount(): Long = _items.sumOf { it.qty.toLong() * it.price }
 
     fun currentFocusProductId(): String? {
         val active = lastTouchedProductId
-        return if (active != null && items.any { it.productId == active }) {
+        return if (active != null && _items.any { it.productId == active }) {
             active
         } else {
-            items.lastOrNull()?.productId
+            _items.lastOrNull()?.productId
         }
     }
 
     fun currentFocusQty(): Int {
         val focusId = currentFocusProductId() ?: return 0
-        return items.firstOrNull { it.productId == focusId }?.qty ?: 0
+        return _items.firstOrNull { it.productId == focusId }?.qty ?: 0
     }
 
+    // --- DIPERBAIKI: Susunan (productId, qty, price) ---
     fun addOrIncrease(productId: String, price: Long, maxStock: Int): Boolean {
-        val current = items.firstOrNull { it.productId == productId }
+        val current = _items.firstOrNull { it.productId == productId }
         val nextQty = (current?.qty ?: 0) + 1
 
         if (nextQty > maxStock) return false
 
         if (current == null) {
-            items += ItemKeranjang(productId, 1, price)
+            _items += ItemKeranjang(productId, 1, price)
         } else {
             current.qty = nextQty
         }
 
         lastTouchedProductId = productId
+        persist()
+        triggerUIRefresh()
         return true
     }
 
     fun changeQty(productId: String, delta: Int, maxStock: Int): Boolean {
-        val current = items.firstOrNull { it.productId == productId } ?: return false
+        val current = _items.firstOrNull { it.productId == productId } ?: return false
         val nextQty = current.qty + delta
 
         if (nextQty <= 0) {
-            items.removeAll { it.productId == productId }
-            lastTouchedProductId = items.lastOrNull()?.productId
+            _items.removeAll { it.productId == productId }
+            lastTouchedProductId = _items.lastOrNull()?.productId
+            persist()
+            triggerUIRefresh()
             return true
         }
 
@@ -68,26 +136,40 @@ object SessionKeranjangRumahan {
 
         current.qty = nextQty
         lastTouchedProductId = productId
+        persist()
+        triggerUIRefresh()
         return true
     }
 
     fun increaseFocused(getStock: (String) -> Int): Boolean {
         val focusId = currentFocusProductId() ?: return false
-        val current = items.firstOrNull { it.productId == focusId } ?: return false
+        val current = _items.firstOrNull { it.productId == focusId } ?: return false
         val maxStock = getStock(focusId)
         return addOrIncrease(focusId, current.price, maxStock)
     }
 
     fun decreaseFocused(): Boolean {
         val focusId = currentFocusProductId() ?: return false
-        val current = items.firstOrNull { it.productId == focusId } ?: return false
+        val current = _items.firstOrNull { it.productId == focusId } ?: return false
         return changeQty(focusId, -1, current.qty)
     }
 
     fun remove(productId: String) {
-        items.removeAll { it.productId == productId }
+        _items.removeAll { it.productId == productId }
         if (lastTouchedProductId == productId) {
-            lastTouchedProductId = items.lastOrNull()?.productId
+            lastTouchedProductId = _items.lastOrNull()?.productId
         }
+        persist()
+        triggerUIRefresh()
+    }
+
+    // === FUNGSI BARU UNTUK LAYAR COMPOSE ===
+    fun getQty(productId: String): Int {
+        return _items.firstOrNull { it.productId == productId }?.qty ?: 0
+    }
+
+    fun decreaseSpecific(productId: String) {
+        val current = _items.firstOrNull { it.productId == productId } ?: return
+        changeQty(productId, -1, current.qty)
     }
 }

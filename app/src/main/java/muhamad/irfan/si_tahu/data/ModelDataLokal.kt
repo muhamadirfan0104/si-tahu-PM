@@ -38,9 +38,11 @@ data class Produk(
     var producedToday: Boolean = false,
     var safeStock: Int = stock,
     var nearExpiredStock: Int = 0,
+    var edTodayStock: Int = 0,
     var expiredStock: Int = 0,
     var nearestExpiryDate: String = "",
-    var stockBatchStatus: String = "Stok Sisa"
+    var stockBatchStatus: String = "Stok Sisa",
+    var lastProductionDate: String = ""
 )
 
 data class ParameterProduksi(

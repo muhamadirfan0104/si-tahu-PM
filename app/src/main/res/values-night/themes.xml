@@ -1,7 +1,119 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.SitahuPM" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema Utama: Menggunakan DayNight agar mendukung Mode Gelap & Terang secara otomatis -->
+    <style name="Theme.SiTahuCompose" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/blue_primary</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/mint_primary</item>
+        <item name="colorTertiary">@color/blue_primary</item>
+        <item name="colorSurface">@color/card_surface</item>
+        <item name="colorSurfaceVariant">@color/surface_soft</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorOutline">@color/line_color</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:fontFamily">sans-serif</item>
+
+        <!-- Referensi ke desain cetak biru Widget di bawah -->
+        <item name="toolbarStyle">@style/Widget.SiTahu.Toolbar</item>
+        <item name="materialCardViewStyle">@style/Widget.SiTahu.Card</item>
+        <item name="materialButtonStyle">@style/Widget.SiTahu.Button</item>
+        <item name="bottomNavigationStyle">@style/Widget.SiTahu.BottomNav</item>
+        <item name="textInputStyle">@style/Widget.SiTahu.TextInputLayout</item>
+        <item name="android:spinnerStyle">@style/Widget.SiTahu.Spinner</item>
     </style>
+
+    <!-- ========================================= -->
+    <!-- CETAK BIRU WIDGET (JANGAN DIHAPUS)        -->
+    <!-- ========================================= -->
+
+    <style name="Widget.Umkm.Toolbar" parent="Widget.SiTahu.Toolbar" />
+    <style name="Widget.Umkm.Card" parent="Widget.SiTahu.Card" />
+    <style name="Widget.Umkm.Button" parent="Widget.SiTahu.Button" />
+    <style name="Widget.Umkm.BottomNav" parent="Widget.SiTahu.BottomNav" />
+    <style name="Widget.Umkm.BottomNav.ActiveIndicator" parent="Widget.SiTahu.BottomNav.ActiveIndicator" />
+    <style name="Widget.Umkm.Spinner" parent="Widget.SiTahu.Spinner" />
+
+    <style name="Widget.SiTahu.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="backgroundTint">@color/screen_bg_light</item>
+        <item name="titleTextColor">@color/text_primary</item>
+        <item name="subtitleTextColor">@color/text_secondary</item>
+        <item name="navigationIconTint">@color/text_primary</item>
+        <item name="android:minHeight">46dp</item>
+        <item name="contentInsetStart">12dp</item>
+        <item name="contentInsetEnd">12dp</item>
+        <item name="titleTextAppearance">@style/TextAppearance.SiTahu.ToolbarTitle</item>
+        <item name="subtitleTextAppearance">@style/TextAppearance.SiTahu.ToolbarSubtitle</item>
+    </style>
+
+    <style name="Widget.SiTahu.Card" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardBackgroundColor">@color/card_surface</item>
+        <item name="strokeColor">@color/line_color</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="cardElevation">1dp</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.SiTahu.XLarge</item>
+    </style>
+
+    <style name="Widget.SiTahu.Button" parent="Widget.Material3.Button">
+        <item name="shapeAppearance">@style/ShapeAppearance.SiTahu.Large</item>
+        <item name="android:minHeight">50dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="elevation">0dp</item>
+        <item name="backgroundTint">@color/blue_primary</item>
+        <item name="android:textColor">@color/white</item>
+    </style>
+
+    <style name="Widget.SiTahu.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="shapeAppearance">@style/ShapeAppearance.SiTahu.Large</item>
+        <item name="android:minHeight">50dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="strokeColor">@color/line_color</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
+
+    <style name="Widget.SiTahu.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="shapeAppearance">@style/ShapeAppearance.SiTahu.Medium</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/blue_primary</item>
+    </style>
+
+    <style name="Widget.SiTahu.BottomNav" parent="Widget.Material3.BottomNavigationView">
+        <item name="android:background">@drawable/bg_bottom_nav_pill</item>
+        <item name="itemActiveIndicatorStyle">@style/Widget.SiTahu.BottomNav.ActiveIndicator</item>
+        <item name="itemIconTint">@color/nav_item_selector</item>
+        <item name="itemTextColor">@color/nav_item_selector</item>
+    </style>
+
+    <style name="Widget.SiTahu.BottomNav.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:color">@color/blue_soft</item>
+    </style>
+
+    <style name="Widget.SiTahu.TextInputLayout" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxBackgroundColor">@color/surface_input</item>
+        <item name="boxStrokeColor">@color/line_color</item>
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeWidthFocused">2dp</item>
+        <item name="hintTextColor">@color/muted</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.SiTahu.Large</item>
+    </style>
+
+    <style name="Widget.SiTahu.Spinner" parent="@android:style/Widget.DeviceDefault.Light.Spinner">
+        <item name="android:popupBackground">@color/card_surface</item>
+        <item name="android:backgroundTint">@color/card_surface</item>
+    </style>
+
+    <style name="TextAppearance.SiTahu.ToolbarTitle" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:fontFamily">sans-serif-black</item>
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
+    <style name="TextAppearance.SiTahu.ToolbarSubtitle" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/text_secondary</item>
+    </style>
+    <style name="ShapeAppearance.Umkm.Small" parent="ShapeAppearance.SiTahu.Medium" />
+    <style name="ShapeAppearance.Umkm.Medium" parent="ShapeAppearance.SiTahu.Large" />
+    <style name="ShapeAppearance.SiTahu.Medium" parent="ShapeAppearance.Material3.Corner.Medium"><item name="cornerSize">16dp</item></style>
+    <style name="ShapeAppearance.SiTahu.Large" parent="ShapeAppearance.Material3.Corner.Large"><item name="cornerSize">22dp</item></style>
+    <style name="ShapeAppearance.SiTahu.XLarge" parent="ShapeAppearance.Material3.Corner.ExtraLarge"><item name="cornerSize">30dp</item></style>
 </resources>

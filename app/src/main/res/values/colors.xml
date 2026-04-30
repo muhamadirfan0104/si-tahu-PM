@@ -1,26 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="green_primary">#5F7D49</color>
-    <color name="green_secondary">#749660</color>
-    <color name="green_soft">#E7EFDC</color>
-    <color name="gold_primary">#D8B856</color>
-    <color name="gold_soft">#F8ECC1</color>
-    <color name="orange_primary">#D68C55</color>
-    <color name="orange_soft">#F7DFCE</color>
-    <color name="blue_soft">#DDEAF7</color>
-    <color name="danger_soft">#EFD5CF</color>
-    <color name="text_primary">#293226</color>
-    <color name="text_secondary">#5D6754</color>
-    <color name="muted">#8A8577</color>
-    <color name="screen_bg">#F7F4ED</color>
-    <color name="screen_bg_light">#FCFBF7</color>
-    <color name="card_surface">#FFFFFF</color>
-    <color name="line_color">#DDD5C7</color>
+    <!-- SiTahu Soft Tofu UI: warm cream + soybean gold + soft sage. Calm food-friendly palette, not blue-heavy. -->
+    <color name="blue_primary">#C79A3D</color>
+    <color name="blue_secondary">#E7C56C</color>
+    <color name="blue_dark">#8A6022</color>
+    <color name="blue_soft">#FFF3D6</color>
+    <color name="blue_pale">#FFF8EA</color>
+
+    <color name="green_primary">#4D8D64</color>
+    <color name="green_secondary">#6F9D7C</color>
+    <color name="green_soft">#EEF7EF</color>
+    <color name="danger_primary">#C65B4A</color>
+    <color name="danger_soft">#FFEDE7</color>
+
+    <!-- Legacy aliases are mapped to the same restrained tofu palette. -->
+    <color name="gold_primary">#C79A3D</color>
+    <color name="gold_soft">#FFF3D6</color>
+    <color name="orange_primary">#DDA65A</color>
+    <color name="orange_soft">#FFF2DD</color>
+    <color name="mint_primary">#6F9D7C</color>
+    <color name="mint_soft">#EEF7EF</color>
+    <color name="purple_primary">#B88745</color>
+    <color name="purple_soft">#FFF3D6</color>
+    <color name="pink_primary">#C79A3D</color>
+    <color name="pink_soft">#FFF3D6</color>
+
+    <color name="text_primary">#2A241B</color>
+    <color name="text_secondary">#7E7464</color>
+    <color name="muted">#A69B8A</color>
+    <color name="screen_bg">#FFF8EC</color>
+    <color name="screen_bg_light">#FFFFF9</color>
+    <color name="card_surface">#FFFFFC</color>
+    <color name="surface_glass">#F7FFFFFC</color>
+    <color name="surface_soft">#FFF8EA</color>
+    <color name="surface_input">#FFFFFC</color>
+    <color name="surface_pressed">#FFF3D6</color>
+    <color name="line_color">#EBDDCA</color>
+    <color name="line_strong">#D9C5A8</color>
+
+    <color name="brand_dark">#2A241B</color>
+    <color name="brand_lime">#FFF3D6</color>
+    <color name="brand_mint">#6F9D7C</color>
+    <color name="brand_cream">#FFF8EC</color>
+    <color name="on_dark_soft">#FFFFFF</color>
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
 
-    <color name="floating_menu_toggle">#5F7D49</color>
-    <color name="floating_menu_surface">#EEF5E7</color>
-    <color name="floating_menu_overlay">#BFF7F4ED</color>
-
+    <color name="floating_menu_toggle">#C79A3D</color>
+    <color name="floating_menu_surface">#FFFFFC</color>
+    <color name="floating_menu_overlay">#B8FFF3D6</color>
 </resources>

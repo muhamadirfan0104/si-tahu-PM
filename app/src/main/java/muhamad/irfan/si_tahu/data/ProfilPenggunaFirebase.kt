@@ -7,5 +7,6 @@ data class ProfilPenggunaFirebase(
     val peranAsli: String = "",
     val modeAplikasi: String = "",
     val aktif: Boolean = true,
-    val bolehMasuk: Boolean = true
+    val bolehMasuk: Boolean = true,
+    val dihapus: Boolean = false
 )

@@ -3,7 +3,40 @@ package muhamad.irfan.si_tahu.ui.pengguna
 import android.content.Intent
 import android.os.Bundle
 import android.util.Patterns
-import android.view.View
+import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AdminPanelSettings
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Email
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LockReset
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Phone
+import androidx.compose.material.icons.rounded.Save
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import com.google.firebase.FirebaseApp
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
@@ -12,411 +45,464 @@ import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import muhamad.irfan.si_tahu.databinding.ActivityUserFormBinding
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
-import muhamad.irfan.si_tahu.util.AdapterSpinner
+import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
 import muhamad.irfan.si_tahu.util.EkstraAplikasi
 
 class AktivitasFormPengguna : AktivitasDasar() {
 
-    private lateinit var binding: ActivityUserFormBinding
-    private val firestore by lazy { FirebaseFirestore.getInstance() }
-
-    private var editingUserId: String? = null
-    private val roleOptions = listOf("ADMIN", "KASIR")
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityUserFormBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        bindToolbar(binding.toolbar, "Form Pengguna", "Tambah atau edit pengguna")
+        if (!requireLoginOrRedirect()) return
 
-        editingUserId = intent.getStringExtra(EkstraAplikasi.EXTRA_USER_ID)
+        val editingUserId = intent.getStringExtra(EkstraAplikasi.EXTRA_USER_ID)
 
-        binding.spRole.adapter = AdapterSpinner.stringAdapter(this, roleOptions)
-        binding.cbActive.isChecked = true
-        binding.btnResetPassword.visibility = View.GONE
-
-        binding.btnSave.setOnClickListener {
-            saveUser()
-        }
-
-        binding.btnResetPassword.setOnClickListener {
-            sendResetPassword()
-        }
-
-        if (!editingUserId.isNullOrBlank()) {
-            loadEditingUser(editingUserId!!)
-        }
-    }
-
-    private fun loadEditingUser(userId: String) {
-        firestore.collection("Pengguna")
-            .document(userId)
-            .get()
-            .addOnSuccessListener { doc ->
-                if (!doc.exists()) {
-                    showMessage("Data pengguna tidak ditemukan.")
-                    return@addOnSuccessListener
-                }
-
-                binding.etName.setText(doc.getString("namaPengguna").orEmpty())
-                binding.etEmail.setText(doc.getString("email").orEmpty())
-                binding.etPhone.setText(doc.getString("nomorTelepon").orEmpty())
-                binding.cbActive.isChecked = doc.getBoolean("aktif") ?: true
-
-                val role = doc.getString("peranAsli").orEmpty().ifBlank { "KASIR" }
-                val roleIndex = roleOptions.indexOf(role).takeIf { it >= 0 } ?: 0
-                binding.spRole.setSelection(roleIndex)
-
-                binding.etEmail.isEnabled = false
-                binding.etPassword.isEnabled = false
-                binding.etPassword.setText("")
-                binding.etPassword.hint = "Password tidak diubah dari form ini"
-                binding.btnResetPassword.visibility = View.VISIBLE
-            }
-            .addOnFailureListener { e ->
-                showMessage("Gagal memuat pengguna: ${e.message}")
-            }
-    }
-
-    private fun saveUser() {
-        clearErrors()
-
-        val namaPengguna = binding.etName.text?.toString()?.trim().orEmpty()
-        val email = binding.etEmail.text?.toString()?.trim()?.lowercase().orEmpty()
-        val nomorTelepon = binding.etPhone.text?.toString()?.trim().orEmpty()
-        val passwordInput = binding.etPassword.text?.toString()?.trim().orEmpty()
-        val peranAsli = binding.spRole.selectedItem?.toString().orEmpty().ifBlank { "KASIR" }
-        val aktif = binding.cbActive.isChecked
-
-        if (namaPengguna.isBlank()) {
-            binding.etName.error = "Nama wajib diisi"
-            binding.etName.requestFocus()
-            return
-        }
-
-        if (email.isBlank()) {
-            binding.etEmail.error = "Email wajib diisi"
-            binding.etEmail.requestFocus()
-            return
-        }
-
-        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            binding.etEmail.error = "Format email tidak valid"
-            binding.etEmail.requestFocus()
-            return
-        }
-
-        if (nomorTelepon.isBlank()) {
-            binding.etPhone.error = "Nomor telepon wajib diisi"
-            binding.etPhone.requestFocus()
-            return
-        }
-
-        if (editingUserId.isNullOrBlank()) {
-            if (passwordInput.isBlank()) {
-                binding.etPassword.error = "Password wajib diisi"
-                binding.etPassword.requestFocus()
-                return
-            }
-
-            if (passwordInput.length < 6) {
-                binding.etPassword.error = "Password minimal 6 karakter"
-                binding.etPassword.requestFocus()
-                return
-            }
-        }
-
-        setFormLoading(true)
-
-        firestore.collection("Pengguna")
-            .whereEqualTo("email", email)
-            .get()
-            .addOnSuccessListener { snapshot ->
-                val duplicateExists = snapshot.documents.any { it.id != editingUserId }
-
-                if (duplicateExists) {
-                    setFormLoading(false)
-                    binding.etEmail.error = "Email sudah dipakai pengguna lain"
-                    binding.etEmail.requestFocus()
-                    return@addOnSuccessListener
-                }
-
-                if (editingUserId.isNullOrBlank()) {
-                    createAuthUserThenPersist(
-                        namaPengguna = namaPengguna,
-                        email = email,
-                        nomorTelepon = nomorTelepon,
-                        password = passwordInput,
-                        peranAsli = peranAsli,
-                        aktif = aktif
-                    )
-                } else {
-                    persistUser(
-                        userId = editingUserId!!,
-                        authUid = null,
-                        namaPengguna = namaPengguna,
-                        email = email,
-                        nomorTelepon = nomorTelepon,
-                        peranAsli = peranAsli,
-                        aktif = aktif,
-                        isNew = false
-                    )
-                }
-            }
-            .addOnFailureListener { e ->
-                setFormLoading(false)
-                showMessage("Gagal memeriksa email pengguna: ${e.message}")
-            }
-    }
-
-    private fun createAuthUserThenPersist(
-        namaPengguna: String,
-        email: String,
-        nomorTelepon: String,
-        password: String,
-        peranAsli: String,
-        aktif: Boolean
-    ) {
-        val secondaryAppName = "user_creator_${System.currentTimeMillis()}"
-        val primaryApp = FirebaseApp.getInstance()
-        val secondaryApp = FirebaseApp.initializeApp(this, primaryApp.options, secondaryAppName)
-
-        if (secondaryApp == null) {
-            setFormLoading(false)
-            showMessage("Gagal menyiapkan auth pengguna.")
-            return
-        }
-
-        val secondaryAuth = FirebaseAuth.getInstance(secondaryApp)
-
-        secondaryAuth.createUserWithEmailAndPassword(email, password)
-            .addOnSuccessListener { result ->
-                val firebaseUser = result.user
-                if (firebaseUser == null) {
-                    cleanupSecondaryAuth(secondaryAuth, secondaryApp)
-                    setFormLoading(false)
-                    showMessage("Akun login gagal dibuat.")
-                    return@addOnSuccessListener
-                }
-
-                generateNextUserId(
-                    peranAsli = peranAsli,
-                    onResult = { newId ->
-                        persistUser(
-                            userId = newId,
-                            authUid = firebaseUser.uid,
-                            namaPengguna = namaPengguna,
-                            email = email,
-                            nomorTelepon = nomorTelepon,
-                            peranAsli = peranAsli,
-                            aktif = aktif,
-                            isNew = true,
-                            onSuccess = {
-                                cleanupSecondaryAuth(secondaryAuth, secondaryApp)
-                            },
-                            onFailure = { firestoreError ->
-                                rollbackCreatedAuthUser(
-                                    secondaryAuth = secondaryAuth,
-                                    secondaryApp = secondaryApp,
-                                    failureMessage = "Auth berhasil dibuat, tapi Firestore gagal: ${firestoreError.message}"
-                                )
-                            }
-                        )
+        setContent {
+            SiTahuProTheme {
+                UserFormScreen(
+                    editingUserId = editingUserId,
+                    onNavigateBack = { finish() },
+                    onShowMessage = { pesan -> showMessage(pesan) },
+                    onSaveSuccess = {
+                        setResult(RESULT_OK)
+                        finish()
                     },
-                    onError = { e ->
-                        rollbackCreatedAuthUser(
-                            secondaryAuth = secondaryAuth,
-                            secondaryApp = secondaryApp,
-                            failureMessage = "Gagal membuat ID pengguna: ${e.message}"
-                        )
-                    }
+                    activityContext = this@AktivitasFormPengguna
                 )
             }
+        }
+    }
+}
+
+// === KOMPONEN UTAMA UI ===
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UserFormScreen(
+    editingUserId: String?,
+    onNavigateBack: () -> Unit,
+    onShowMessage: (String) -> Unit,
+    onSaveSuccess: () -> Unit,
+    activityContext: AppCompatActivity
+) {
+    val firestore = FirebaseFirestore.getInstance()
+    val isEditing = !editingUserId.isNullOrBlank()
+
+    // State Form Pribadi
+    var namaPengguna by remember { mutableStateOf("") }
+    var nomorTelepon by remember { mutableStateOf("") }
+
+    // State Peran (Dropdown)
+    val roleOptions = listOf("ADMIN", "KASIR")
+    var isRoleDropdownExpanded by remember { mutableStateOf(false) }
+    var peranAsli by remember { mutableStateOf(roleOptions.last()) } // Default Kasir
+
+    // State Kredensial Login
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    // State Akses
+    var aktif by remember { mutableStateOf(true) }
+
+    // State Proses
+    var isLoading by remember { mutableStateOf(isEditing) }
+    var isSaving by remember { mutableStateOf(false) }
+    var isSendingReset by remember { mutableStateOf(false) }
+
+    // Tema Warna Pro
+    val isDark = isSystemInDarkTheme()
+    val bgColor = if (isDark) Color(0xFF111827) else Color(0xFFF3F4F6)
+    val surfaceColor = if (isDark) Color(0xFF1F2937) else Color(0xFFFFFFFF)
+    val primaryColor = if (isDark) Color(0xFF3B82F6) else Color(0xFF2563EB)
+    val textColor = if (isDark) Color(0xFFF9FAFB) else Color(0xFF111827)
+    val mutedColor = if (isDark) Color(0xFF9CA3AF) else Color(0xFF6B7280)
+    val borderColor = if (isDark) Color(0xFF374151) else Color(0xFFE5E7EB)
+    val warningColor = if (isDark) Color(0xFFF59E0B) else Color(0xFFD97706)
+
+    // Load Data Jika Mode Edit
+    LaunchedEffect(editingUserId) {
+        if (isEditing && editingUserId != null) {
+            firestore.collection("Pengguna").document(editingUserId).get()
+                .addOnSuccessListener { doc ->
+                    if (!doc.exists()) {
+                        onShowMessage("Data pengguna tidak ditemukan.")
+                        onNavigateBack()
+                        return@addOnSuccessListener
+                    }
+                    namaPengguna = doc.getString("namaPengguna").orEmpty()
+                    email = doc.getString("email").orEmpty()
+                    nomorTelepon = doc.getString("nomorTelepon").orEmpty()
+                    aktif = doc.getBoolean("aktif") ?: true
+                    peranAsli = doc.getString("peranAsli").orEmpty().ifBlank { "KASIR" }
+                    isLoading = false
+                }
+                .addOnFailureListener { e ->
+                    onShowMessage("Gagal memuat pengguna: ${e.message}")
+                    onNavigateBack()
+                }
+        }
+    }
+
+    // --- FUNGSI LOGIKA FIREBASE ---
+
+    fun sendResetPassword() {
+        if (email.isBlank()) {
+            onShowMessage("Email pengguna tidak ditemukan.")
+            return
+        }
+        isSendingReset = true
+        FirebaseAuth.getInstance().sendPasswordResetEmail(email)
+            .addOnSuccessListener {
+                isSendingReset = false
+                onShowMessage("Link reset password berhasil dikirim ke $email")
+            }
             .addOnFailureListener { e ->
-                cleanupSecondaryAuth(secondaryAuth, secondaryApp)
-                setFormLoading(false)
-                showMessage(readableAuthError(e))
+                isSendingReset = false
+                onShowMessage("Gagal mengirim link reset: ${e.message}")
             }
     }
 
-    private fun persistUser(
-        userId: String,
-        authUid: String?,
-        namaPengguna: String,
-        email: String,
-        nomorTelepon: String,
-        peranAsli: String,
-        aktif: Boolean,
-        isNew: Boolean,
-        onSuccess: (() -> Unit)? = null,
-        onFailure: ((Exception) -> Unit)? = null
-    ) {
-        val now = Timestamp.now()
-        val modeAplikasi = if (peranAsli == "ADMIN") "ADMIN" else "KASIR"
+    fun saveUser() {
+        val namaBersih = namaPengguna.trim()
+        val emailBersih = email.trim().lowercase()
+        val telpBersih = nomorTelepon.trim()
+        val passBersih = password.trim()
 
-        val data = hashMapOf<String, Any?>(
-            "namaPengguna" to namaPengguna,
-            "email" to email,
-            "nomorTelepon" to nomorTelepon,
-            "peranAsli" to peranAsli,
-            "modeAplikasi" to modeAplikasi,
-            "aktif" to aktif,
-            "bolehMasuk" to aktif,
-            "diperbaruiPada" to now
-        )
+        // Validasi
+        if (namaBersih.isBlank()) { onShowMessage("Nama wajib diisi."); return }
+        if (emailBersih.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(emailBersih).matches()) {
+            onShowMessage("Format email tidak valid."); return
+        }
+        if (telpBersih.isBlank()) { onShowMessage("Nomor telepon wajib diisi."); return }
 
-        if (authUid != null) {
-            data["authUid"] = authUid
+        if (!isEditing) {
+            if (passBersih.isBlank()) { onShowMessage("Password wajib diisi untuk pengguna baru."); return }
+            if (passBersih.length < 6) { onShowMessage("Password minimal 6 karakter."); return }
         }
 
-        if (isNew) {
-            data["dibuatPada"] = now
-        }
+        isSaving = true
 
-        firestore.collection("Pengguna")
-            .document(userId)
-            .set(data, SetOptions.merge())
-            .addOnSuccessListener {
-                onSuccess?.invoke()
-                setFormLoading(false)
-                showMessage("Pengguna berhasil disimpan.")
-                setResult(RESULT_OK)
-                finish()
-            }
-            .addOnFailureListener { e ->
-                onFailure?.invoke(e)
-                setFormLoading(false)
-                if (onFailure == null) {
-                    showMessage("Gagal menyimpan pengguna: ${e.message}")
+        // Cek Duplikasi Email
+        firestore.collection("Pengguna").whereEqualTo("email", emailBersih).get()
+            .addOnSuccessListener { snapshot ->
+                val duplicateExists = snapshot.documents.any { it.id != editingUserId }
+                if (duplicateExists) {
+                    isSaving = false
+                    onShowMessage("Email sudah dipakai oleh pengguna lain.")
+                    return@addOnSuccessListener
+                }
+
+                if (!isEditing) {
+                    // --- ALUR PEMBUATAN PENGGUNA BARU (SECONDARY AUTH) ---
+                    val secondaryAppName = "user_creator_${System.currentTimeMillis()}"
+                    val primaryApp = FirebaseApp.getInstance()
+                    val secondaryApp = FirebaseApp.initializeApp(activityContext, primaryApp.options, secondaryAppName)
+
+                    if (secondaryApp == null) {
+                        isSaving = false; onShowMessage("Gagal menyiapkan sistem Auth pengguna."); return@addOnSuccessListener
+                    }
+                    val secondaryAuth = FirebaseAuth.getInstance(secondaryApp)
+
+                    secondaryAuth.createUserWithEmailAndPassword(emailBersih, passBersih)
+                        .addOnSuccessListener { result ->
+                            val firebaseUser = result.user
+                            if (firebaseUser == null) {
+                                try { secondaryAuth.signOut(); secondaryApp.delete() } catch (_: Exception) {}
+                                isSaving = false; onShowMessage("Akun login gagal dibuat.")
+                                return@addOnSuccessListener
+                            }
+
+                            // Generate ID dan Simpan ke Firestore
+                            val prefix = if (peranAsli == "ADMIN") "usr_admin_" else "usr_kasir_"
+                            firestore.collection("Pengguna").get().addOnSuccessListener { userSnap ->
+                                val lastNum = userSnap.documents.mapNotNull { doc ->
+                                    if (doc.id.startsWith(prefix)) doc.id.removePrefix(prefix).toIntOrNull() else null
+                                }.maxOrNull() ?: 0
+
+                                val newId = prefix + "%02d".format(lastNum + 1)
+                                val now = Timestamp.now()
+                                val data = hashMapOf<String, Any?>(
+                                    "namaPengguna" to namaBersih, "email" to emailBersih, "nomorTelepon" to telpBersih,
+                                    "peranAsli" to peranAsli, "modeAplikasi" to peranAsli,
+                                    "aktif" to aktif, "bolehMasuk" to aktif,
+                                    "dihapus" to false, "dihapusPada" to null,
+                                    "authUid" to firebaseUser.uid, "dibuatPada" to now, "diperbaruiPada" to now
+                                )
+
+                                firestore.collection("Pengguna").document(newId).set(data, SetOptions.merge())
+                                    .addOnSuccessListener {
+                                        try { secondaryAuth.signOut(); secondaryApp.delete() } catch (_: Exception) {}
+                                        onShowMessage("Pengguna baru berhasil ditambahkan.")
+                                        onSaveSuccess()
+                                    }
+                                    .addOnFailureListener { e ->
+                                        firebaseUser.delete().addOnCompleteListener {
+                                            try { secondaryAuth.signOut(); secondaryApp.delete() } catch (_: Exception) {}
+                                            isSaving = false; onShowMessage("Gagal menyimpan ke Firestore: ${e.message}")
+                                        }
+                                    }
+                            }
+                        }
+                        .addOnFailureListener { e ->
+                            try { secondaryAuth.signOut(); secondaryApp.delete() } catch (_: Exception) {}
+                            isSaving = false
+                            val msg = when (e) {
+                                is FirebaseAuthWeakPasswordException -> "Password terlalu lemah (min. 6 karakter)."
+                                is FirebaseAuthInvalidCredentialsException -> "Format email tidak valid."
+                                is FirebaseAuthUserCollisionException -> "Email sudah terdaftar di sistem otentikasi."
+                                else -> "Gagal membuat akun: ${e.message}"
+                            }
+                            onShowMessage(msg)
+                        }
+
+                } else {
+                    // --- ALUR EDIT PENGGUNA ---
+                    val now = Timestamp.now()
+                    val data = hashMapOf<String, Any?>(
+                        "namaPengguna" to namaBersih, "nomorTelepon" to telpBersih,
+                        "peranAsli" to peranAsli, "modeAplikasi" to peranAsli,
+                        "aktif" to aktif, "bolehMasuk" to aktif, "dihapus" to false, "dihapusPada" to null, "diperbaruiPada" to now
+                    )
+
+                    firestore.collection("Pengguna").document(editingUserId!!).set(data, SetOptions.merge())
+                        .addOnSuccessListener {
+                            onShowMessage("Data pengguna berhasil diperbarui.")
+                            onSaveSuccess()
+                        }
+                        .addOnFailureListener { e ->
+                            isSaving = false; onShowMessage("Gagal memperbarui data: ${e.message}")
+                        }
                 }
             }
-    }
-
-    private fun sendResetPassword() {
-        val email = binding.etEmail.text?.toString()?.trim()?.lowercase().orEmpty()
-
-        if (email.isBlank()) {
-            binding.etEmail.error = "Email pengguna tidak ditemukan"
-            binding.etEmail.requestFocus()
-            return
-        }
-
-        binding.btnResetPassword.isEnabled = false
-
-        FirebaseAuth.getInstance()
-            .sendPasswordResetEmail(email)
-            .addOnSuccessListener {
-                binding.btnResetPassword.isEnabled = true
-                showMessage("Link reset password berhasil dikirim ke $email")
-            }
             .addOnFailureListener { e ->
-                binding.btnResetPassword.isEnabled = true
-                showMessage("Gagal mengirim reset password: ${e.message}")
+                isSaving = false
+                onShowMessage("Gagal memeriksa email: ${e.message}")
             }
     }
 
-    private fun rollbackCreatedAuthUser(
-        secondaryAuth: FirebaseAuth,
-        secondaryApp: FirebaseApp,
-        failureMessage: String
-    ) {
-        val createdUser = secondaryAuth.currentUser
-        if (createdUser == null) {
-            cleanupSecondaryAuth(secondaryAuth, secondaryApp)
-            setFormLoading(false)
-            showMessage(failureMessage)
-            return
-        }
-
-        createdUser.delete()
-            .addOnCompleteListener {
-                cleanupSecondaryAuth(secondaryAuth, secondaryApp)
-                setFormLoading(false)
-                showMessage(failureMessage)
-            }
-    }
-
-    private fun cleanupSecondaryAuth(
-        secondaryAuth: FirebaseAuth,
-        secondaryApp: FirebaseApp
-    ) {
-        try {
-            secondaryAuth.signOut()
-        } catch (_: Exception) {
-        }
-
-        try {
-            secondaryApp.delete()
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun readableAuthError(error: Exception): String {
-        return when (error) {
-            is FirebaseAuthWeakPasswordException -> {
-                "Password terlalu lemah. Minimal 6 karakter."
-            }
-            is FirebaseAuthInvalidCredentialsException -> {
-                "Email tidak valid."
-            }
-            is FirebaseAuthUserCollisionException -> {
-                "Email sudah terdaftar di Authentication."
-            }
-            else -> {
-                "Gagal membuat akun login: ${error.message}"
-            }
-        }
-    }
-
-    private fun generateNextUserId(
-        peranAsli: String,
-        onResult: (String) -> Unit,
-        onError: (Exception) -> Unit
-    ) {
-        val prefix = if (peranAsli == "ADMIN") "usr_admin_" else "usr_kasir_"
-
-        firestore.collection("Pengguna")
-            .get()
-            .addOnSuccessListener { snapshot ->
-                val lastNumber = snapshot.documents.mapNotNull { doc ->
-                    if (doc.id.startsWith(prefix)) {
-                        doc.id.removePrefix(prefix).toIntOrNull()
-                    } else {
-                        null
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(if (isEditing) "Edit Pengguna" else "Tambah Pengguna", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
+                        Text(if (isEditing) "Perbarui data staf" else "Daftarkan staf baru", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                     }
-                }.maxOrNull() ?: 0
-
-                val nextNumber = lastNumber + 1
-                onResult(prefix + "%02d".format(nextNumber))
+                },
+                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
+            )
+        },
+        bottomBar = {
+            Surface(
+                color = surfaceColor,
+                shadowElevation = 24.dp,
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            ) {
+                Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
+                    Button(
+                        onClick = { saveUser() },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        enabled = !isSaving && !isLoading,
+                        colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                    ) {
+                        if (isSaving) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text("Menyimpan...", fontWeight = FontWeight.Bold, color = Color.White)
+                        } else {
+                            Icon(Icons.Rounded.Save, null, tint = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Simpan Pengguna", fontWeight = FontWeight.Bold, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                }
             }
-            .addOnFailureListener { e ->
-                onError(e)
-            }
-    }
-
-    private fun clearErrors() {
-        binding.etName.error = null
-        binding.etEmail.error = null
-        binding.etPhone.error = null
-        binding.etPassword.error = null
-    }
-
-    private fun setFormLoading(isLoading: Boolean) {
-        binding.etName.isEnabled = !isLoading
-        binding.etPhone.isEnabled = !isLoading
-        binding.spRole.isEnabled = !isLoading
-        binding.cbActive.isEnabled = !isLoading
-        binding.btnSave.isEnabled = !isLoading
-
-        if (editingUserId.isNullOrBlank()) {
-            binding.etEmail.isEnabled = !isLoading
-            binding.etPassword.isEnabled = !isLoading
+        },
+        containerColor = bgColor
+    ) { paddingValues ->
+        if (isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = primaryColor) }
         } else {
-            binding.btnResetPassword.isEnabled = !isLoading
-        }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
 
-        binding.btnSave.text = if (isLoading) "Menyimpan..." else "Simpan Pengguna"
+                // === 1. KARTU INFORMASI PRIBADI ===
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Rounded.Person, null, tint = primaryColor, modifier = Modifier.size(20.dp))
+                            Text("Informasi Pribadi", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                        }
+
+                        OutlinedTextField(
+                            value = namaPengguna,
+                            onValueChange = { namaPengguna = it },
+                            label = { Text("Nama Lengkap") },
+                            placeholder = { Text("Masukkan nama pengguna") },
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = nomorTelepon,
+                            onValueChange = { nomorTelepon = it.filter { char -> char.isDigit() || char == '+' } },
+                            label = { Text("Nomor Telepon / WhatsApp") },
+                            placeholder = { Text("0812xxxxxx") },
+                            leadingIcon = { Icon(Icons.Rounded.Phone, null, tint = mutedColor) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // Dropdown Peran
+                        ExposedDropdownMenuBox(
+                            expanded = isRoleDropdownExpanded,
+                            onExpandedChange = { isRoleDropdownExpanded = it },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = peranAsli,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Peran / Posisi") },
+                                leadingIcon = { Icon(Icons.Rounded.AdminPanelSettings, null, tint = mutedColor) },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isRoleDropdownExpanded) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
+                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = isRoleDropdownExpanded,
+                                onDismissRequest = { isRoleDropdownExpanded = false },
+                                modifier = Modifier.background(surfaceColor)
+                            ) {
+                                roleOptions.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option, color = textColor) },
+                                        onClick = { peranAsli = option; isRoleDropdownExpanded = false }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // === 2. KARTU KREDENSIAL LOGIN ===
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Rounded.Security, null, tint = primaryColor, modifier = Modifier.size(20.dp))
+                            Text("Kredensial Login", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                        }
+
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = { email = it },
+                            label = { Text("Alamat Email") },
+                            placeholder = { Text("nama@email.com") },
+                            leadingIcon = { Icon(Icons.Rounded.Email, null, tint = mutedColor) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = if (isEditing) ImeAction.Done else ImeAction.Next),
+                            shape = RoundedCornerShape(12.dp),
+                            enabled = !isEditing, // Email tidak bisa diubah saat edit
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor,
+                                disabledTextColor = textColor, disabledBorderColor = borderColor, disabledLabelColor = mutedColor
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (!isEditing) {
+                            OutlinedTextField(
+                                value = password,
+                                onValueChange = { password = it },
+                                label = { Text("Password Akun") },
+                                placeholder = { Text("Minimal 6 karakter") },
+                                leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = mutedColor) },
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            // Jika Edit, Password disembunyikan dan muncul tombol Reset
+                            Surface(shape = RoundedCornerShape(12.dp), color = warningColor.copy(alpha = 0.1f), modifier = Modifier.fillMaxWidth()) {
+                                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Icon(Icons.Rounded.Info, null, tint = warningColor, modifier = Modifier.size(20.dp))
+                                    Text("Password tidak dapat dilihat/diubah langsung untuk keamanan.", color = warningColor, style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = { sendResetPassword() },
+                                modifier = Modifier.fillMaxWidth().height(50.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = !isSendingReset,
+                                border = BorderStroke(1.dp, primaryColor)
+                            ) {
+                                if (isSendingReset) {
+                                    CircularProgressIndicator(color = primaryColor, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Mengirim...", color = primaryColor, fontWeight = FontWeight.Bold)
+                                } else {
+                                    Icon(Icons.Rounded.LockReset, null, tint = primaryColor)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Kirim Link Reset Password", color = primaryColor, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // === 3. KARTU PENGATURAN STATUS ===
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Column(Modifier.padding(vertical = 12.dp)) {
+                        Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Rounded.AdminPanelSettings, null, tint = primaryColor, modifier = Modifier.size(20.dp))
+                            Text("Pengaturan Akses", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                        }
+                        HorizontalDivider(color = borderColor, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+
+                        Row(
+                            Modifier.fillMaxWidth().clickable { aktif = !aktif }.padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Izinkan Masuk (Aktif)", fontWeight = FontWeight.Bold, color = textColor)
+                                Text("Pengguna dapat login dan menggunakan sistem", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                            }
+                            Switch(checked = aktif, onCheckedChange = { aktif = it }, colors = SwitchDefaults.colors(checkedTrackColor = primaryColor))
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(100.dp)) // Ruang ekstra untuk Bottom Bar
+            }
+        }
     }
 }

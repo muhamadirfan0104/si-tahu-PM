@@ -2,75 +2,60 @@ package muhamad.irfan.si_tahu.util
 
 import android.text.Editable
 import android.text.TextWatcher
-import com.google.android.material.textfield.TextInputEditText
+import muhamad.irfan.si_tahu.databinding.ComposeEditTextState
+import androidx.compose.ui.text.input.KeyboardType
 
 object InputAngka {
 
-    fun pasang(editText: TextInputEditText, desimal: Boolean = false) {
+    fun pasang(editText: ComposeEditTextState, desimal: Boolean = false) {
+        editText.keyboardType = if (desimal) KeyboardType.Decimal else KeyboardType.Number
         editText.addTextChangedListener(object : TextWatcher {
             private var sedangFormat = false
 
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
 
             override fun afterTextChanged(s: Editable?) {
                 if (sedangFormat) return
-
                 val raw = s?.toString().orEmpty()
                 if (raw.isBlank()) return
 
                 sedangFormat = true
-                val formatted = if (desimal) {
-                    formatDesimalInput(raw)
-                } else {
-                    formatInput(raw)
-                }
-
+                val formatted = if (desimal) formatDesimalInput(raw) else formatInput(raw)
                 if (formatted != raw) {
                     editText.setText(formatted)
                     editText.setSelection(formatted.length)
                 }
-
                 sedangFormat = false
             }
         })
     }
 
-    fun ambilLong(editText: TextInputEditText): Long {
-        return parseLong(editText.text?.toString())
-    }
+    fun ambilLong(editText: ComposeEditTextState): Long = parseLong(editText.text?.toString())
 
-    fun ambilInt(editText: TextInputEditText): Int {
-        return ambilLong(editText).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-    }
+    fun ambilInt(editText: ComposeEditTextState): Int = ambilLong(editText).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 
-    fun ambilDouble(editText: TextInputEditText): Double {
-        return parseDouble(editText.text?.toString())
-    }
+    fun ambilDouble(editText: ComposeEditTextState): Double = parseDouble(editText.text?.toString())
 
-    fun setNilai(editText: TextInputEditText, value: Long) {
+    fun setNilai(editText: ComposeEditTextState, value: Long) {
         editText.setText(if (value <= 0L) "" else Formatter.ribuan(value))
     }
 
-    fun setNilai(editText: TextInputEditText, value: Int) {
+    fun setNilai(editText: ComposeEditTextState, value: Int) {
         setNilai(editText, value.toLong())
     }
 
-    fun setNilaiDesimal(editText: TextInputEditText, value: Double) {
+    fun setNilaiDesimal(editText: ComposeEditTextState, value: Double) {
         if (value <= 0.0) {
             editText.setText("")
             return
         }
-
         val nilaiBulat = value.toLong()
         val pecahan = value - nilaiBulat
         val text = if (pecahan == 0.0) {
             Formatter.ribuan(nilaiBulat)
         } else {
-            val pecahanText = value.toString()
-                .substringAfter(".", "")
-                .trimEnd('0')
+            val pecahanText = value.toString().substringAfter(".", "").trimEnd('0')
             "${Formatter.ribuan(nilaiBulat)},$pecahanText"
         }
         editText.setText(text)
@@ -106,6 +91,8 @@ object InputAngka {
         val angka = parseLong(value)
         return if (angka == 0L && value.isNullOrBlank()) "" else Formatter.ribuan(angka)
     }
+
+    fun formatInputDesimal(value: String?): String = formatDesimalInput(value)
 
     private fun formatDesimalInput(value: String?): String {
         if (value.isNullOrBlank()) return ""
