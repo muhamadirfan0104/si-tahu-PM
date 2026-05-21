@@ -113,7 +113,7 @@ open class AktivitasDasar : AppCompatActivity() {
     protected fun showReceiptModal(
         title: String,
         receiptText: String,
-        pdfLabel: String = "Download",
+        pdfLabel: String = "Unduh",
         onClosed: (() -> Unit)? = null
     ) {
         if (isFinishing || isDestroyed) return
@@ -127,15 +127,15 @@ open class AktivitasDasar : AppCompatActivity() {
                     runCatching { PembantuCetak.printNota(this, title, receiptText) }
                         .onFailure { showMessage(it.message ?: "Gagal mencetak nota") }
                 }) else null,
-                negativeLabel = "Share",
+                negativeLabel = "Bagikan PDF",
                 onNegative = {
                     runCatching { PembantuCetak.shareStrukPdf(this, title, receiptText) }
-                        .onFailure { showMessage(it.message ?: "Gagal membagikan struk") }
+                        .onFailure { showMessage(it.message ?: "Gagal membagikan nota") }
                 },
                 neutralLabel = pdfLabel.takeIf { it.isNotBlank() },
                 onNeutral = if (showStrukActions) ({
                     runCatching { PembantuCetak.downloadStrukPdf(this, title, receiptText) }
-                        .onFailure { showMessage(it.message ?: "Gagal download struk") }
+                        .onFailure { showMessage(it.message ?: "Gagal download nota") }
                 }) else null,
                 monospace = true,
                 onClosed = onClosed

@@ -162,6 +162,8 @@ private fun PriceListScreen(
     var showProductPicker by remember { mutableStateOf(false) }
     var productSearchQuery by remember { mutableStateOf("") }
     var productFilter by remember { mutableStateOf("SEMUA") }
+    var halamanHargaSaatIni by remember { mutableStateOf(1) }
+    val itemKecilPerHalaman = 15
 
     // Tema Warna Pro
     val isDark = isSystemInDarkTheme()
@@ -176,6 +178,14 @@ private fun PriceListScreen(
     val warningColor = if (isDark) Color(0xFFF59E0B) else Color(0xFFD97706)
     val dangerColor = if (isDark) Color(0xFFEF4444) else Color(0xFFDC2626)
     val produkTerkunci = !initialProductId.isNullOrBlank()
+
+    val totalHalamanHarga = maxOf(1, ((channels.size - 1) / itemKecilPerHalaman) + 1)
+    if (halamanHargaSaatIni > totalHalamanHarga) halamanHargaSaatIni = totalHalamanHarga
+    val daftarHargaTampil = channels.drop((halamanHargaSaatIni - 1) * itemKecilPerHalaman).take(itemKecilPerHalaman)
+
+    LaunchedEffect(selectedProduct?.id, channels.size) {
+        halamanHargaSaatIni = 1
+    }
 
     // 1. Load Produk Awal
     LaunchedEffect(autoRefreshTrigger) {
@@ -284,7 +294,7 @@ private fun PriceListScreen(
                     val otherActiveDocs = snapshot.documents.filter { it.getBoolean("dihapus") != true && it.getBoolean("aktif") != false && it.id != channel.id }
 
                     if (otherActiveDocs.isEmpty()) {
-                        onShowMessage("Tidak bisa menonaktifkan harga ini karena harus ada minimal satu harga aktif.")
+                        onShowMessage("Harga ini tidak dapat dinonaktifkan karena produk harus memiliki minimal satu harga aktif.")
                         return@addOnSuccessListener
                     }
 
@@ -313,7 +323,7 @@ private fun PriceListScreen(
                 val otherActiveDocs = snapshot.documents.filter { it.getBoolean("dihapus") != true && it.getBoolean("aktif") != false && it.id != channel.id }
 
                 if (isActive && otherActiveDocs.isEmpty()) {
-                    onShowMessage("Tidak bisa menghapus harga ini karena ini harga aktif terakhir.")
+                    onShowMessage("Harga ini tidak dapat dihapus karena menjadi satu-satunya harga aktif untuk produk ini.")
                     return@addOnSuccessListener
                 }
 
@@ -343,7 +353,7 @@ private fun PriceListScreen(
                     title = {
                         Column {
                             Text("Harga Kanal", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Atur variasi harga penjualan", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Kelola harga jual berdasarkan kanal penjualan", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -378,19 +388,19 @@ private fun PriceListScreen(
                 Column(Modifier.padding(20.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Rounded.Category, null, tint = primaryColor, modifier = Modifier.size(20.dp))
-                        Text(if (produkTerkunci) "Target Produk" else "Pilih Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                        Text(if (produkTerkunci) "Produk Tujuan" else "Pilih Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
                     }
 
                     // Tampilan TextField Pemilih
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        val displayValue = if (isLoadingProducts) "Memuat..." else selectedProduct?.name ?: "Belum ada produk..."
+                        val displayValue = if (isLoadingProducts) "Memuat..." else selectedProduct?.name ?: "Belum ada produk"
 
                         OutlinedTextField(
                             value = displayValue,
                             onValueChange = {},
                             readOnly = true,
                             enabled = !produkTerkunci,
-                            label = { Text("Produk Terpilih") },
+                            label = { Text("Produk Dipilih") },
                             trailingIcon = {
                                 if (!produkTerkunci && products.isNotEmpty()) {
                                     Icon(imageVector = Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = primaryColor)
@@ -443,11 +453,11 @@ private fun PriceListScreen(
                 }
             } else if (selectedProduct == null) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Pilih Produk", "Silakan pilih produk terlebih dahulu untuk mengatur harga.")
+                    EmptyDataView("Pilih Produk", "Pilih produk terlebih dahulu untuk melihat dan mengatur harga jual.")
                 }
             } else if (channels.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Belum Anda Harga", "Tekan tombol + di bawah untuk menambahkan variasi harga.")
+                    EmptyDataView("Belum Ada Harga", "Tekan tombol tambah untuk membuat harga jual baru.")
                 }
             } else {
                 LazyColumn(
@@ -455,7 +465,7 @@ private fun PriceListScreen(
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(channels) { channel ->
+                    items(daftarHargaTampil) { channel ->
                         PriceCard(
                             channel = channel,
                             surfaceColor = surfaceColor,
@@ -480,6 +490,21 @@ private fun PriceListScreen(
                                 }
                             }}
                         )
+                    }
+                    if (totalHalamanHarga > 1) {
+                        item {
+                            PaginationListCard(
+                                halamanSaatIni = halamanHargaSaatIni,
+                                totalHalaman = totalHalamanHarga,
+                                primaryColor = primaryColor,
+                                surfaceColor = surfaceColor,
+                                borderColor = borderColor,
+                                textColor = textColor,
+                                mutedColor = mutedColor,
+                                onPrev = { if (halamanHargaSaatIni > 1) halamanHargaSaatIni-- },
+                                onNext = { if (halamanHargaSaatIni < totalHalamanHarga) halamanHargaSaatIni++ }
+                            )
+                        }
                     }
                 }
             }
@@ -512,6 +537,40 @@ private fun PriceListScreen(
 }
 
 // === KOMPONEN UI REUSABLE ===
+
+@Composable
+private fun PaginationListCard(
+    halamanSaatIni: Int,
+    totalHalaman: Int,
+    primaryColor: Color,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    onPrev: () -> Unit,
+    onNext: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = surfaceColor,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            TextButton(onClick = onPrev, enabled = halamanSaatIni > 1) {
+                Text("Sebelumnya", color = if (halamanSaatIni > 1) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
+            }
+            Text("Hal $halamanSaatIni dari $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onNext, enabled = halamanSaatIni < totalHalaman) {
+                Text("Selanjutnya", color = if (halamanSaatIni < totalHalaman) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
 
 @Composable
 private fun EmptyDataView(title: String, subtitle: String) {
@@ -602,7 +661,7 @@ private fun ProductPickerHargaDialog(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     label = { Text("Cari produk") },
-                    placeholder = { Text("Nama atau jenis...") },
+                    placeholder = { Text("Cari nama atau jenis produk") },
                     leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null, tint = mutedColor) },
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
@@ -733,7 +792,7 @@ private fun PriceCard(
                     }
                     if (channel.hargaUtama) {
                         Surface(shape = RoundedCornerShape(6.dp), color = successColor.copy(alpha = 0.1f)) {
-                            Text("Default Kasir", color = successColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            Text("Harga Utama Kasir", color = successColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                         }
                     }
                 }
@@ -763,7 +822,7 @@ private fun PriceCard(
 
                         if (!channel.hargaUtama) {
                             DropdownMenuItem(
-                                text = { Text("Jadikan Default Kasir", color = successColor) },
+                                text = { Text("Jadikan Harga Utama Kasir", color = successColor) },
                                 onClick = { showMenu = false; onSetDefault() }
                             )
                         }

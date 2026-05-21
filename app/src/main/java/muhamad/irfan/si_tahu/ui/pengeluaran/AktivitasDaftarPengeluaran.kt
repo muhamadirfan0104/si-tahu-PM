@@ -56,6 +56,7 @@ import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
+import muhamad.irfan.si_tahu.util.DialogPilihBulanRiwayat
 import muhamad.irfan.si_tahu.util.Formatter
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -149,7 +150,7 @@ private fun ExpenseListScreen(
 
     // Paginasi
     var halamanSaatIni by remember { mutableStateOf(1) }
-    val itemPerHalaman = 15
+    val itemPerHalaman = 10
 
     // Tema Warna Pro
     val isDark = isSystemInDarkTheme()
@@ -163,9 +164,16 @@ private fun ExpenseListScreen(
     val dangerColor = if (isDark) Color(0xFFEF4444) else Color(0xFFDC2626)
     val warningColor = if (isDark) Color(0xFFF59E0B) else Color(0xFFD97706)
 
+    // Muat ulang otomatis saat data pengeluaran berubah dari form, perangkat lain, atau proses sinkronisasi.
+    DisposableEffect(Unit) {
+        val registration = firestore.collection("Pengeluaran")
+            .addSnapshotListener { _, _ -> triggerRefresh++ }
+        onDispose { registration.remove() }
+    }
+
     // Load Data
     LaunchedEffect(triggerRefresh) {
-        isLoading = true
+        isLoading = expenses.isEmpty()
         runCatching { RepositoriFirebaseUtama.muatRiwayatPengeluaran() }
             .onSuccess { rows ->
                 expenses = rows.map {
@@ -369,7 +377,7 @@ private fun ExpenseListScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Tidak ada data pengeluaran", "Coba hapus kriteria filter atau ubah pencarian.")
+                    EmptyDataView("Tidak ada data pengeluaran", "Coba ubah pencarian, filter, atau rentang tanggal.")
                 }
             } else {
                 LazyColumn(
@@ -508,6 +516,7 @@ private fun ModernExpenseFilterDialog(
     var draftMulai by remember { mutableStateOf(initialRentangMulai.orEmpty()) }
     var draftSelesai by remember { mutableStateOf(initialRentangSelesai.orEmpty()) }
     var showDateRangePicker by remember { mutableStateOf(false) }
+    var showMonthPicker by remember { mutableStateOf(false) }
 
     fun formatDateToLocalId(dateStr: String): String {
         if (dateStr.isBlank()) return ""
@@ -572,6 +581,18 @@ private fun ModernExpenseFilterDialog(
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Rounded.DateRange, contentDescription = null, tint = if (draftFilter == "Rentang") primaryColor else mutedColor)
                         Text(text = dateLabel, color = if (draftMulai.isNotBlank()) textColor else mutedColor, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clickable { showMonthPicker = true },
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
+                        Text("Pilih satu bulan penuh", color = textColor, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -669,6 +690,25 @@ private fun ModernExpenseFilterDialog(
                 }
             }
         }
+    }
+
+    if (showMonthPicker) {
+        DialogPilihBulanRiwayat(
+            initialDate = draftMulai.ifBlank { null },
+            primaryColor = primaryColor,
+            surfaceColor = surfaceColor,
+            bgColor = bgColor,
+            textColor = textColor,
+            mutedColor = mutedColor,
+            borderColor = borderColor,
+            onDismiss = { showMonthPicker = false },
+            onApply = { mulai, selesai, _ ->
+                draftFilter = "Rentang"
+                draftMulai = mulai
+                draftSelesai = selesai
+                showMonthPicker = false
+            }
+        )
     }
 }
 
@@ -804,7 +844,7 @@ private fun ProDetailDialog(
                     ) {
                         SelectionContainer {
                             Text(
-                                text = detailText.ifBlank { "Detail belum tersedia." },
+                                text = detailText.ifBlank { "Detail data belum tersedia." },
                                 color = textColor,
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.bodySmall,

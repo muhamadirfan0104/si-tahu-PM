@@ -166,13 +166,12 @@ private fun ExpenseFormScreen(
         }
 
         isSaving = true
-        val dateTime = Formatter.isoDate(tanggalBersih, "$waktu:00")
-
         coroutineScope.launch {
             runCatching {
                 val newId = RepositoriFirebaseUtama.simpanPengeluaran(
                     existingId = existingId,
-                    dateOnly = dateTime, // Mengirim format ISO lengkap
+                    dateOnly = tanggalBersih,
+                    timeOnly = waktu,
                     category = namaPengeluaranBersih,
                     amount = nominal,
                     note = catatanBersih,

@@ -418,9 +418,9 @@ object RepositoriFirebaseUtama {
 
         val stokLayak = safe + near + edToday
         val status = when {
-            stokLayak <= 0L && expired > 0L -> "Kadaluarsa"
+            stokLayak <= 0L && expired > 0L -> "Kedaluwarsa"
             edToday > 0L -> "ED Hari Ini"
-            near > 0L -> "Hampir Kadaluarsa"
+            near > 0L -> "Hampir Kedaluwarsa"
             producedToday -> "Produksi Hari Ini"
             safe > 0L -> "Stok Sisa"
             else -> "Habis"
@@ -655,10 +655,23 @@ object RepositoriFirebaseUtama {
         }
     }
 
+    private fun labelPeriodeTanggal(rangeKey: String): String {
+        val normalized = rangeKeyNormal(rangeKey)
+        if (normalized == "semua") return "Semua data"
+        val (start, end) = batasRentangKunciTanggal(normalized)
+        if (start.isNullOrBlank() || end.isNullOrBlank()) return labelRentang(normalized)
+        return if (start == end) labelTanggalLaporan(start) else "${labelTanggalLaporan(start)} - ${labelTanggalLaporan(end)}"
+    }
+
+    private fun normalisasiKunciTanggal(value: String): String {
+        val clean = value.trim()
+        return Regex("^\\d{4}-\\d{2}-\\d{2}").find(clean)?.value.orEmpty()
+    }
+
     private fun dalamRentangKunciTanggal(kunciTanggal: String, rangeKey: String): Boolean {
         val (start, end) = batasRentangKunciTanggal(rangeKey)
         if (start == null || end == null) return true
-        val key = kunciTanggal.ifBlank { Formatter.currentDateOnly() }
+        val key = normalisasiKunciTanggal(kunciTanggal).ifBlank { Formatter.currentDateOnly() }
         return key >= start && key <= end
     }
 
@@ -682,7 +695,6 @@ object RepositoriFirebaseUtama {
         val today = Formatter.currentDateOnly()
 
         val query = when (normalized) {
-            "hari_ini" -> ref.whereEqualTo(keyField, today)
             "semua" -> {
                 val fetchLimit = limit?.let { (it * RECENT_FETCH_MULTIPLIER).coerceAtLeast(it).toLong() }
                 if (fetchLimit != null) ref.orderBy("dibuatPada", Query.Direction.DESCENDING).limit(fetchLimit) else ref
@@ -690,7 +702,12 @@ object RepositoriFirebaseUtama {
             else -> {
                 val start = awalRentangKunciTanggal(normalized) ?: today
                 val end = akhirRentangKunciTanggal(normalized) ?: today
-                ref.whereGreaterThanOrEqualTo(keyField, start).whereLessThanOrEqualTo(keyField, end)
+                val endExclusive = Calendar.getInstance().apply {
+                    time = Formatter.parseDate("${end}T00:00:00")
+                    add(Calendar.DAY_OF_MONTH, 1)
+                }.time
+                ref.whereGreaterThanOrEqualTo(timestampField, Timestamp(Formatter.parseDate("${start}T00:00:00")))
+                    .whereLessThan(timestampField, Timestamp(endExclusive))
             }
         }
 
@@ -713,7 +730,7 @@ object RepositoriFirebaseUtama {
         keyField: String,
         timestampField: String
     ): String {
-        return doc.getString(keyField).orEmpty()
+        return normalisasiKunciTanggal(doc.getString(keyField).orEmpty())
             .ifBlank { dayKeyFromTimestamp(doc.getTimestamp(timestampField)) }
             .ifBlank { dayKeyFromTimestamp(doc.getTimestamp("dibuatPada")) }
     }
@@ -801,7 +818,7 @@ object RepositoriFirebaseUtama {
     ) {
         val stokLayak = stokLayakTransaksi(produk, stokFisik)
         check(stokLayak >= qtyDiminta) {
-            "Stok layak $konteks ${produk.name} tidak mencukupi. Stok kadaluarsa tidak bisa dipakai."
+            "Stok layak $konteks ${produk.name} tidak mencukupi. Stok kedaluwarsa tidak bisa dipakai."
         }
         val qtyBatchLayak = alokasiBatch.sumOf { it.qtyDiambil }
         val stokLegacyLayak = (stokLayak - qtyBatchLayak).coerceAtLeast(0L)
@@ -1042,7 +1059,7 @@ object RepositoriFirebaseUtama {
             notifikasi += NotifikasiAdmin(
                 id = "hampir_ed",
                 jenis = "HAMPIR_ED",
-                judul = "Stok Hampir ED",
+                judul = "Stok Hampir Kedaluwarsa",
                 isi = "${produkHampirEd.size} produk mendekati ED${if (contoh.isNotBlank()) ": $contoh" else ""}.",
                 jumlah = totalHampirEd,
                 warna = "orange",
@@ -1055,10 +1072,10 @@ object RepositoriFirebaseUtama {
         if (totalKadaluarsa > 0) {
             val contoh = produkKadaluarsa.take(2).joinToString(", ") { it.name }
             notifikasi += NotifikasiAdmin(
-                id = "kadaluarsa",
+                id = "kedaluwarsa",
                 jenis = "KADALUARSA",
-                judul = "Stok Kadaluarsa",
-                isi = "${produkKadaluarsa.size} produk memiliki stok kadaluarsa${if (contoh.isNotBlank()) ": $contoh" else ""}. Segera cek dan buang ED.",
+                judul = "Stok Kedaluwarsa",
+                isi = "${produkKadaluarsa.size} produk memiliki stok kedaluwarsa${if (contoh.isNotBlank()) ": $contoh" else ""}. Segera cek dan buang produk kedaluwarsa.",
                 jumlah = totalKadaluarsa,
                 warna = "danger",
                 tujuan = "stok"
@@ -1410,7 +1427,7 @@ object RepositoriFirebaseUtama {
             val alokasiBahan = siapkanAlokasiBatchFefo(trx, fromProductId, fromSnap.getString("namaProduk") ?: "Bahan", inputQty.toLong(), batchRefsByProduct)
             val totalAlokasiLayak = alokasiBahan.sumOf { it.qtyDiambil }
             check(totalAlokasiLayak >= inputQty.toLong()) {
-                "Stok layak pakai bahan tidak mencukupi. Stok kadaluarsa tidak bisa dipakai."
+                "Stok layak pakai bahan tidak mencukupi. Stok kedaluwarsa tidak bisa dipakai."
             }
             val stokAsalSesudah = stokAsal - inputQty.toLong()
             val stokHasil = toSnap.getLong("stokSaatIni") ?: 0L
@@ -1797,7 +1814,7 @@ $pembatalanBlock
             if (hasilBatchSnaps.isNotEmpty()) {
                 val qtySisaBatchHasil = hasilBatchSnaps.sumOf { (_, snap) -> snap.getLong("qtySisa") ?: 0L }
                 check(qtySisaBatchHasil >= hasilQty) {
-                    "Stok batch hasil sudah terpakai, produksi tidak bisa dibatalkan. Buat adjustment koreksi jika perlu."
+                    "Stok hasil produksi sudah terpakai, produksi tidak bisa dibatalkan. Buat penyesuaian stok jika diperlukan."
                 }
             }
 
@@ -1950,7 +1967,7 @@ $pembatalanBlock
                     status == "Habis" -> "Habis"
                     status == "Menipis" -> "Menipis"
                     produk.edTodayStock > 0 -> "ED Hari Ini"
-                    produk.nearExpiredStock > 0 -> "Hampir ED"
+                    produk.nearExpiredStock > 0 -> "Hampir Kedaluwarsa"
                     else -> "Aman"
                 },
                 edTerdekat = produk.nearestExpiryDate
@@ -1997,9 +2014,9 @@ $pembatalanBlock
         note: String,
         userAuthId: String
     ): String {
-        require(qty > 0) { "Jumlah adjustment harus lebih dari 0" }
+        require(qty > 0) { "Jumlah penyesuaian harus lebih dari 0" }
         require(!type.equals("add", ignoreCase = true) && !type.equals("tambah", ignoreCase = true)) {
-            "Adjustment stok hanya untuk mengurangi stok. Penambahan stok dilakukan lewat menu Produksi."
+            "Penyesuaian stok hanya untuk mengurangi stok. Penambahan stok dilakukan lewat menu Produksi."
         }
 
         val qtyLong = qty.toLong()
@@ -2098,7 +2115,7 @@ $pembatalanBlock
 
     suspend fun buildAdjustmentDetailText(id: String): String {
         val doc = firestore.collection("PenyesuaianStok").document(id).get().await()
-        if (!doc.exists()) return "Data adjustment tidak ditemukan"
+        if (!doc.exists()) return "Data penyesuaian tidak ditemukan"
         val tanggal = isoFromTimestamp(doc.getTimestamp("tanggalPenyesuaian") ?: doc.getTimestamp("dibuatPada"))
         val status = if (doc.penyesuaianDibatalkan()) "DIBATALKAN" else "AKTIF"
         val pembatalanBlock = if (doc.penyesuaianDibatalkan()) {
@@ -2127,9 +2144,9 @@ $pembatalanBlock
     suspend fun batalkanPenyesuaianStok(id: String, alasan: String, userAuthId: String) {
         val ref = firestore.collection("PenyesuaianStok").document(id)
         val doc = ref.get().await()
-        if (!doc.exists()) throw IllegalStateException("Data adjustment tidak ditemukan")
+        if (!doc.exists()) throw IllegalStateException("Data penyesuaian tidak ditemukan")
         require(alasan.isNotBlank()) { "Alasan pembatalan wajib diisi" }
-        if (doc.penyesuaianDibatalkan()) throw IllegalStateException("Adjustment sudah dibatalkan")
+        if (doc.penyesuaianDibatalkan()) throw IllegalStateException("Penyesuaian sudah dibatalkan")
 
         val productId = doc.getString("idProduk").orEmpty()
         val produkRef = produkRef(productId)
@@ -2148,19 +2165,16 @@ $pembatalanBlock
         val idPembatal = user?.idDokumen ?: userAuthId
         val namaPembatal = user?.nama ?: "Pengguna"
         val kunciTanggal = doc.getString("kunciTanggal").orEmpty().ifBlank { dayKeyFromTimestamp(doc.getTimestamp("tanggalPenyesuaian")) }
-        var riwayatDrafts: List<DraftRiwayatStok> = emptyList()
 
         firestore.runTransaction { trx ->
             val adjSnap = trx.get(ref)
-            check(adjSnap.exists()) { "Data adjustment tidak ditemukan" }
-            check(!adjSnap.penyesuaianDibatalkan()) { "Adjustment sudah dibatalkan" }
+            check(adjSnap.exists()) { "Data penyesuaian tidak ditemukan" }
+            check(!adjSnap.penyesuaianDibatalkan()) { "Penyesuaian sudah dibatalkan" }
             val produkSnap = trx.get(produkRef)
             check(produkSnap.exists()) { "Produk tidak ditemukan" }
             val batchSnaps = batchRefs.map { it to trx.get(it) }
             val stok = produkSnap.getLong("stokSaatIni") ?: 0L
             val stokSesudah = stok + qty
-            val kodeProduk = produkSnap.getString("kodeProduk") ?: productId
-            val namaProduk = produkSnap.getString("namaProduk") ?: adjSnap.getString("namaProduk").orEmpty().ifBlank { "Produk" }
 
             trx.update(produkRef, mapOf("stokSaatIni" to stokSesudah, "diperbaruiPada" to dibuatPada))
 
@@ -2195,28 +2209,10 @@ $pembatalanBlock
                 )
             )
 
-            riwayatDrafts = listOf(
-                DraftRiwayatStok(
-                    tanggalMutasi = dibuatPada,
-                    kunciTanggal = dayKeyFromTimestamp(dibuatPada),
-                    idProduk = productId,
-                    kodeProduk = kodeProduk,
-                    namaProduk = namaProduk,
-                    jenisMutasi = if (jenis.equals("KADALUARSA", true)) "PEMBATALAN_ADJUSTMENT_KADALUARSA" else "PEMBATALAN_ADJUSTMENT_KURANG",
-                    sumberMutasi = "PenyesuaianStok",
-                    referensiId = id,
-                    qtyMasuk = qty,
-                    qtyKeluar = 0L,
-                    stokSebelum = stok,
-                    stokSesudah = stokSesudah,
-                    catatan = "Pembatalan adjustment: ${alasan.trim()}",
-                    idPembuat = idPembatal,
-                    namaPembuat = namaPembatal
-                )
-            )
+            // Pembatalan adjustment mengikuti pola batal transaksi: data utama dan riwayat aslinya
+            // ditandai BATAL, tanpa membuat kartu mutasi pembatalan baru.
         }.await()
 
-        catatRiwayatStok(riwayatDrafts)
         tandaiRiwayatStokDibatalkan(id, "PenyesuaianStok", alasan.trim(), idPembatal, namaPembatal, dibuatPada)
         perbaruiRingkasanHarian(kunciTanggal)
     }
@@ -2245,7 +2241,7 @@ $pembatalanBlock
         note: String,
         userAuthId: String
     ): String {
-        require(qty > 0) { "Jumlah stok kadaluarsa harus lebih dari 0" }
+        require(qty > 0) { "Jumlah stok kedaluwarsa harus lebih dari 0" }
 
         val today = tanggalKeySaatIni()
         val ref = firestore.collection("PenyesuaianStok").document(newId("adj"))
@@ -2278,7 +2274,7 @@ $pembatalanBlock
             )
             .map { it.reference }
 
-        check(expiredBatchRefs.isNotEmpty()) { "Tidak ada stok kadaluarsa untuk produk ini" }
+        check(expiredBatchRefs.isNotEmpty()) { "Tidak ada stok kedaluwarsa untuk produk ini" }
 
         var riwayatDrafts: List<DraftRiwayatStok> = emptyList()
         var detailBatchTerbuang: List<Map<String, Any>> = emptyList()
@@ -2313,7 +2309,7 @@ $pembatalanBlock
                 sisaBuang -= ambil
             }
 
-            check(sisaBuang <= 0L) { "Jumlah melebihi stok kadaluarsa yang tersedia" }
+            check(sisaBuang <= 0L) { "Jumlah melebihi stok kedaluwarsa yang tersedia" }
 
             val stok = produkSnap.getLong("stokSaatIni") ?: 0L
             // Data lama kadang punya BatchStok kadaluarsa yang lebih besar dari stokSaatIni.
@@ -2355,8 +2351,8 @@ $pembatalanBlock
                     "namaProduk" to namaProduk,
                     "jenisPenyesuaian" to "KADALUARSA",
                     "jumlah" to qty,
-                    "alasanPenyesuaian" to note.ifBlank { "Buang stok kadaluarsa" },
-                    "catatan" to note.ifBlank { "Buang stok kadaluarsa" },
+                    "alasanPenyesuaian" to note.ifBlank { "Buang stok kedaluwarsa" },
+                    "catatan" to note.ifBlank { "Buang stok kedaluwarsa" },
                     "batchKadaluarsaDetail" to detailBatchTerbuang,
                     "statusPenyesuaian" to "AKTIF",
                     "dibatalkan" to false,
@@ -2384,7 +2380,7 @@ $pembatalanBlock
                     qtyKeluar = qty.toLong(),
                     stokSebelum = stok,
                     stokSesudah = nextStok,
-                    catatan = note.ifBlank { "Buang stok kadaluarsa" },
+                    catatan = note.ifBlank { "Buang stok kedaluwarsa" },
                     idPembuat = user?.idDokumen ?: userAuthId,
                     namaPembuat = user?.nama ?: "Pengguna"
                 )
@@ -2451,8 +2447,8 @@ $pembatalanBlock
             jenisMutasi.contains("PRODUKSI_DASAR", ignoreCase = true) -> "Produksi Dasar"
             jenisMutasi.contains("KONVERSI_MASUK", ignoreCase = true) -> "Produk Olahan Masuk"
             jenisMutasi.contains("KONVERSI_KELUAR", ignoreCase = true) -> "Produk Olahan Keluar"
-            jenisMutasi.contains("ADJUSTMENT_TAMBAH", ignoreCase = true) -> "Adjustment Tambah"
-            jenisMutasi.contains("ADJUSTMENT_KURANG", ignoreCase = true) -> "Adjustment Kurang"
+            jenisMutasi.contains("ADJUSTMENT_TAMBAH", ignoreCase = true) -> "Penyesuaian Tambah"
+            jenisMutasi.contains("ADJUSTMENT_KURANG", ignoreCase = true) -> "Penyesuaian Kurang"
             jenisMutasi.contains("PENJUALAN", ignoreCase = true) -> "Penjualan"
             else -> jenisMutasi
         }
@@ -2492,8 +2488,8 @@ $pembatalanBlock
                 jenisMutasi.contains("PRODUKSI_DASAR") -> "Produksi masuk"
                 jenisMutasi.contains("KONVERSI_MASUK") -> "Produk Olahan masuk"
                 jenisMutasi.contains("KONVERSI_KELUAR") -> "Produk Olahan keluar"
-                jenisMutasi.contains("ADJUSTMENT_TAMBAH") -> "Adjustment tambah"
-                jenisMutasi.contains("ADJUSTMENT_KURANG") -> "Adjustment kurang"
+                jenisMutasi.contains("ADJUSTMENT_TAMBAH") -> "Penyesuaian tambah"
+                jenisMutasi.contains("ADJUSTMENT_KURANG") -> "Penyesuaian kurang"
                 jenisMutasi.contains("PENJUALAN") -> "Penjualan keluar"
                 else -> jenisMutasi.ifBlank { "Mutasi stok" }
             }
@@ -2523,6 +2519,7 @@ $pembatalanBlock
         uangDiterima: Long,
         cartItems: List<ItemKeranjang>,
         products: List<Produk>,
+        customerName: String = "",
         paymentGateway: String = "",
         paymentOrderId: String = "",
         paymentQrId: String = "",
@@ -2552,7 +2549,7 @@ $pembatalanBlock
             throw IllegalArgumentException("Uang diterima kurang dari total belanja")
         }
         if (metode == "QRIS") {
-            require(paymentGateway.isNotBlank()) { "Gateway QRIS belum tercatat" }
+            require(paymentGateway.isNotBlank()) { "Data pembayaran QRIS belum lengkap" }
             require(paymentOrderId.isNotBlank()) { "Order ID QRIS belum tercatat" }
             require(paymentStatus.equals("COMPLETED", ignoreCase = true)) {
                 "Pembayaran QRIS belum selesai"
@@ -2655,6 +2652,7 @@ $pembatalanBlock
                     "kunciTanggal" to kunciTanggal,
                     "sumberTransaksi" to "KASIR",
                     "metodePembayaran" to metode,
+                    "namaPelanggan" to customerName.trim(),
                     "totalItem" to cartItems.sumOf { it.qty },
                     "totalBelanja" to total,
                     "uangDiterima" to if (metode == "TUNAI") uangDiterima else total,
@@ -2737,10 +2735,11 @@ $pembatalanBlock
         paymentQrCreatedAtMillis: Long,
         paymentQrExpiresAtMillis: Long,
         paymentStatus: String,
-        paymentAmount: Long
+        paymentAmount: Long,
+        customerName: String = ""
     ): String {
         require(cartItems.isNotEmpty()) { "Keranjang masih kosong" }
-        require(paymentGateway.isNotBlank()) { "Gateway QRIS belum tercatat" }
+        require(paymentGateway.isNotBlank()) { "Data pembayaran QRIS belum lengkap" }
         require(paymentOrderId.isNotBlank()) { "Order ID QRIS belum tercatat" }
 
         val total = cartItems.sumOf { it.qty.toLong() * it.price }
@@ -2764,7 +2763,7 @@ $pembatalanBlock
                 val stok = snap.getLong("stokSaatIni") ?: 0L
                 check(stok >= item.qty) { "Stok ${produk.name} tidak mencukupi" }
                 check(stokLayakTransaksi(produk, stok) >= item.qty) {
-                    "Stok layak jual ${produk.name} tidak mencukupi. Stok kadaluarsa tidak bisa dijual."
+                    "Stok layak jual ${produk.name} tidak mencukupi. Stok kedaluwarsa tidak bisa dijual."
                 }
             }
 
@@ -2776,6 +2775,7 @@ $pembatalanBlock
                     "kunciTanggal" to kunciTanggal,
                     "sumberTransaksi" to "KASIR",
                     "metodePembayaran" to "QRIS",
+                    "namaPelanggan" to customerName.trim(),
                     "totalItem" to cartItems.sumOf { it.qty },
                     "totalBelanja" to total,
                     "uangDiterima" to 0L,
@@ -2844,6 +2844,34 @@ $pembatalanBlock
             statusPembayaran = doc.getString("statusPembayaran").orEmpty(),
             statusPenjualan = doc.getString("statusPenjualan").orEmpty().ifBlank { "SELESAI" }
         )
+    }
+
+    suspend fun tandaiQrisTidakTerbayarJikaKadaluarsa(id: String): Boolean {
+        val saleRef = firestore.collection("Penjualan").document(id)
+        val saleDoc = saleRef.get().await()
+        if (!saleDoc.exists()) return false
+
+        val statusPenjualan = saleDoc.getString("statusPenjualan").orEmpty().ifBlank { "SELESAI" }
+        val statusPembayaran = saleDoc.getString("statusPembayaran").orEmpty()
+        if (!statusPenjualan.equals("PENDING", ignoreCase = true) &&
+            !statusPembayaran.equals("PENDING_PAYMENT", ignoreCase = true)
+        ) return false
+
+        val expiresAt = saleDoc.getLong("paymentQrExpiresAtMillis") ?: 0L
+        if (expiresAt <= 0L || expiresAt > System.currentTimeMillis()) return false
+
+        val now = nowTimestamp()
+        saleRef.update(
+            mapOf(
+                "statusPenjualan" to "TIDAK_TERBAYAR",
+                "statusPembayaran" to "TIDAK_TERBAYAR",
+                "statusTransaksiKasir" to "TIDAK_TERBAYAR",
+                "paymentStatus" to "EXPIRED",
+                "catatanPenjualan" to "QRIS kedaluwarsa dan tidak terbayar",
+                "diperbaruiPada" to now
+            )
+        ).await()
+        return true
     }
 
     suspend fun selesaikanPenjualanQrisPending(
@@ -3457,20 +3485,13 @@ $pembatalanBlock
         val statusLabel = when (statusRaw.uppercase()) {
             "SELESAI" -> "Selesai"
             "PENDING" -> "Pending QRIS"
+            "TIDAK_TERBAYAR" -> "Belum Terbayar"
             "BATAL" -> "Dibatalkan"
             else -> statusRaw
         }
         val metodeLabel = labelMetodePembayaran(saleDoc.getString("metodePembayaran"))
-        val paymentGateway = saleDoc.getString("paymentGateway").orEmpty()
-        val paymentOrderId = saleDoc.getString("paymentOrderId").orEmpty()
-        val paymentStatus = saleDoc.getString("statusPembayaran").orEmpty()
-            .ifBlank { saleDoc.getString("paymentStatus").orEmpty() }
-        val gatewayStatus = saleDoc.getString("paymentStatus").orEmpty()
-        val paymentSource = saleDoc.getString("paymentSource").orEmpty()
-        val paymentReferenceId = saleDoc.getString("paymentReferenceId").orEmpty()
-        val paymentPaidAt = saleDoc.getString("paymentPaidAt").orEmpty()
-        val paymentAmount = saleDoc.getLong("paymentAmount") ?: 0L
-
+        val namaPelanggan = saleDoc.getString("namaPelanggan").orEmpty().trim()
+        val pelangganLine = if (namaPelanggan.isNotBlank()) "Pelanggan      : $namaPelanggan\n" else ""
         val detailText = if (detailSnapshot.isEmpty) {
             "Tidak ada rincian item"
         } else {
@@ -3503,21 +3524,6 @@ $pembatalanBlock
         val pembatal = saleDoc.getString("dibatalkanOlehNama").orEmpty()
         val timestampBatal = saleDoc.getTimestamp("dibatalkanPada")
         val tanggalBatal = timestampBatal?.let { Formatter.readableDateTime(isoFromTimestamp(it)) }.orEmpty()
-
-        val gatewayBlock = if (paymentGateway.isNotBlank() || paymentOrderId.isNotBlank()) {
-            """
-Gateway       : ${paymentGateway.ifBlank { "-" }}
-Order Gateway : ${paymentOrderId.ifBlank { "-" }}
-Status Bayar  : ${paymentStatus.ifBlank { "-" }}
-Status Gateway: ${gatewayStatus.ifBlank { "-" }}
-Nominal Bayar : ${if (paymentAmount > 0L) Formatter.currency(paymentAmount) else "-"}
-Sumber Bayar  : ${paymentSource.ifBlank { "-" }}
-Ref Bayar     : ${paymentReferenceId.ifBlank { "-" }}
-Waktu Gateway : ${paymentPaidAt.ifBlank { "-" }}
-            """.trimIndent()
-        } else {
-            ""
-        }
 
         val pembayaranText = if (metodeLabel.equals("Rekap", true)) {
             """
@@ -3557,12 +3563,12 @@ Tanggal        : ${Formatter.readableDateTime(tanggal)}
 Metode         : $metodeLabel
 Status         : $statusLabel
 Kasir/Admin    : ${saleDoc.getString("namaKasir").orEmpty().ifBlank { "-" }}
-────────────────────────
+${pelangganLine}────────────────────────
 DETAIL ITEM
 $detailText
 ────────────────────────
 $pembayaranText
-$gatewayBlock$pembatalanBlock
+$pembatalanBlock
 Catatan        : ${saleDoc.getString("catatanPenjualan").orEmpty().ifBlank { "-" }}
 ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
         """.trimIndent()
@@ -3728,8 +3734,12 @@ ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
         val user = cariPengguna(userAuthId)
         val dibuatPada = existingDoc?.takeIf { it.exists() }?.getTimestamp("dibuatPada") ?: nowTimestamp()
         val diperbaruiPada = nowTimestamp()
-        val kunciTanggal = dateOnly
-        val jam = timeOnly.ifBlank { Formatter.currentTimeOnly() }
+        val inputTanggal = dateOnly.trim()
+        val kunciTanggal = normalisasiKunciTanggal(inputTanggal).ifBlank { Formatter.currentDateOnly() }
+        val jamDariInput = inputTanggal.substringAfter("T", "").take(5).takeIf { Regex("\\d{2}:\\d{2}").matches(it) }
+        val jam = timeOnly.trim().take(5).takeIf { Regex("\\d{2}:\\d{2}").matches(it) }
+            ?: jamDariInput
+            ?: Formatter.currentTimeOnly()
         val tanggalPengeluaran = Timestamp(Formatter.parseDate("${kunciTanggal}T${jam}:00"))
 
         ref.set(
@@ -3758,7 +3768,7 @@ ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
             .get()
             .await()
 
-        return snapshot.documents.map { doc ->
+        return snapshot.documents.filter { !it.dataDihapus() }.map { doc ->
             val tanggalIso = isoFromTimestamp(doc.getTimestamp("tanggalPengeluaran") ?: doc.getTimestamp("dibuatPada"))
             val kategori = doc.getString("kategori").orEmpty().ifBlank { "Operasional" }
             val nominal = doc.getLong("nominal") ?: 0L
@@ -3940,6 +3950,7 @@ ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
                 status = when (status.uppercase()) {
                     "BATAL" -> "Batal"
                     "PENDING" -> "Pending"
+                    "TIDAK_TERBAYAR" -> "Belum Terbayar"
                     else -> "Selesai"
                 },
                 userId = userId,
@@ -4013,11 +4024,11 @@ ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
                 .ifBlank { "Pengguna" }
             rows += BarisRiwayatTransaksi(
                 id = doc.id,
-                jenis = "Adjustment",
+                jenis = "Penyesuaian",
                 title = doc.getString("namaProduk").orEmpty().ifBlank { "Produk" },
                 subtitle = "${Formatter.readableDateTime(tanggalIso)} • $jenisAdjustment • $userName" + if (batal) " • DIBATALKAN" else "",
                 amount = if (batal) "BATAL" else Formatter.ribuan(doc.getLong("jumlah") ?: 0L),
-                badge = "Adjustment",
+                badge = "Penyesuaian",
                 tanggalIso = tanggalIso,
                 status = if (batal) "Batal" else jenisAdjustment.lowercase(Locale.US).replaceFirstChar { it.uppercase() },
                 userId = userId,
@@ -4072,7 +4083,7 @@ ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
             appendLine(row("Transaksi Penjualan", laporan.totalTransaksi.toString()))
             appendLine(row("Item Terjual", laporan.totalItemTerjual.toString()))
             appendLine(row(""))
-            appendLine(row("Produk Terlaris", "Qty", "Nominal"))
+            appendLine(row("Produk Terlaris Hari Ini", "Qty", "Nominal"))
             laporan.produkTerlaris.forEach { appendLine(row(it.title, it.qty.toString(), it.nominal.toString())) }
             appendLine(row(""))
             appendLine(row("Nama Pengeluaran", "Nominal"))
@@ -4092,6 +4103,12 @@ ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
         val user: String,
         val debit: Long,
         val kredit: Long
+    )
+
+    private data class BukuHarianExportData(
+        val label: String,
+        val rows: List<BarisBukuHarianExport>,
+        val saldoAwal: Long
     )
 
     private data class BarisMutasiStokExport(
@@ -4283,16 +4300,17 @@ $rowXml
     }
 
     suspend fun buildBukuHarianXlsx(rangeKey: String): ByteArray {
-        val (label, rows) = muatBarisBukuHarianExport(rangeKey)
-        var saldo = 0L
+        val data = muatBarisBukuHarianExport(rangeKey)
+        var saldo = data.saldoAwal
         val sheetRows = mutableListOf<List<String>>()
         sheetRows += listOf("BUKU HARIAN SI TAHU")
         sheetRows += listOf("Tanggal Laporan", Formatter.readableDateTime(formatIso.format(Date())))
-        sheetRows += listOf("Periode Transaksi", label)
+        sheetRows += listOf("Periode Transaksi", data.label)
         sheetRows += listOf("Jenis Data", "Pemasukan penjualan dan pengeluaran")
+        sheetRows += listOf("Saldo Awal", nominalMutasiExport(data.saldoAwal))
         sheetRows += emptyList<String>()
         sheetRows += listOf("Tanggal Transaksi", "Uraian Transaksi", "User", "Debit/Pengeluaran", "Kredit/Pemasukan", "Saldo")
-        rows.forEach { item ->
+        data.rows.forEach { item ->
             saldo += item.kredit - item.debit
             sheetRows += listOf(
                 Formatter.readableDateTime(item.tanggalIso),
@@ -4316,7 +4334,7 @@ $rowXml
         summaryRows += listOf("Tanggal Laporan", Formatter.readableDateTime(formatIso.format(Date())))
         summaryRows += listOf("Periode Mutasi", label)
         summaryRows += emptyList<String>()
-        summaryRows += listOf("Kode", "Nama Produk", "Kategori", "Stok Fisik", "Stok Layak", "ED Hari Ini", "Hampir ED", "Kadaluarsa", "Stok Minimum")
+        summaryRows += listOf("Kode", "Nama Produk", "Kategori", "Stok Fisik", "Layak Jual", "ED Hari Ini", "Hampir Kedaluwarsa", "Kedaluwarsa", "Stok Minimum")
         produk.forEach { item ->
             summaryRows += listOf(
                 item.code,
@@ -4352,8 +4370,8 @@ $rowXml
             rows += listOf("Kode/Kategori", "${item.code} / ${item.category}")
             rows += listOf("Periode", label)
             rows += listOf("Stok Fisik Saat Ini", item.stock.toString())
-            rows += listOf("Stok Layak Jual", (item.safeStock + item.nearExpiredStock + item.edTodayStock).toString())
-            rows += listOf("Rincian ED", "ED Hari Ini ${item.edTodayStock}, Hampir ED ${item.nearExpiredStock}, Kadaluarsa ${item.expiredStock}")
+            rows += listOf("Layak Jual", (item.safeStock + item.nearExpiredStock + item.edTodayStock).toString())
+            rows += listOf("Rincian ED", "ED Hari Ini ${item.edTodayStock}, Hampir Kedaluwarsa ${item.nearExpiredStock}, Kedaluwarsa ${item.expiredStock}")
             rows += emptyList<String>()
             rows += listOf("Tanggal Transaksi", "Uraian Transaksi", "User", "Masuk", "Keluar", "Saldo", "Catatan")
             val mutasi = grouped[item.id].orEmpty()
@@ -4377,26 +4395,53 @@ $rowXml
         return buildXlsxWorkbook(sheets)
     }
 
-    private suspend fun muatBarisBukuHarianExport(rangeKey: String): Pair<String, List<BarisBukuHarianExport>> {
+    private suspend fun hitungSaldoAwalBukuHarian(normalizedRange: String): Long {
+        val startKey = awalRentangKunciTanggal(normalizedRange) ?: return 0L
+        if (rangeKeyNormal(normalizedRange) == "semua") return 0L
+
+        val salesDocs = runCatching { firestore.collection("Penjualan").get().await().documents }.getOrElse { emptyList() }
+        val expenseDocs = runCatching { firestore.collection("Pengeluaran").get().await().documents }.getOrElse { emptyList() }
+
+        val pemasukanSebelumnya = salesDocs
+            .filter { doc -> !doc.dataDihapus() }
+            .filter { doc -> kunciTanggalDoc(doc, "kunciTanggal", "tanggalPenjualan") < startKey }
+            .filter { doc -> doc.getString("statusPenjualan").orEmpty().ifBlank { "SELESAI" }.equals("SELESAI", true) }
+            .sumOf { doc -> doc.getLong("totalBelanja") ?: 0L }
+
+        val pengeluaranSebelumnya = expenseDocs
+            .filter { doc -> !doc.dataDihapus() }
+            .filter { doc -> kunciTanggalDoc(doc, "kunciTanggal", "tanggalPengeluaran") < startKey }
+            .sumOf { doc -> doc.getLong("nominal") ?: 0L }
+
+        return pemasukanSebelumnya - pengeluaranSebelumnya
+    }
+
+    private suspend fun muatBarisBukuHarianExport(rangeKey: String): BukuHarianExportData {
         val normalizedRange = rangeKeyNormal(rangeKey)
         val salesAll = ambilDokumenKunciTanggal("Penjualan", "kunciTanggal", "tanggalPenjualan", normalizedRange)
         val expenses = ambilDokumenKunciTanggal("Pengeluaran", "kunciTanggal", "tanggalPengeluaran", normalizedRange)
+            .filter { !it.dataDihapus() }
 
         val rows = mutableListOf<BarisBukuHarianExport>()
 
         salesAll
+            .filter { doc -> !doc.dataDihapus() }
             .filter { doc -> doc.getString("statusPenjualan").orEmpty().ifBlank { "SELESAI" }.equals("SELESAI", true) }
             .forEach { doc ->
                 val tanggalIso = isoFromTimestamp(doc.getTimestamp("tanggalPenjualan") ?: doc.getTimestamp("dibuatPada"))
                 val nomor = doc.getString("nomorPenjualan").orEmpty().ifBlank { doc.id }
                 val sumber = labelSumberPenjualan(doc.getString("sumberTransaksi"))
                 val metode = labelMetodePembayaran(doc.getString("metodePembayaran"))
+                val pelanggan = doc.getString("namaPelanggan").orEmpty().trim()
                 val user = doc.getString("namaKasir").orEmpty()
                     .ifBlank { doc.getString("dibuatOlehNama").orEmpty() }
                     .ifBlank { if (sumber.equals("Pasar", true)) "Admin" else "Kasir" }
                 rows += BarisBukuHarianExport(
                     tanggalIso = tanggalIso,
-                    uraian = "Penjualan $sumber $nomor ($metode)",
+                    uraian = buildString {
+                        append("Penjualan $sumber $nomor ($metode)")
+                        if (pelanggan.isNotBlank()) append(" - Pelanggan: $pelanggan")
+                    },
                     user = user,
                     debit = 0L,
                     kredit = doc.getLong("totalBelanja") ?: 0L
@@ -4417,7 +4462,11 @@ $rowXml
             )
         }
 
-        return labelRentang(normalizedRange) to rows.sortedBy { Formatter.parseDate(it.tanggalIso) }
+        return BukuHarianExportData(
+            label = labelPeriodeTanggal(normalizedRange),
+            rows = rows.sortedBy { Formatter.parseDate(it.tanggalIso) },
+            saldoAwal = hitungSaldoAwalBukuHarian(normalizedRange)
+        )
     }
 
     private suspend fun muatMutasiStokExport(rangeKey: String): Triple<String, List<Produk>, Map<String, List<BarisMutasiStokExport>>> {
@@ -4470,12 +4519,12 @@ $rowXml
     }
 
     suspend fun buildBukuHarianExcelXml(rangeKey: String): String {
-        val (label, rows) = muatBarisBukuHarianExport(rangeKey)
+        val data = muatBarisBukuHarianExport(rangeKey)
         fun row(vararg cells: String): String = cells.joinToString(prefix = "<Row>", postfix = "</Row>") { cell ->
             "<Cell><Data ss:Type=\"String\">${xmlEscape(cell)}</Data></Cell>"
         }
 
-        var saldo = 0L
+        var saldo = data.saldoAwal
         return buildString {
             appendLine("<?xml version=\"1.0\"?>")
             appendLine("<?mso-application progid=\"Excel.Sheet\"?>")
@@ -4483,10 +4532,11 @@ $rowXml
             appendLine("<Worksheet ss:Name=\"Buku Harian\"><Table>")
             appendLine(row("BUKU HARIAN SI TAHU"))
             appendLine(row("Tanggal Laporan", Formatter.readableDateTime(formatIso.format(Date()))))
-            appendLine(row("Periode Transaksi", label))
+            appendLine(row("Periode Transaksi", data.label))
+            appendLine(row("Saldo Awal", nominalMutasiExport(data.saldoAwal)))
             appendLine(row(""))
             appendLine(row("Tanggal Transaksi", "Uraian Transaksi", "User", "Debit/Pengeluaran", "Kredit/Pemasukan", "Saldo"))
-            rows.forEach { item ->
+            data.rows.forEach { item ->
                 saldo += item.kredit - item.debit
                 appendLine(row(
                     Formatter.readableDateTime(item.tanggalIso),
@@ -4497,6 +4547,8 @@ $rowXml
                     nominalMutasiExport(saldo)
                 ))
             }
+            appendLine(row(""))
+            appendLine(row("Saldo Akhir", nominalMutasiExport(saldo)))
             appendLine("</Table>")
             appendLine(excelA4LandscapeFitOptions())
             appendLine("</Worksheet>")
@@ -4505,15 +4557,16 @@ $rowXml
     }
 
     suspend fun buildBukuHarianPdfText(rangeKey: String): String {
-        val (label, rows) = muatBarisBukuHarianExport(rangeKey)
+        val data = muatBarisBukuHarianExport(rangeKey)
         fun field(value: String): String = value.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ').trim()
-        var saldo = 0L
+        var saldo = data.saldoAwal
         return buildString {
             appendLine("@@TYPE=BUKU_HARIAN")
             appendLine("@@TANGGAL=${field(Formatter.readableDateTime(formatIso.format(Date())))}")
-            appendLine("@@PERIODE=${field(label)}")
+            appendLine("@@PERIODE=${field(data.label)}")
             appendLine("@@JENIS=Pemasukan penjualan dan pengeluaran")
-            rows.forEach { item ->
+            appendLine("@@SALDO_AWAL=${field(nominalMutasiExport(data.saldoAwal))}")
+            data.rows.forEach { item ->
                 saldo += item.kredit - item.debit
                 appendLine(
                     listOf(
@@ -4559,7 +4612,7 @@ $rowXml
             appendLine(row("Tanggal Laporan", Formatter.readableDateTime(formatIso.format(Date()))))
             appendLine(row("Periode Mutasi", label))
             appendLine(row(""))
-            appendLine(row("Kode", "Nama Produk", "Kategori", "Stok Fisik", "Stok Layak", "ED Hari Ini", "Hampir ED", "Kadaluarsa", "Stok Minimum"))
+            appendLine(row("Kode", "Nama Produk", "Kategori", "Stok Fisik", "Layak Jual", "ED Hari Ini", "Hampir Kedaluwarsa", "Kedaluwarsa", "Stok Minimum"))
             produk.forEach { item ->
                 appendLine(row(
                     item.code,
@@ -4585,7 +4638,7 @@ $rowXml
                 appendLine(row("Kode", item.code))
                 appendLine(row("Periode", label))
                 appendLine(row("Stok Fisik Saat Ini", item.stock.toString()))
-                appendLine(row("Stok Layak Jual", (item.safeStock + item.nearExpiredStock + item.edTodayStock).toString()))
+                appendLine(row("Layak Jual", (item.safeStock + item.nearExpiredStock + item.edTodayStock).toString()))
                 appendLine(row(""))
                 appendLine(row("Tanggal Transaksi", "Uraian Transaksi", "User", "Masuk", "Keluar", "Saldo", "Catatan"))
                 grouped[item.id].orEmpty().forEach { baris ->
@@ -4646,9 +4699,6 @@ $rowXml
             firestore.collection("Pengaturan").document("umum").get().await()
         }.getOrNull()
 
-        val ringkasanDoc = runCatching {
-            firestore.collection("RingkasanHarian").document(todayKey).get().await()
-        }.getOrNull()
 
         val produk = muatSemuaProduk()
         val produkAktif = produk.filter { it.active && !it.deleted }
@@ -4689,7 +4739,7 @@ $rowXml
                     title = item.name,
                     subtitle = item.nearestExpiryDate.takeIf { it.isNotBlank() }?.let { "ED terdekat ${Formatter.readableShortDate(it)}" } ?: "Perlu diprioritaskan",
                     amount = "${Formatter.ribuan(qtyPerhatian.toLong())} ${item.unit}",
-                    badge = if (item.expiredStock > 0) "Kadaluarsa" else if (item.edTodayStock > 0) "ED Hari Ini" else "Hampir ED",
+                    badge = if (item.expiredStock > 0) "Kedaluwarsa" else if (item.edTodayStock > 0) "ED Hari Ini" else "Hampir Kedaluwarsa",
                     tanggalIso = todayKey
                 )
             }
@@ -4757,15 +4807,12 @@ $rowXml
             )
         }
 
-        val totalPenjualan = ringkasanDoc?.getLong("totalPenjualan") ?: laporanHariIni.totalPenjualan
-        val totalPengeluaran = ringkasanDoc?.getLong("totalPengeluaran") ?: laporanHariIni.totalPengeluaran
-        val totalTransaksi = (ringkasanDoc?.getLong("totalTransaksi") ?: laporanHariIni.totalTransaksi.toLong()).toInt()
-        val totalItemTerjual = (ringkasanDoc?.getLong("totalItemTerjual") ?: laporanHariIni.totalItemTerjual.toLong()).toInt()
-        val totalLaba = ringkasanDoc?.getLong("totalLabaRugi") ?: laporanHariIni.labaRugi
-        val totalProduksi = (
-                (ringkasanDoc?.getLong("totalProduksiDasar") ?: 0L) +
-                        (ringkasanDoc?.getLong("totalProduksiOlahan") ?: 0L)
-                ).toInt().takeIf { it > 0 } ?: laporanHariIni.totalProduksi
+        val totalPenjualan = laporanHariIni.totalPenjualan
+        val totalPengeluaran = laporanHariIni.totalPengeluaran
+        val totalTransaksi = laporanHariIni.totalTransaksi
+        val totalItemTerjual = laporanHariIni.totalItemTerjual
+        val totalLaba = laporanHariIni.labaRugi
+        val totalProduksi = laporanHariIni.totalProduksi
 
         return RingkasanDashboard(
             namaUsaha = settingDoc?.getString("namaTampilanToko").orEmpty().ifBlank { "SI Tahu" },
@@ -4818,19 +4865,13 @@ $rowXml
     suspend fun perbaruiRingkasanHarian(kunciTanggal: String) {
         if (kunciTanggal.isBlank()) return
 
-        val sales = firestore.collection("Penjualan")
-            .whereEqualTo("kunciTanggal", kunciTanggal)
-            .whereEqualTo("statusPenjualan", "SELESAI")
-            .get().await().documents
+        val sales = ambilDokumenKunciTanggal("Penjualan", "kunciTanggal", "tanggalPenjualan", "custom:$kunciTanggal:$kunciTanggal")
+            .filter { doc -> doc.getString("statusPenjualan").orEmpty().ifBlank { "SELESAI" }.equals("SELESAI", true) }
 
-        val expenses = firestore.collection("Pengeluaran")
-            .whereEqualTo("kunciTanggal", kunciTanggal)
-            .get().await().documents
+        val expenses = ambilDokumenKunciTanggal("Pengeluaran", "kunciTanggal", "tanggalPengeluaran", "custom:$kunciTanggal:$kunciTanggal")
             .filter { !it.dataDihapus() }
 
-        val produksi = firestore.collection("CatatanProduksi")
-            .whereEqualTo("kunciTanggal", kunciTanggal)
-            .get().await().documents
+        val produksi = ambilDokumenKunciTanggal("CatatanProduksi", "kunciTanggal", "tanggalProduksi", "custom:$kunciTanggal:$kunciTanggal")
             .filter { !it.produksiDibatalkan() && !it.dataDihapus() }
 
         val totalPenjualan = sales.sumOf { it.getLong("totalBelanja") ?: 0L }

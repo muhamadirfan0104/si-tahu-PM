@@ -16,11 +16,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,18 +85,28 @@ class AktivitasLaporan : AktivitasDasar() {
         }
     }
 
-    private fun safeRangeName(key: String): String = key.replace(Regex("[^A-Za-z0-9_-]"), "_")
+    private fun safeRangeName(key: String): String = key.replace(Regex("[^A-Za-z0-9_-]"), "_").trim('_').ifBlank { "periode" }
+
+    private fun metaDariText(text: String, key: String): String {
+        val prefix = "@@$key="
+        return text.lineSequence().firstOrNull { it.startsWith(prefix) }?.substringAfter("=")?.trim().orEmpty()
+    }
+
+    private fun namaFilePeriode(text: String, fallbackRangeKey: String): String {
+        val periode = metaDariText(text, "PERIODE").ifBlank { fallbackRangeKey }
+        return safeRangeName(periode.replace(" - ", "_sampai_"))
+    }
 
     private fun exportBukuHarianExcel(rangeKey: String, setLoading: (Boolean) -> Unit) {
         lifecycleScope.launch {
             setLoading(true)
-            showMessage("Menyiapkan Excel buku harian...")
             runCatching {
                 val text = RepositoriFirebaseUtama.buildBukuHarianPdfText(rangeKey)
-                buildBukuHarianXlsxFromText(text)
-            }.onSuccess { bytes ->
+                val periodeFile = namaFilePeriode(text, rangeKey)
+                val bytes = buildBukuHarianXlsxFromText(text)
+                saveBytesToDownloads("buku_harian_sitahu_${periodeFile}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes)
+            }.onSuccess {
                 setLoading(false)
-                saveBytesToDownloads("buku_harian_sitahu_${safeRangeName(rangeKey)}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes)
             }.onFailure {
                 setLoading(false)
                 showMessage(it.message ?: "Gagal membuat buku harian Excel")
@@ -104,11 +117,13 @@ class AktivitasLaporan : AktivitasDasar() {
     private fun exportBukuHarianPdf(rangeKey: String, setLoading: (Boolean) -> Unit) {
         lifecycleScope.launch {
             setLoading(true)
-            showMessage("Menyiapkan PDF buku harian...")
             runCatching {
                 val text = RepositoriFirebaseUtama.buildBukuHarianPdfText(rangeKey)
-                savePdfTextToDownloads("Download Buku Harian PDF", "buku_harian_sitahu_${safeRangeName(rangeKey)}.pdf", text)
-            }.onSuccess { setLoading(false) }.onFailure {
+                val periodeFile = namaFilePeriode(text, rangeKey)
+                savePdfTextToDownloads("Buku Harian SI Tahu", "buku_harian_sitahu_${periodeFile}.pdf", text)
+            }.onSuccess {
+                setLoading(false)
+            }.onFailure {
                 setLoading(false)
                 showMessage(it.message ?: "Gagal membuat buku harian PDF")
             }
@@ -118,13 +133,12 @@ class AktivitasLaporan : AktivitasDasar() {
     private fun exportStokExcel(rangeKey: String, setLoading: (Boolean) -> Unit) {
         lifecycleScope.launch {
             setLoading(true)
-            showMessage("Menyiapkan Excel stok produk...")
             runCatching {
                 val text = RepositoriFirebaseUtama.buildStokProdukPdfText(rangeKey)
-                buildStokProdukXlsxFromText(text)
-            }.onSuccess { bytes ->
-                setLoading(false)
+                val bytes = buildStokProdukXlsxFromText(text)
                 saveBytesToDownloads("stok_produk_sitahu_${safeRangeName(rangeKey)}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes)
+            }.onSuccess {
+                setLoading(false)
             }.onFailure {
                 setLoading(false)
                 showMessage(it.message ?: "Gagal membuat stok produk Excel")
@@ -135,11 +149,12 @@ class AktivitasLaporan : AktivitasDasar() {
     private fun exportStokPdf(rangeKey: String, setLoading: (Boolean) -> Unit) {
         lifecycleScope.launch {
             setLoading(true)
-            showMessage("Menyiapkan PDF stok produk...")
             runCatching {
                 val text = RepositoriFirebaseUtama.buildStokProdukPdfText(rangeKey)
-                savePdfTextToDownloads("Download Stok Produk PDF", "stok_produk_sitahu_${safeRangeName(rangeKey)}.pdf", text)
-            }.onSuccess { setLoading(false) }.onFailure {
+                savePdfTextToDownloads("Unduh Stok Produk PDF", "stok_produk_sitahu_${safeRangeName(rangeKey)}.pdf", text)
+            }.onSuccess {
+                setLoading(false)
+            }.onFailure {
                 setLoading(false)
                 showMessage(it.message ?: "Gagal membuat stok produk PDF")
             }
@@ -173,7 +188,7 @@ class AktivitasLaporan : AktivitasDasar() {
                 resolver.openOutputStream(uri)?.use { output -> output.write(bytes) }
                 values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0)
                 resolver.update(uri, values, null, null)
-                showMessage("Tersimpan di Download/$folderName: $fileName")
+                showMessage("Tersimpan di Unduh/$folderName: $fileName")
             } catch (e: Exception) {
                 resolver.delete(uri, null, null); throw e
             }
@@ -183,7 +198,7 @@ class AktivitasLaporan : AktivitasDasar() {
             val file = File(directory, fileName)
             FileOutputStream(file).use { output -> output.write(bytes) }
             MediaScannerConnection.scanFile(this, arrayOf(file.absolutePath), arrayOf(mimeType), null)
-            showMessage("Tersimpan di Download/$folderName: $fileName")
+            showMessage("Tersimpan di Unduh/$folderName: $fileName")
         }
     }
 }
@@ -204,6 +219,8 @@ private data class DataStatistikLengkap(
 private data class PdfBukuRow(val tanggal: String, val uraian: String, val user: String, val debit: String, val kredit: String, val saldo: String)
 private data class PdfStokRow(val tanggal: String, val uraian: String, val user: String, val masuk: String, val keluar: String, val saldo: String, val catatan: String)
 private data class PdfStokProduk(val nama: String, val kodeKategori: String, val stokSaatIni: String, val stokLayak: String, val rincianEd: String, val mutasi: List<PdfStokRow>)
+private data class PreviewLaporanRequest(val jenis: String, val format: String, val judul: String, val rangeLabel: String, val rangeKey: String)
+private data class PreviewRowsLaporan(val metaLabel: String, val headers: List<String>, val rows: List<List<String>>, val totalRows: Int)
 
 // === ANIMASI SKELETON ===
 private fun Modifier.adminShimmerEffect(): Modifier = composed {
@@ -233,6 +250,7 @@ private fun ReportDashboardScreen(
     var showFilterDialog by remember { mutableStateOf(false) }
     var showDateRangePicker by remember { mutableStateOf(false) }
     var showMonthPicker by remember { mutableStateOf(false) }
+    var previewRequest by remember { mutableStateOf<PreviewLaporanRequest?>(null) }
 
     // Bottom Sheet States
     var showExportSheet by remember { mutableStateOf(false) }
@@ -346,7 +364,7 @@ private fun ReportDashboardScreen(
                 Text("Pusat Analitik & Laporan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 16.dp))
                 Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor), modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
                     Column {
-                        ActionMenuItem(Icons.Rounded.Description, successColor, "Export Laporan Excel", "Unduh buku transaksi, laporan, dan stok", textColor, mutedColor) { showExportSheet = true }
+                        ActionMenuItem(Icons.Rounded.Description, successColor, "Ekspor Laporan Excel", "Unduh buku transaksi, laporan, dan stok", textColor, mutedColor) { showExportSheet = true }
                         HorizontalDivider(color = borderColor)
                         ActionMenuItem(Icons.Rounded.PieChart, warningColor, "Grafik & Statistik", "Analisis tren penjualan, laba, dan performa", textColor, mutedColor) { showStatsSheet = true }
                     }
@@ -487,28 +505,151 @@ private fun ReportDashboardScreen(
 
         // === BOTTOM SHEET EXPORT LAPORAN ===
         if (showExportSheet) {
-            var loadingKey by remember { mutableStateOf<String?>(null) }
-            val setExportLoad: (String?) -> (Boolean) -> Unit = { key -> { active -> loadingKey = if (active) key else null } }
-
             ModalBottomSheet(onDismissRequest = { showExportSheet = false }, containerColor = bgColor, dragHandle = { BottomSheetDefaults.DragHandle() }, windowInsets = WindowInsets.navigationBars) {
                 Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("Export Laporan (${selectedRange.first})", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
+                    Text("Ekspor Laporan (${selectedRange.first})", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
 
                     Text("Buku Harian", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
                     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor)) {
                         Column {
-                            ActionMenuItem(Icons.Rounded.ReceiptLong, successColor, "Buku Harian Excel (.xlsx)", "Berisi data penjualan dan pengeluaran", textColor, mutedColor, loadingKey == "bx") { onExportBukuHarianExcel(selectedRange.second, setExportLoad("bx")) }
+                            ActionMenuItem(Icons.Rounded.ReceiptLong, successColor, "Buku Harian Excel (.xlsx)", "Lihat data dulu sebelum download", textColor, mutedColor) {
+                                previewRequest = PreviewLaporanRequest("buku", "excel", "Buku Harian Excel", selectedRange.first, selectedRange.second)
+                                showExportSheet = false
+                            }
                             HorizontalDivider(color = borderColor)
-                            ActionMenuItem(Icons.Rounded.Description, dangerColor, "Buku Harian PDF (.pdf)", "Tabel debit kredit siap cetak", textColor, mutedColor, loadingKey == "bp") { onExportBukuHarianPdf(selectedRange.second, setExportLoad("bp")) }
+                            ActionMenuItem(Icons.Rounded.Description, dangerColor, "Buku Harian PDF (.pdf)", "Lihat data dulu sebelum cetak/download", textColor, mutedColor) {
+                                previewRequest = PreviewLaporanRequest("buku", "pdf", "Buku Harian PDF", selectedRange.first, selectedRange.second)
+                                showExportSheet = false
+                            }
                         }
                     }
 
                     Text("Stok Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
                     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor)) {
                         Column {
-                            ActionMenuItem(Icons.Rounded.Inventory, warningColor, "Stok Produk Excel (.xlsx)", "Mutasi dipisah per produk", textColor, mutedColor, loadingKey == "sx") { onExportStokExcel(selectedRange.second, setExportLoad("sx")) }
+                            ActionMenuItem(Icons.Rounded.Inventory, warningColor, "Stok Produk Excel (.xlsx)", "Lihat data mutasi sebelum download", textColor, mutedColor) {
+                                previewRequest = PreviewLaporanRequest("stok", "excel", "Stok Produk Excel", selectedRange.first, selectedRange.second)
+                                showExportSheet = false
+                            }
                             HorizontalDivider(color = borderColor)
-                            ActionMenuItem(Icons.Rounded.Description, dangerColor, "Stok Produk PDF (.pdf)", "Tabel mutasi stok per produk", textColor, mutedColor, loadingKey == "sp") { onExportStokPdf(selectedRange.second, setExportLoad("sp")) }
+                            ActionMenuItem(Icons.Rounded.Description, dangerColor, "Stok Produk PDF (.pdf)", "Lihat data mutasi sebelum cetak/download", textColor, mutedColor) {
+                                previewRequest = PreviewLaporanRequest("stok", "pdf", "Stok Produk PDF", selectedRange.first, selectedRange.second)
+                                showExportSheet = false
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // === PRATINJAU DATA SEBELUM CETAK / DOWNLOAD LAPORAN ===
+        previewRequest?.let { request ->
+            var previewText by remember(request) { mutableStateOf<String?>(null) }
+            var previewError by remember(request) { mutableStateOf<String?>(null) }
+            var previewLoading by remember(request) { mutableStateOf(true) }
+            var exportLoading by remember(request) { mutableStateOf(false) }
+
+            LaunchedEffect(request) {
+                previewLoading = true
+                previewError = null
+                runCatching {
+                    if (request.jenis == "buku") RepositoriFirebaseUtama.buildBukuHarianPdfText(request.rangeKey) else RepositoriFirebaseUtama.buildStokProdukPdfText(request.rangeKey)
+                }.onSuccess { text ->
+                    previewText = text
+                    previewLoading = false
+                }.onFailure { e ->
+                    previewError = e.message ?: "Gagal menampilkan data laporan"
+                    previewLoading = false
+                }
+            }
+
+            Dialog(
+                onDismissRequest = { if (!exportLoading) previewRequest = null },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .fillMaxHeight(0.86f),
+                    shape = RoundedCornerShape(24.dp),
+                    color = bgColor,
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Pratinjau Data Laporan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
+                            Text("${request.judul} · ${request.rangeLabel}", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
+                            Text("Periksa data yang akan dicetak/download. Setelah sesuai, tekan tombol lanjut di bawah.", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = true)
+                        ) {
+                            when {
+                                previewLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = primaryColor) }
+                                previewError != null -> Surface(shape = RoundedCornerShape(18.dp), color = dangerColor.copy(alpha = 0.10f), border = BorderStroke(1.dp, dangerColor.copy(alpha = 0.35f)), modifier = Modifier.fillMaxWidth()) {
+                                    Text(previewError.orEmpty(), color = dangerColor, fontWeight = FontWeight.Medium, modifier = Modifier.padding(16.dp))
+                                }
+                                previewText != null -> LaporanPreviewTable(
+                                    request = request,
+                                    text = previewText.orEmpty(),
+                                    surfaceColor = surfaceColor,
+                                    bgColor = bgColor,
+                                    borderColor = borderColor,
+                                    textColor = textColor,
+                                    mutedColor = mutedColor,
+                                    primaryColor = primaryColor,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(
+                                onClick = { previewRequest = null },
+                                enabled = !exportLoading,
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Batal") }
+                            Button(
+                                onClick = {
+                                    exportLoading = true
+                                    val done: (Boolean) -> Unit = { active ->
+                                        exportLoading = active
+                                        if (!active) previewRequest = null
+                                    }
+                                    when {
+                                        request.jenis == "buku" && request.format == "excel" -> onExportBukuHarianExcel(request.rangeKey, done)
+                                        request.jenis == "buku" && request.format == "pdf" -> onExportBukuHarianPdf(request.rangeKey, done)
+                                        request.jenis == "stok" && request.format == "excel" -> onExportStokExcel(request.rangeKey, done)
+                                        request.jenis == "stok" && request.format == "pdf" -> onExportStokPdf(request.rangeKey, done)
+                                    }
+                                },
+                                enabled = !previewLoading && previewError == null && !exportLoading,
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
+                                modifier = Modifier.weight(1.4f)
+                            ) {
+                                if (exportLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                val labelTombol = when {
+                                    exportLoading && request.format == "excel" -> "Membuat Excel..."
+                                    exportLoading && request.format == "pdf" -> "Membuat PDF..."
+                                    request.format == "pdf" -> "Lanjut PDF"
+                                    else -> "Lanjut Excel"
+                                }
+                                Text(labelTombol, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -549,7 +690,7 @@ private fun ReportDashboardScreen(
                         Text("Tren Harian", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
                         TrendHarianCard(d.trenHarian, surfaceColor, borderColor, textColor, mutedColor, primaryColor, warningColor)
 
-                        Text("Produk Terlaris", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
+                        Text("Produk Terlaris Hari Ini", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
                         AnalitikList("Belum ada produk terjual.", d.laporan.produkTerlaris, surfaceColor, borderColor, textColor, mutedColor, primaryColor)
 
                         Text("Kesehatan Stok", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
@@ -589,6 +730,111 @@ private fun ActionMenuItem(icon: ImageVector, iconTint: Color, title: String, su
         if (isLoading) CircularProgressIndicator(color = iconTint, modifier = Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Rounded.ArrowForwardIos, null, tint = mutedColor, modifier = Modifier.size(16.dp))
     }
 }
+
+
+@Composable
+private fun LaporanPreviewTable(
+    request: PreviewLaporanRequest,
+    text: String,
+    surfaceColor: Color,
+    bgColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val preview = remember(request, text) { buildPreviewRowsLaporan(request, text) }
+    val horizontalState = rememberScrollState()
+    Surface(shape = RoundedCornerShape(20.dp), color = surfaceColor, border = BorderStroke(1.dp, borderColor), modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(preview.metaLabel.ifBlank { request.rangeLabel }, color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    Text("${preview.totalRows} baris data ditemukan", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                }
+                Surface(shape = RoundedCornerShape(100), color = primaryColor.copy(alpha = 0.12f)) {
+                    Text(request.format.uppercase(Locale.US), color = primaryColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
+                }
+            }
+
+            if (preview.rows.isEmpty()) {
+                Surface(shape = RoundedCornerShape(16.dp), color = bgColor, modifier = Modifier.fillMaxWidth()) {
+                    Text("Belum ada data pada periode ini.", color = mutedColor, textAlign = TextAlign.Center, modifier = Modifier.padding(24.dp))
+                }
+            } else {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = true)
+                        .horizontalScroll(horizontalState)
+                ) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .widthIn(min = 760.dp)
+                            .fillMaxHeight()
+                    ) {
+                        item {
+                            PreviewHeaderRow(preview.headers, bgColor, borderColor, textColor)
+                        }
+                        itemsIndexed(preview.rows) { index, row ->
+                            PreviewDataRow(row, if (index % 2 == 0) surfaceColor else bgColor.copy(alpha = 0.55f), borderColor, textColor, mutedColor)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewHeaderRow(headers: List<String>, bgColor: Color, borderColor: Color, textColor: Color) {
+    Row(Modifier.widthIn(min = 760.dp).background(bgColor).padding(vertical = 9.dp)) {
+        headers.forEach { header ->
+            Text(header, color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(126.dp).padding(horizontal = 8.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+    HorizontalDivider(color = borderColor)
+}
+
+@Composable
+private fun PreviewDataRow(row: List<String>, rowColor: Color, borderColor: Color, textColor: Color, mutedColor: Color) {
+    Row(Modifier.widthIn(min = 760.dp).background(rowColor).padding(vertical = 8.dp)) {
+        row.forEach { value ->
+            val isEmpty = value.isBlank()
+            Text(if (isEmpty) "-" else value, color = if (isEmpty) mutedColor else textColor, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(126.dp).padding(horizontal = 8.dp), maxLines = 3, overflow = TextOverflow.Ellipsis)
+        }
+    }
+    HorizontalDivider(color = borderColor.copy(alpha = 0.6f))
+}
+
+private fun buildPreviewRowsLaporan(request: PreviewLaporanRequest, text: String): PreviewRowsLaporan {
+    return if (request.jenis == "buku") {
+        val (meta, rows) = parseBukuRows(text)
+        PreviewRowsLaporan(
+            metaLabel = meta["tanggal"].orEmpty().ifBlank { meta["periode"].orEmpty() },
+            headers = listOf("Tanggal", "Uraian", "User", "Debit", "Kredit", "Saldo"),
+            rows = rows.map { listOf(it.tanggal, it.uraian, it.user, it.debit, it.kredit, it.saldo) },
+            totalRows = rows.size
+        )
+    } else {
+        val (meta, products) = parseStokProduk(text)
+        val flatRows = mutableListOf<List<String>>()
+        products.forEach { product ->
+            flatRows += listOf("Produk", product.nama, product.kodeKategori, product.stokSaatIni, product.stokLayak, product.rincianEd)
+            product.mutasi.forEach { row ->
+                flatRows += listOf(row.tanggal, row.uraian, row.user, row.masuk, row.keluar, row.saldo)
+            }
+        }
+        PreviewRowsLaporan(
+            metaLabel = meta["tanggal"].orEmpty().ifBlank { meta["periode"].orEmpty() },
+            headers = listOf("Tanggal", "Uraian", "User", "Masuk", "Keluar", "Saldo"),
+            rows = flatRows,
+            totalRows = products.sumOf { it.mutasi.size }
+        )
+    }
+}
+
 
 @Composable
 private fun DashboardSkeleton(surfaceColor: Color, borderColor: Color) {
@@ -746,7 +992,7 @@ private fun StokAnalysisCard(stok: RepositoriFirebaseUtama.RingkasanStokDashboar
             }
             HorizontalDivider(color = borderColor)
             Text("Rincian ED & Stok", color = textColor, fontWeight = FontWeight.Bold)
-            Text("Aman ${Formatter.ribuan(stok.totalStokAman)} pcs • ED/Hampir ED ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs • Kadaluarsa ${Formatter.ribuan(stok.totalKadaluarsa)} pcs", color = mutedColor)
+            Text("Aman ${Formatter.ribuan(stok.totalStokAman)} pcs • ED/Hampir Kedaluwarsa ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs • Kedaluwarsa ${Formatter.ribuan(stok.totalKadaluarsa)} pcs", color = mutedColor)
         }
     }
 }
@@ -827,8 +1073,8 @@ private fun bangunStatistikLengkap(laporan: RepositoriFirebaseUtama.RingkasanLap
     if (hariTerbaik != null) insight += "Hari terbaik pada data tren adalah ${hariTerbaik.label} dengan pemasukan ${Formatter.currency(hariTerbaik.pemasukan)}."
 
     val rekomendasi = mutableListOf<String>()
-    if (stok.totalKadaluarsa > 0) rekomendasi += "Segera tindak ${Formatter.ribuan(stok.totalKadaluarsa)} pcs stok kadaluarsa agar tidak tercampur dengan stok layak jual."
-    if (stok.totalHampirKadaluarsa > 0) rekomendasi += "Prioritaskan penjualan ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs stok ED hari ini/hampir ED dengan prinsip stok lama keluar lebih dulu."
+    if (stok.totalKadaluarsa > 0) rekomendasi += "Segera tindak ${Formatter.ribuan(stok.totalKadaluarsa)} pcs stok kedaluwarsa agar tidak tercampur dengan stok layak jual."
+    if (stok.totalHampirKadaluarsa > 0) rekomendasi += "Prioritaskan penjualan ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs stok ED hari ini/hampir kedaluwarsa dengan prinsip stok lama keluar lebih dulu."
     if (stok.totalMenipis > 0 || stok.totalHabis > 0) rekomendasi += "Ada ${stok.totalMenipis + stok.totalHabis} produk menipis/habis. Jadwalkan produksi atau restock bahan untuk produk prioritas."
     if (rasioBiaya > 70.0) rekomendasi += "Rasio pengeluaran tinggi. Periksa biaya terbesar dan bandingkan dengan omzet produk terlaris."
     if (rekomendasi.isEmpty()) rekomendasi += "Kondisi periode ini relatif aman. Pertahankan pencatatan produksi, penjualan, pengeluaran, dan stok secara konsisten."
@@ -865,7 +1111,7 @@ private fun bangunAnalisisAiStatistik(laporan: RepositoriFirebaseUtama.Ringkasan
     val prioritas = mutableListOf<String>()
     if (laporan.labaRugi < 0) prioritas += "Pulihkan laba: cek harga jual, biaya bahan, dan pengeluaran terbesar."
     if (rasioBiaya > 70.0) prioritas += "Tekan pengeluaran: rasio biaya ${formatPersen(rasioBiaya)} cukup tinggi."
-    if (stok.totalKadaluarsa > 0) prioritas += "Tindak stok kadaluarsa: ${Formatter.ribuan(stok.totalKadaluarsa)} pcs perlu dipisah."
+    if (stok.totalKadaluarsa > 0) prioritas += "Tindak stok kedaluwarsa: ${Formatter.ribuan(stok.totalKadaluarsa)} pcs perlu dipisah."
     if (prioritas.isEmpty()) prioritas += "Tidak ada prioritas kritis. Pertahankan pencatatan."
 
     val peluang = mutableListOf<String>()
@@ -882,9 +1128,10 @@ private fun buildBukuHarianXlsxFromText(text: String): ByteArray {
     sheetRows += listOf("BUKU HARIAN SI TAHU")
     sheetRows += listOf("Tanggal Laporan", meta["tanggal"].orEmpty())
     sheetRows += listOf("Periode Transaksi", meta["periode"].orEmpty())
+    sheetRows += listOf("Saldo Awal", meta["saldoAwal"].orEmpty())
     sheetRows += emptyList<String>()
     sheetRows += listOf("Tanggal Transaksi", "Uraian Transaksi", "User", "Debit/Pengeluaran", "Kredit/Pemasukan", "Saldo")
-    if (rows.isEmpty()) sheetRows += listOf("Belum ada data pada periode ini.") else rows.forEach { sheetRows += listOf(it.tanggal, it.uraian, it.user, it.debit, it.kredit, it.saldo) }
+    if (rows.isEmpty()) sheetRows += listOf("Belum ada data yang ditampilkan pada periode ini.") else rows.forEach { sheetRows += listOf(it.tanggal, it.uraian, it.user, it.debit, it.kredit, it.saldo) }
     sheetRows += emptyList<String>()
     sheetRows += listOf("Saldo Akhir", meta["saldo"].orEmpty())
     return buildXlsxWorkbook(listOf("Buku Harian" to sheetRows))
@@ -897,15 +1144,15 @@ private fun buildStokProdukXlsxFromText(text: String): ByteArray {
     sumRows += listOf("RINGKASAN STOK PRODUK SI TAHU")
     sumRows += listOf("Tanggal Laporan", meta["tanggal"].orEmpty())
     sumRows += emptyList<String>()
-    sumRows += listOf("Produk", "Kode", "Fisik", "Layak", "ED", "Hampir ED", "Kadaluarsa")
-    if (products.isEmpty()) sumRows += listOf("Belum ada produk aktif.") else products.forEach { sumRows += listOf(it.nama, it.kodeKategori, it.stokSaatIni, it.stokLayak, angkaRincianEd(it.rincianEd, "ED Hari Ini").toString(), angkaRincianEd(it.rincianEd, "Hampir ED").toString(), angkaRincianEd(it.rincianEd, "Kadaluarsa").toString()) }
+    sumRows += listOf("Produk", "Kode", "Fisik", "Layak", "ED", "Hampir Kedaluwarsa", "Kedaluwarsa")
+    if (products.isEmpty()) sumRows += listOf("Belum ada produk aktif.") else products.forEach { sumRows += listOf(it.nama, it.kodeKategori, it.stokSaatIni, it.stokLayak, angkaRincianEd(it.rincianEd, "ED Hari Ini").toString(), angkaRincianEd(it.rincianEd, "Hampir Kedaluwarsa").toString(), angkaRincianEd(it.rincianEd, "Kedaluwarsa").toString()) }
     sheets += "Ringkasan" to sumRows
     val used = mutableSetOf("ringkasan")
     products.forEachIndexed { i, p ->
         val rows = mutableListOf<List<String>>()
         rows += listOf("MUTASI STOK PRODUK")
         rows += listOf("Produk", p.nama)
-        rows += listOf("Stok Layak", p.stokLayak)
+        rows += listOf("Layak Jual", p.stokLayak)
         rows += emptyList<String>()
         rows += listOf("Tanggal Transaksi", "Uraian Transaksi", "User", "Masuk", "Keluar", "Saldo", "Catatan")
         if (p.mutasi.isEmpty()) rows += listOf("Belum ada mutasi.") else p.mutasi.forEach { rows += listOf(it.tanggal, it.uraian, it.user, it.masuk, it.keluar, it.saldo, it.catatan) }
@@ -946,10 +1193,14 @@ private fun buildBukuHarianPdf(title: String, text: String): PdfDocument {
     return createLandscapePdf(title) { state ->
         state.drawTitle("BUKU HARIAN SI TAHU")
         state.drawMeta("Tanggal Laporan", meta["tanggal"].orEmpty())
+        state.drawMeta("Periode Transaksi", meta["periode"].orEmpty())
+        state.drawMeta("Saldo Awal", meta["saldoAwal"].orEmpty())
         state.space(10f)
         val c = floatArrayOf(96f, 300f, 88f, 86f, 86f, 86f); val h = listOf("Tanggal", "Uraian", "User", "Debit", "Kredit", "Saldo")
         state.drawTableHeader(h, c, listOf(0, 0, 0, 1, 1, 1))
         rows.forEach { state.drawTableRow(listOf(it.tanggal, it.uraian, it.user, it.debit, it.kredit, it.saldo), c, listOf(0, 0, 0, 1, 1, 1)) { state.drawTableHeader(h, c, listOf(0, 0, 0, 1, 1, 1)) } }
+        state.space(8f)
+        state.drawMeta("Saldo Akhir", meta["saldo"].orEmpty())
     }
 }
 private fun buildStokProdukPdf(title: String, text: String): PdfDocument {
@@ -969,7 +1220,13 @@ private fun buildPlainTextPdf(title: String, text: String): PdfDocument = create
 
 private fun parseBukuRows(text: String): Pair<Map<String, String>, List<PdfBukuRow>> {
     val meta = mutableMapOf<String, String>(); val rows = mutableListOf<PdfBukuRow>()
-    text.lineSequence().forEach { val l = it.trimEnd(); when { l.startsWith("@@TANGGAL=") -> meta["tanggal"] = l.substringAfter("=").trim(); l.startsWith("@@ROW=") -> { val f = l.substringAfter("=").trim().split('\t'); rows += PdfBukuRow(f.getOrElse(0){""}, f.getOrElse(1){""}, f.getOrElse(2){""}, f.getOrElse(3){""}, f.getOrElse(4){""}, f.getOrElse(5){""}) } } }
+    text.lineSequence().forEach { val l = it.trimEnd(); when {
+        l.startsWith("@@TANGGAL=") -> meta["tanggal"] = l.substringAfter("=").trim()
+        l.startsWith("@@PERIODE=") -> meta["periode"] = l.substringAfter("=").trim()
+        l.startsWith("@@SALDO_AWAL=") -> meta["saldoAwal"] = l.substringAfter("=").trim()
+        l.startsWith("@@SALDO=") -> meta["saldo"] = l.substringAfter("=").trim()
+        l.startsWith("@@ROW=") -> { val f = l.substringAfter("=").trim().split('	'); rows += PdfBukuRow(f.getOrElse(0){""}, f.getOrElse(1){""}, f.getOrElse(2){""}, f.getOrElse(3){""}, f.getOrElse(4){""}, f.getOrElse(5){""}) }
+    } }
     return meta to rows
 }
 private fun parseStokProduk(text: String): Pair<Map<String, String>, List<PdfStokProduk>> {

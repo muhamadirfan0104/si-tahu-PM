@@ -222,7 +222,7 @@ private fun PriceFormScreen(
                         if (activeDocs.isEmpty()) {
                             hargaRef.document(priceIdToSave).update(mapOf("aktif" to true, "hargaUtama" to true))
                                 .addOnSuccessListener {
-                                    onShowMessage("Sistem mewajibkan 1 harga aktif. Harga telah ditetapkan sebagai Default.")
+                                    onShowMessage("Setiap produk harus memiliki satu harga aktif. Harga ini ditetapkan sebagai harga utama.")
                                     onSaveSuccess(selectedProduct.id)
                                 }
                             return@addOnSuccessListener
@@ -243,7 +243,7 @@ private fun PriceFormScreen(
                                 val fallbackDoc = activeDocs.firstOrNull { it.id == priceIdToSave } ?: activeDocs.first()
                                 hargaRef.document(fallbackDoc.id).update("hargaUtama", true)
                                     .addOnSuccessListener {
-                                        onShowMessage("Karena belum ada default, sistem menunjuk salah satu harga sebagai Default Kasir.")
+                                        onShowMessage("Karena belum ada default, sistem menunjuk salah satu harga sebagai Harga Utama Kasir.")
                                         onSaveSuccess(selectedProduct.id)
                                     }
                             } else {
@@ -337,7 +337,7 @@ private fun PriceFormScreen(
                                 Icon(Icons.Rounded.Category, null, tint = primaryColor, modifier = Modifier.size(20.dp))
                             }
                             Column {
-                                Text("Target Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                                Text("Produk Tujuan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
                                 Text("Produk induk yang diatur harganya", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -347,7 +347,7 @@ private fun PriceFormScreen(
                             onValueChange = {},
                             readOnly = true,
                             enabled = false,
-                            label = { Text("Produk Induk") },
+                            label = { Text("Produk") },
                             shape = RoundedCornerShape(14.dp),
                             textStyle = LocalTextStyle.current.copy(fontWeight = FontWeight.Bold, color = textColor),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -374,16 +374,16 @@ private fun PriceFormScreen(
                                 Icon(Icons.Rounded.AttachMoney, null, tint = primaryColor, modifier = Modifier.size(24.dp))
                             }
                             Column {
-                                Text("Detail Harga", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                                Text("Isi nama kanal dan nominal", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                                Text("Detail Harga Jual", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                                Text("Isi kanal penjualan dan nominal harga", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                             }
                         }
 
                         OutlinedTextField(
                             value = kanalInput,
                             onValueChange = { kanalInput = it },
-                            label = { Text("Nama Kanal (Label)") },
-                            placeholder = { Text("Misal: GoFood, GrabFood, Reguler") },
+                            label = { Text("Nama Kanal Penjualan") },
+                            placeholder = { Text("Contoh: Kasir, Pasar, GoFood, GrabFood") },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                             shape = RoundedCornerShape(14.dp),
                             textStyle = LocalTextStyle.current.copy(fontWeight = FontWeight.Medium, color = textColor),
@@ -428,8 +428,8 @@ private fun PriceFormScreen(
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Harga Kanal Aktif", fontWeight = FontWeight.Bold, color = textColor)
-                                Text("Menentukan apakah variasi harga ini bisa digunakan", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                                Text("Harga Aktif", fontWeight = FontWeight.Bold, color = textColor)
+                                Text("Aktifkan agar harga ini bisa digunakan saat transaksi", color = mutedColor, style = MaterialTheme.typography.labelMedium)
                             }
                             Switch(checked = aktif, onCheckedChange = { aktif = it }, colors = SwitchDefaults.colors(checkedTrackColor = primaryColor))
                         }
@@ -442,8 +442,8 @@ private fun PriceFormScreen(
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Jadikan Default Kasir", fontWeight = FontWeight.Bold, color = if (aktif) textColor else mutedColor)
-                                Text("Otomatis terpilih langsung saat melayani pembeli", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                                Text("Jadikan Harga Utama Kasir", fontWeight = FontWeight.Bold, color = if (aktif) textColor else mutedColor)
+                                Text("Harga ini otomatis dipakai saat transaksi kasir dibuat", color = mutedColor, style = MaterialTheme.typography.labelMedium)
                             }
                             Switch(checked = hargaUtama, onCheckedChange = { hargaUtama = it }, enabled = aktif, colors = SwitchDefaults.colors(checkedTrackColor = primaryColor))
                         }
@@ -454,7 +454,7 @@ private fun PriceFormScreen(
                 Surface(shape = RoundedCornerShape(16.dp), color = primaryColor.copy(alpha = 0.08f), modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Rounded.Info, null, tint = primaryColor, modifier = Modifier.size(20.dp).padding(top = 2.dp))
-                        Text("Sistem mewajibkan minimal tersedia 1 variasi harga aktif untuk setiap produk agar menu Kasir dapat melayani transaksi.", color = primaryColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2)
+                        Text("Setiap produk harus memiliki minimal satu harga aktif agar dapat dijual di kasir.", color = primaryColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2)
                     }
                 }
 

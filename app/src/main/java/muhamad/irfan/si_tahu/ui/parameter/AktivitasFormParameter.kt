@@ -306,7 +306,7 @@ private fun ParameterFormScreen(
                                 Icon(Icons.Rounded.Category, null, tint = primaryColor, modifier = Modifier.size(20.dp))
                             }
                             Column {
-                                Text("Target Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                                Text("Produk Tujuan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
                                 Text("Produk induk kategori DASAR", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -353,7 +353,7 @@ private fun ParameterFormScreen(
                         OutlinedTextField(
                             value = hasilRaw,
                             onValueChange = { input -> hasilRaw = InputAngka.formatInput(input) },
-                            label = { Text("Target Hasil per Batch") },
+                            label = { Text("Target Hasil per Masak") },
                             placeholder = { Text("0") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                             shape = RoundedCornerShape(14.dp),

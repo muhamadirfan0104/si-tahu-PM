@@ -164,6 +164,8 @@ private fun ParameterListScreen(
     var triggerRefreshParameters by remember { mutableStateOf(0) }
     var showProductPicker by remember { mutableStateOf(false) }
     var productSearchQuery by remember { mutableStateOf("") }
+    var halamanParameterSaatIni by remember { mutableStateOf(1) }
+    val itemKecilPerHalaman = 15
 
     // Tema Warna Pro
     val isDark = isSystemInDarkTheme()
@@ -178,6 +180,14 @@ private fun ParameterListScreen(
     val warningColor = if (isDark) Color(0xFFF59E0B) else Color(0xFFD97706)
     val dangerColor = if (isDark) Color(0xFFEF4444) else Color(0xFFDC2626)
     val produkTerkunci = !initialProductId.isNullOrBlank()
+
+    val totalHalamanParameter = maxOf(1, ((parameters.size - 1) / itemKecilPerHalaman) + 1)
+    if (halamanParameterSaatIni > totalHalamanParameter) halamanParameterSaatIni = totalHalamanParameter
+    val daftarParameterTampil = parameters.drop((halamanParameterSaatIni - 1) * itemKecilPerHalaman).take(itemKecilPerHalaman)
+
+    LaunchedEffect(selectedProduct?.id, parameters.size) {
+        halamanParameterSaatIni = 1
+    }
 
     // 1. Load Produk Awal
     LaunchedEffect(autoRefreshTrigger) {
@@ -297,7 +307,7 @@ private fun ParameterListScreen(
                     title = {
                         Column {
                             Text("Parameter Produksi", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Standar hasil per masak", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Atur standar hasil setiap proses produksi", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -332,18 +342,18 @@ private fun ParameterListScreen(
                 Column(Modifier.padding(20.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Rounded.Category, null, tint = primaryColor, modifier = Modifier.size(20.dp))
-                        Text(if (produkTerkunci) "Target Produk" else "Pilih Produk Dasar", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                        Text(if (produkTerkunci) "Produk Tujuan" else "Pilih Produk Dasar", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
                     }
 
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        val displayValue = if (isLoadingProducts) "Memuat..." else selectedProduct?.namaProduk ?: "Belum ada produk..."
+                        val displayValue = if (isLoadingProducts) "Memuat..." else selectedProduct?.namaProduk ?: "Belum ada produk"
 
                         OutlinedTextField(
                             value = displayValue,
                             onValueChange = {},
                             readOnly = true,
                             enabled = !produkTerkunci,
-                            label = { Text("Produk Terpilih") },
+                            label = { Text("Produk Dipilih") },
                             trailingIcon = {
                                 if (!produkTerkunci && products.isNotEmpty()) {
                                     Icon(imageVector = Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = primaryColor)
@@ -405,7 +415,7 @@ private fun ParameterListScreen(
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(parameters) { param ->
+                    items(daftarParameterTampil) { param ->
                         ParameterCard(
                             parameter = param,
                             productName = selectedProduct?.namaProduk ?: "Produk",
@@ -424,6 +434,21 @@ private fun ParameterListScreen(
                                 }
                             }
                         )
+                    }
+                    if (totalHalamanParameter > 1) {
+                        item {
+                            PaginationListCard(
+                                halamanSaatIni = halamanParameterSaatIni,
+                                totalHalaman = totalHalamanParameter,
+                                primaryColor = primaryColor,
+                                surfaceColor = surfaceColor,
+                                borderColor = borderColor,
+                                textColor = textColor,
+                                mutedColor = mutedColor,
+                                onPrev = { if (halamanParameterSaatIni > 1) halamanParameterSaatIni-- },
+                                onNext = { if (halamanParameterSaatIni < totalHalamanParameter) halamanParameterSaatIni++ }
+                            )
+                        }
                     }
                 }
             }
@@ -453,6 +478,40 @@ private fun ParameterListScreen(
 }
 
 // === KOMPONEN UI REUSABLE & MODERNA ===
+
+@Composable
+private fun PaginationListCard(
+    halamanSaatIni: Int,
+    totalHalaman: Int,
+    primaryColor: Color,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    onPrev: () -> Unit,
+    onNext: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = surfaceColor,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            TextButton(onClick = onPrev, enabled = halamanSaatIni > 1) {
+                Text("Sebelumnya", color = if (halamanSaatIni > 1) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
+            }
+            Text("Hal $halamanSaatIni dari $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onNext, enabled = halamanSaatIni < totalHalaman) {
+                Text("Selanjutnya", color = if (halamanSaatIni < totalHalaman) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
 
 @Composable
 private fun EmptyDataView(title: String, subtitle: String) {

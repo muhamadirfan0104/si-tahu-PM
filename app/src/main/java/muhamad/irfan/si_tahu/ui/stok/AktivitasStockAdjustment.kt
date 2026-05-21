@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.data.Produk
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
@@ -79,7 +80,7 @@ class AktivitasStockAdjustment : AktivitasDasar() {
                     onSaveSuccess = {
                         // REVISI: Langsung tandai berhasil dan tutup halaman, tanpa memunculkan receiptModal
                         setResult(android.app.Activity.RESULT_OK, Intent().putExtra(EXTRA_STOCK_UPDATED, true))
-                        showMessage(if (modeKadaluarsa) "Stok kadaluarsa berhasil dibuang" else "Penyesuaian stok berhasil disimpan")
+                        showMessage(if (modeKadaluarsa) "Stok kedaluwarsa berhasil dibuang" else "Penyesuaian stok berhasil disimpan")
                         finish()
                     },
                     activityContext = this@AktivitasStockAdjustment
@@ -115,13 +116,14 @@ private fun StockAdjustmentScreen(
 
     var isLoading by remember { mutableStateOf(true) }
     var isSaving by remember { mutableStateOf(false) }
+    var triggerRefresh by remember { mutableIntStateOf(0) }
 
     // Status Terkunci
     val isProductLocked = !initialProductId.isNullOrBlank()
 
     // State Form
     var qtyInput by remember { mutableStateOf("") }
-    var noteInput by remember { mutableStateOf(if (modeKadaluarsa) "Dibuang karena kadaluarsa / tidak layak jual" else "") }
+    var noteInput by remember { mutableStateOf(if (modeKadaluarsa) "Dibuang karena kedaluwarsa / tidak layak jual" else "") }
     var tanggal by remember { mutableStateOf(Formatter.currentDateOnly()) }
     var waktu by remember { mutableStateOf(Formatter.currentTimeOnly()) }
     var showDateTime by remember { mutableStateOf(false) }
@@ -139,9 +141,21 @@ private fun StockAdjustmentScreen(
     val borderColor = if (isDark) Color(0xFF374151) else Color(0xFFE5E7EB)
 
     val activeColor = if (modeKadaluarsa) dangerColor else primaryColor
-    val titleText = if (modeKadaluarsa) "Buang Kadaluarsa" else "Opname (Adjustment)"
+    val titleText = if (modeKadaluarsa) "Buang Kedaluwarsa" else "Penyesuaian Stok"
     val subtitleText = if (modeKadaluarsa) "Tindak lanjuti stok tak layak jual" else "Koreksi selisih stok fisik & sistem"
     val qtyLabel = if (modeKadaluarsa) "Jumlah Dibuang" else "Jumlah Dikurangi"
+
+    // Muat ulang otomatis ketika stok, batch, atau riwayat penyesuaian berubah.
+    DisposableEffect(Unit) {
+        val firestoreRealtime = FirebaseFirestore.getInstance()
+        val registrations = listOf(
+            firestoreRealtime.collection("Produk").addSnapshotListener { _, _ -> triggerRefresh++ },
+            firestoreRealtime.collection("BatchStok").addSnapshotListener { _, _ -> triggerRefresh++ },
+            firestoreRealtime.collection("PenyesuaianStok").addSnapshotListener { _, _ -> triggerRefresh++ },
+            firestoreRealtime.collection("RiwayatStok").addSnapshotListener { _, _ -> triggerRefresh++ }
+        )
+        onDispose { registrations.forEach { it.remove() } }
+    }
 
     // Load Data
     val fetchExpiredStock = { productId: String ->
@@ -156,14 +170,18 @@ private fun StockAdjustmentScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(triggerRefresh) {
+        isLoading = products.isEmpty()
         runCatching { RepositoriFirebaseUtama.muatSemuaProduk() }
             .onSuccess { result ->
-                products = result.sortedBy { it.name.lowercase() }
+                val sortedProducts = result.sortedBy { it.name.lowercase() }
+                products = sortedProducts
 
+                val currentSelectedId = selectedProduk?.id
                 selectedProduk = when {
-                    isProductLocked && result.any { it.id == initialProductId } -> result.find { it.id == initialProductId }
-                    else -> result.firstOrNull()
+                    isProductLocked && sortedProducts.any { it.id == initialProductId } -> sortedProducts.find { it.id == initialProductId }
+                    !currentSelectedId.isNullOrBlank() && sortedProducts.any { it.id == currentSelectedId } -> sortedProducts.find { it.id == currentSelectedId }
+                    else -> sortedProducts.firstOrNull()
                 }
 
                 selectedProduk?.id?.let { fetchExpiredStock(it) }
@@ -186,8 +204,8 @@ private fun StockAdjustmentScreen(
             else if (qty <= 0L) onShowMessage("Jumlah stok harus lebih dari 0.")
             else if (qty > Int.MAX_VALUE) onShowMessage("Jumlah terlalu besar.")
             else if (noteInput.isBlank()) onShowMessage("Catatan/alasan wajib diisi.")
-            else if (modeKadaluarsa && qty > stokKadaluarsaTerpilih) onShowMessage("Jumlah melebihi stok kadaluarsa (${Formatter.ribuan(stokKadaluarsaTerpilih)} ${produkTerpilih.unit}).")
-            else if (!modeKadaluarsa && qty > produkTerpilih.stock) onShowMessage("Jumlah adjustment melebihi stok saat ini (${Formatter.ribuan(produkTerpilih.stock.toLong())} ${produkTerpilih.unit}).")
+            else if (modeKadaluarsa && qty > stokKadaluarsaTerpilih) onShowMessage("Jumlah melebihi stok kedaluwarsa (${Formatter.ribuan(stokKadaluarsaTerpilih)} ${produkTerpilih.unit}).")
+            else if (!modeKadaluarsa && qty > produkTerpilih.stock) onShowMessage("Jumlah penyesuaian melebihi stok saat ini (${Formatter.ribuan(produkTerpilih.stock.toLong())} ${produkTerpilih.unit}).")
             else {
                 isSaving = true
                 coroutineScope.launch {
@@ -208,7 +226,7 @@ private fun StockAdjustmentScreen(
                         onSaveSuccess() // Panggil callback langsung untuk exit screen
                     }.onFailure {
                         isSaving = false
-                        onShowMessage(it.message ?: "Gagal menyimpan adjustment")
+                        onShowMessage(it.message ?: "Gagal menyimpan penyesuaian")
                     }
                 }
             }
@@ -279,7 +297,7 @@ private fun StockAdjustmentScreen(
                         } else {
                             Icon(if (modeKadaluarsa) Icons.Rounded.DeleteForever else Icons.Rounded.SyncAlt, contentDescription = null, tint = Color.White)
                             Spacer(Modifier.width(8.dp))
-                            Text(if (modeKadaluarsa) "Buang Stok Kadaluarsa" else "Simpan Penyesuaian", fontWeight = FontWeight.Bold, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                            Text(if (modeKadaluarsa) "Buang Produk Kedaluwarsa" else "Simpan Penyesuaian", fontWeight = FontWeight.Bold, color = Color.White, style = MaterialTheme.typography.titleMedium)
                         }
                     }
                 }
@@ -309,20 +327,20 @@ private fun StockAdjustmentScreen(
                             Icon(Icons.Rounded.Category, null, tint = activeColor, modifier = Modifier.size(20.dp))
                         }
                         Column {
-                            Text(if (isProductLocked) "Target Produk" else "Pilih Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                            Text("Data stok diambil langsung dari server", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                            Text(if (isProductLocked) "Produk Tujuan" else "Pilih Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                            Text("Data stok terbaru dari sistem", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        val displayValue = if (isLoading) "Memuat produk..." else selectedProduk?.name ?: "Pilih produk dari daftar"
+                        val displayValue = if (isLoading) "Memuat produk..." else selectedProduk?.name ?: "Pilih produk yang akan diproses"
 
                         OutlinedTextField(
                             value = displayValue,
                             onValueChange = {},
                             readOnly = true,
                             enabled = !isProductLocked,
-                            label = { Text("Produk Terpilih") },
+                            label = { Text("Produk Dipilih") },
                             trailingIcon = {
                                 if (!isProductLocked) {
                                     Icon(imageVector = Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = activeColor)
@@ -353,7 +371,7 @@ private fun StockAdjustmentScreen(
                             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Icon(Icons.Rounded.Info, null, tint = activeColor, modifier = Modifier.size(20.dp).padding(top = 2.dp))
                                 Text(
-                                    text = if (modeKadaluarsa) "Sistem mencatat ada ${Formatter.ribuan(stokKadaluarsaTerpilih)} ${produkTerpilih.unit} stok kadaluarsa. Tindakan ini akan membuangnya secara permanen."
+                                    text = if (modeKadaluarsa) "Sistem mencatat ada ${Formatter.ribuan(stokKadaluarsaTerpilih)} ${produkTerpilih.unit} stok kedaluwarsa. Tindakan ini akan membuangnya secara permanen."
                                     else "Tersedia fisik ${Formatter.ribuan(produkTerpilih.stock.toLong())} ${produkTerpilih.unit}. Penyesuaian mengurangi stok fisik dan mengambil dari batch layak jual (FEFO).",
                                     color = activeColor,
                                     style = MaterialTheme.typography.bodySmall,
@@ -379,8 +397,8 @@ private fun StockAdjustmentScreen(
                             Icon(Icons.Rounded.Edit, null, tint = activeColor, modifier = Modifier.size(20.dp))
                         }
                         Column {
-                            Text("Detail Tindakan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                            Text("Isi jumlah dan alasan perubahan", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                            Text("Detail Penyesuaian", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                            Text("Isi jumlah stok dan alasan pencatatan", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
@@ -398,8 +416,8 @@ private fun StockAdjustmentScreen(
                             ) {
                                 Icon(Icons.Rounded.SyncAlt, contentDescription = null, tint = activeColor, modifier = Modifier.size(20.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text("Mode Kurangi Stok", color = activeColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                    Text("Hanya untuk selisih fisik, rusak, hilang, atau koreksi minus.", color = activeColor.copy(alpha=0.8f), style = MaterialTheme.typography.labelSmall)
+                                    Text("Kurangi Stok", color = activeColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                    Text("Gunakan untuk stok rusak, hilang, selisih fisik, atau koreksi pengurangan.", color = activeColor.copy(alpha=0.8f), style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
@@ -428,8 +446,8 @@ private fun StockAdjustmentScreen(
                     OutlinedTextField(
                         value = noteInput,
                         onValueChange = { noteInput = it },
-                        label = { Text("Alasan / Catatan (Wajib)") },
-                        placeholder = { Text("Misal: Tahu hancur saat dipindahkan...") },
+                        label = { Text("Alasan Penyesuaian (Wajib)") },
+                        placeholder = { Text("Contoh: Produk rusak saat dipindahkan") },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         shape = RoundedCornerShape(14.dp),
                         textStyle = LocalTextStyle.current.copy(color = textColor),
@@ -448,7 +466,7 @@ private fun StockAdjustmentScreen(
 
             // === 3. PENGATURAN TANGGAL ===
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Pengaturan Waktu", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
+                Text("Waktu Pencatatan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = surfaceColor),
@@ -540,7 +558,7 @@ private fun StockAdjustmentProductPickerDialog(
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("Cari nama / kode...", color = mutedColor) },
+                    placeholder = { Text("Cari nama atau kode produk", color = mutedColor) },
                     leadingIcon = { Icon(Icons.Rounded.Search, null, tint=mutedColor) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),

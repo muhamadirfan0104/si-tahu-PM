@@ -104,7 +104,7 @@ open class FragmenDasar(@Suppress("UNUSED_PARAMETER") layoutRes: Int = 0) : Frag
         startActivity(Intent.createChooser(intent, title))
     }
 
-    protected fun showReceiptModal(title: String, receiptText: String, pdfLabel: String = "Download") {
+    protected fun showReceiptModal(title: String, receiptText: String, pdfLabel: String = "Unduh") {
         val safeContext = context ?: return
         val showStrukActions = pdfLabel.isNotBlank()
         showDetailModal(
@@ -112,7 +112,7 @@ open class FragmenDasar(@Suppress("UNUSED_PARAMETER") layoutRes: Int = 0) : Frag
             message = receiptText,
             positiveLabel = if (showStrukActions) "Cetak" else "Tutup",
             onPositive = if (showStrukActions) ({ PembantuCetak.printNota(safeContext, title, receiptText) }) else null,
-            negativeLabel = "Share",
+            negativeLabel = "Bagikan",
             onNegative = { PembantuCetak.shareStrukPdf(safeContext, title, receiptText) },
             neutralLabel = pdfLabel.takeIf { it.isNotBlank() },
             onNeutral = if (showStrukActions) ({ PembantuCetak.downloadStrukPdf(safeContext, title, receiptText) }) else null,

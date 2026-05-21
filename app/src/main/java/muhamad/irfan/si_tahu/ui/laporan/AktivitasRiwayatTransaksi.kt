@@ -50,6 +50,7 @@ import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
+import muhamad.irfan.si_tahu.util.DialogPilihBulanRiwayat
 import muhamad.irfan.si_tahu.util.Formatter
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -135,7 +136,7 @@ private fun TransactionHistoryScreen(
     var searchQuery by remember { mutableStateOf("") }
     var showFilterDialog by remember { mutableStateOf(false) }
 
-    val jenisOptions = listOf("Semua", "Penjualan", "Produksi", "Pengeluaran", "Adjustment")
+    val jenisOptions = listOf("Semua", "Penjualan", "Produksi", "Pengeluaran", "Penyesuaian")
     var selectedJenis by remember { mutableStateOf(jenisOptions.first()) }
 
     val semuaUserLabel = "Semua user"
@@ -174,7 +175,7 @@ private fun TransactionHistoryScreen(
 
     // Paginasi
     var halamanSaatIni by remember { mutableStateOf(1) }
-    val itemPerHalaman = 15
+    val itemPerHalaman = 10
 
     // Tema Warna Pro
     val isDark = isSystemInDarkTheme()
@@ -356,7 +357,7 @@ private fun TransactionHistoryScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Tidak ada transaksi", "Coba hapus kriteria filter atau ubah pencarian.")
+                    EmptyDataView("Tidak ada transaksi", "Coba ubah pencarian, filter, atau rentang tanggal.")
                 }
             } else {
                 LazyColumn(
@@ -503,6 +504,7 @@ private fun ModernHistoryFilterDialog(
     var draftSelesai by remember { mutableStateOf(initialTanggalSelesai.orEmpty()) }
 
     var showDateRangePicker by remember { mutableStateOf(false) }
+    var showMonthPicker by remember { mutableStateOf(false) }
 
     fun formatDateToLocalId(dateStr: String): String {
         if (dateStr.isBlank()) return ""
@@ -608,6 +610,21 @@ private fun ModernHistoryFilterDialog(
                         Text(text = dateLabel, color = if (draftMulai.isNotBlank()) textColor else mutedColor, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        draftRentang = "Rentang"
+                        showMonthPicker = true
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
+                        Text("Pilih satu bulan penuh", color = textColor, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
             }
         },
         confirmButton = {
@@ -705,6 +722,25 @@ private fun ModernHistoryFilterDialog(
                 }
             }
         }
+    }
+
+    if (showMonthPicker) {
+        DialogPilihBulanRiwayat(
+            initialDate = draftMulai.ifBlank { null },
+            primaryColor = primaryColor,
+            surfaceColor = surfaceColor,
+            bgColor = bgColor,
+            textColor = textColor,
+            mutedColor = mutedColor,
+            borderColor = borderColor,
+            onDismiss = { showMonthPicker = false },
+            onApply = { mulai, selesai, _ ->
+                draftMulai = mulai
+                draftSelesai = selesai
+                draftRentang = "Rentang"
+                showMonthPicker = false
+            }
+        )
     }
 }
 
@@ -817,7 +853,7 @@ private fun ProDetailDialog(
                     ) {
                         SelectionContainer {
                             Text(
-                                text = detailText.ifBlank { "Detail belum tersedia." },
+                                text = detailText.ifBlank { "Detail data belum tersedia." },
                                 color = textColor,
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.bodySmall,
@@ -855,7 +891,7 @@ private fun TransactionCard(
     // Penentuan Warna & Ikon Berdasarkan Jenis Transaksi
     val (typeColor, typeIcon) = when {
         tx.jenis.equals("Pengeluaran", true) -> dangerColor to Icons.Rounded.ReceiptLong
-        tx.jenis.equals("Adjustment", true) -> mutedColor to Icons.Rounded.SyncAlt
+        tx.jenis.equals("Penyesuaian", true) -> mutedColor to Icons.Rounded.SyncAlt
         tx.jenis.contains("Produksi", true) || tx.badge.contains("Olahan", true) -> warningColor to Icons.Rounded.Inventory
         tx.badge.equals("Rumahan", true) || tx.badge.equals("Pasar", true) -> primaryColor to Icons.Rounded.Storefront
         else -> successColor to Icons.Rounded.ReceiptLong

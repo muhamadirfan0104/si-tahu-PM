@@ -18,12 +18,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.DeleteForever
-import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,9 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,7 +87,7 @@ private data class DataBarisPengguna(
 )
 
 // === KOMPONEN UTAMA UI ===
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun UserListScreen(
     autoRefreshTrigger: Int,
@@ -107,17 +105,13 @@ private fun UserListScreen(
 
     // State Pencarian & Filter
     var searchQuery by remember { mutableStateOf("") }
-
     val roleOptions = listOf("Semua", "ADMIN", "KASIR")
     var roleAktif by remember { mutableStateOf(roleOptions.first()) }
-
     val statusOptions = listOf("Semua", "Aktif", "Nonaktif")
     var statusAktif by remember { mutableStateOf(statusOptions.first()) }
-
-    var showFilterSheet by remember { mutableStateOf(false) }
-
-    // Bottom Sheet Aksi
-    var selectedUserForAction by remember { mutableStateOf<DataBarisPengguna?>(null) }
+    var showFilterDialog by remember { mutableStateOf(false) }
+    var halamanSaatIni by remember { mutableStateOf(1) }
+    val itemKecilPerHalaman = 15
 
     // Tema Warna Pro
     val isDark = isSystemInDarkTheme()
@@ -140,16 +134,16 @@ private fun UserListScreen(
                 users = snapshot.documents
                     .filter { it.getBoolean("dihapus") != true }
                     .map { doc ->
-                    DataBarisPengguna(
-                        id = doc.id,
-                        namaPengguna = doc.getString("namaPengguna").orEmpty(),
-                        email = doc.getString("email").orEmpty(),
-                        nomorTelepon = doc.getString("nomorTelepon").orEmpty(),
-                        peranAsli = doc.getString("peranAsli").orEmpty(),
-                        aktif = doc.getBoolean("aktif") ?: true,
-                        dibuatPadaMillis = doc.getTimestamp("dibuatPada")?.toDate()?.time ?: 0L
-                    )
-                }.sortedByDescending { it.dibuatPadaMillis }
+                        DataBarisPengguna(
+                            id = doc.id,
+                            namaPengguna = doc.getString("namaPengguna").orEmpty(),
+                            email = doc.getString("email").orEmpty(),
+                            nomorTelepon = doc.getString("nomorTelepon").orEmpty(),
+                            peranAsli = doc.getString("peranAsli").orEmpty(),
+                            aktif = doc.getBoolean("aktif") ?: true,
+                            dibuatPadaMillis = doc.getTimestamp("dibuatPada")?.toDate()?.time ?: 0L
+                        )
+                    }.sortedByDescending { it.dibuatPadaMillis }
                 isLoading = false
             }
             .addOnFailureListener { e ->
@@ -188,74 +182,140 @@ private fun UserListScreen(
 
     val jumlahFilterAktif = (if (roleAktif != "Semua") 1 else 0) + (if (statusAktif != "Semua") 1 else 0)
 
+    LaunchedEffect(searchQuery, roleAktif, statusAktif, users.size) {
+        halamanSaatIni = 1
+    }
+    val totalHalaman = maxOf(1, ((filteredUsers.size - 1) / itemKecilPerHalaman) + 1)
+    if (halamanSaatIni > totalHalaman) halamanSaatIni = totalHalaman
+    val penggunaTampil = filteredUsers.drop((halamanSaatIni - 1) * itemKecilPerHalaman).take(itemKecilPerHalaman)
+
+    // --- FUNGSI AKSI PENGGUNA ---
+    fun toggleUserStatus(user: DataBarisPengguna) {
+        onShowConfirmation(
+            if (user.aktif) "Nonaktifkan pengguna?" else "Aktifkan pengguna?",
+            "Pengguna ${user.namaPengguna} akan di${if (user.aktif) "non" else ""}aktifkan.",
+            if (user.aktif) "Nonaktifkan" else "Aktifkan"
+        ) {
+            firestore.collection("Pengguna").document(user.id)
+                .update(mapOf("aktif" to !user.aktif, "bolehMasuk" to !user.aktif, "diperbaruiPada" to Timestamp.now()))
+                .addOnSuccessListener {
+                    onShowMessage("Status pengguna berhasil diubah.")
+                    triggerRefresh++
+                }
+                .addOnFailureListener { e -> onShowMessage("Gagal mengubah status: ${e.message}") }
+        }
+    }
+
+    fun deleteUser(user: DataBarisPengguna) {
+        onShowConfirmation("Hapus pengguna?", "Pengguna ${user.namaPengguna} akan disembunyikan dari daftar aktif. Riwayat lama tetap aman.", "Hapus") {
+            firestore.collection("Pengguna").document(user.id)
+                .update(mapOf(
+                    "dihapus" to true,
+                    "aktif" to false,
+                    "bolehMasuk" to false,
+                    "dihapusPada" to Timestamp.now(),
+                    "diperbaruiPada" to Timestamp.now()
+                ))
+                .addOnSuccessListener {
+                    onShowMessage("Pengguna berhasil dihapus dari daftar aktif.")
+                    triggerRefresh++
+                }
+                .addOnFailureListener { e -> onShowMessage("Gagal menghapus pengguna: ${e.message}") }
+        }
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Pengguna", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                        Text("Kelola admin dan kasir", style = MaterialTheme.typography.labelMedium, color = mutedColor)
-                    }
-                },
-                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
-            )
+            Surface(
+                color = surfaceColor,
+                shadowElevation = if (isDark) 0.dp else 4.dp,
+                border = if (isDark) BorderStroke(1.dp, borderColor) else null
+            ) {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text("Pengguna", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
+                            Text("Kelola admin dan kasir", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                        }
+                    },
+                    navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { onNavigateToForm(null) }, containerColor = primaryColor, shape = CircleShape) {
-                Icon(Icons.Rounded.Add, "Tambah Pengguna", tint = Color.White)
+                Icon(Icons.Rounded.Add, "Tambah", tint = Color.White)
             }
         },
         containerColor = bgColor
     ) { paddingValues ->
         Column(
             modifier = Modifier.fillMaxSize().padding(paddingValues),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // --- PENCARIAN & FILTER ---
+            // --- PENCARIAN & FILTER MODERN ---
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Cari nama, email, telepon...") },
+                    placeholder = { Text("Cari nama, email, telepon...", color = mutedColor) },
                     leadingIcon = { Icon(Icons.Rounded.Search, "Cari", tint = mutedColor) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor, focusedContainerColor = surfaceColor, unfocusedContainerColor = surfaceColor),
-                    modifier = Modifier.weight(1f)
+                    shape = RoundedCornerShape(100),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = primaryColor,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = surfaceColor,
+                        unfocusedContainerColor = surfaceColor
+                    ),
+                    modifier = Modifier.weight(1f).height(54.dp)
                 )
 
-                Box {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (jumlahFilterAktif > 0) primaryColor else surfaceColor,
-                        border = if (jumlahFilterAktif > 0) null else BorderStroke(1.dp, borderColor),
-                        modifier = Modifier.size(56.dp).clickable { showFilterSheet = true }
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Rounded.FilterList, "Filter", tint = if (jumlahFilterAktif > 0) Color.White else textColor)
-                        }
-                    }
-
-                    if (jumlahFilterAktif > 0) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = 4.dp, y = (-4).dp)
-                                .size(20.dp)
-                                .clip(CircleShape)
-                                .background(dangerColor),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(jumlahFilterAktif.toString(), color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                val hasActiveFilter = jumlahFilterAktif > 0
+                Surface(
+                    shape = CircleShape,
+                    color = if (hasActiveFilter) primaryColor else surfaceColor,
+                    border = if (hasActiveFilter) null else BorderStroke(1.dp, borderColor),
+                    modifier = Modifier.size(54.dp).clickable { showFilterDialog = true }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.FilterList, "Filter", tint = if (hasActiveFilter) Color.White else textColor)
+                        if (hasActiveFilter) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(12.dp)
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(dangerColor)
+                            )
                         }
                     }
                 }
+            }
+
+            // --- CHIPS FILTER AKTIF ---
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (jumlahFilterAktif > 0) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (roleAktif != "Semua") {
+                            FilterChipVisual(label = "Peran: $roleAktif", onRemove = { roleAktif = "Semua" }, primaryColor)
+                        }
+                        if (statusAktif != "Semua") {
+                            FilterChipVisual(label = "Status: $statusAktif", onRemove = { statusAktif = "Semua" }, primaryColor)
+                        }
+                    }
+                }
+                Text("Menampilkan ${filteredUsers.size} pengguna", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
             }
 
             // --- DAFTAR PENGGUNA ---
@@ -264,8 +324,11 @@ private fun UserListScreen(
             } else if (filteredUsers.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Rounded.Person, null, tint = borderColor, modifier = Modifier.size(64.dp))
-                        Text(if (users.isEmpty()) "Belum ada pengguna." else "Tidak ada pengguna yang cocok.", color = mutedColor, style = MaterialTheme.typography.bodyLarge)
+                        Box(Modifier.size(64.dp).clip(CircleShape).background(Color.Gray.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Rounded.Person, null, tint = Color.Gray, modifier = Modifier.size(32.dp))
+                        }
+                        Text("Pengguna tidak ditemukan", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text(if (users.isEmpty()) "Belum ada pengguna." else "Coba ubah pencarian, filter, atau rentang tanggal.", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             } else {
@@ -274,7 +337,7 @@ private fun UserListScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(filteredUsers) { user ->
+                    items(penggunaTampil) { user ->
                         UserCard(
                             user = user,
                             surfaceColor = surfaceColor,
@@ -286,144 +349,102 @@ private fun UserListScreen(
                             dangerColor = dangerColor,
                             warningColor = warningColor,
                             onClick = { onNavigateToForm(user.id) },
-                            onActionClick = { selectedUserForAction = user }
+                            onEdit = { onNavigateToForm(user.id) },
+                            onToggleStatus = { toggleUserStatus(user) },
+                            onDelete = { deleteUser(user) }
                         )
                     }
-                }
-            }
-        }
-
-        // === BOTTOM SHEET FILTER ===
-        if (showFilterSheet) {
-            ModalBottomSheet(
-                onDismissRequest = { showFilterSheet = false },
-                containerColor = surfaceColor,
-                dragHandle = { BottomSheetDefaults.DragHandle() },
-                windowInsets = WindowInsets.navigationBars
-            ) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Filter Pengguna", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                        TextButton(onClick = {
-                            roleAktif = "Semua"
-                            statusAktif = "Semua"
-                        }) {
-                            Text("Reset", color = primaryColor, fontWeight = FontWeight.Bold)
+                    if (totalHalaman > 1) {
+                        item {
+                            PaginationListCard(
+                                halamanSaatIni = halamanSaatIni,
+                                totalHalaman = totalHalaman,
+                                primaryColor = primaryColor,
+                                surfaceColor = surfaceColor,
+                                borderColor = borderColor,
+                                textColor = textColor,
+                                mutedColor = mutedColor,
+                                onPrev = { if (halamanSaatIni > 1) halamanSaatIni-- },
+                                onNext = { if (halamanSaatIni < totalHalaman) halamanSaatIni++ }
+                            )
                         }
-                    }
-
-                    // Filter Peran
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Peran Pengguna", color = textColor, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyLarge)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            roleOptions.forEach { option ->
-                                FilterChip(
-                                    selected = roleAktif == option,
-                                    onClick = { roleAktif = option },
-                                    label = { Text(option) },
-                                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = primaryColor.copy(alpha = 0.15f), selectedLabelColor = primaryColor)
-                                )
-                            }
-                        }
-                    }
-
-                    // Filter Status
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Status Akun", color = textColor, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyLarge)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            statusOptions.forEach { option ->
-                                FilterChip(
-                                    selected = statusAktif == option,
-                                    onClick = { statusAktif = option },
-                                    label = { Text(option) },
-                                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = primaryColor.copy(alpha = 0.15f), selectedLabelColor = primaryColor)
-                                )
-                            }
-                        }
-                    }
-
-                    Button(
-                        onClick = { showFilterSheet = false },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(50.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
-                    ) {
-                        Text("Terapkan Filter", fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
 
-        // === BOTTOM SHEET MENU AKSI ===
-        if (selectedUserForAction != null) {
-            val user = selectedUserForAction!!
-
-            ModalBottomSheet(
-                onDismissRequest = { selectedUserForAction = null },
-                containerColor = surfaceColor,
-                dragHandle = { BottomSheetDefaults.DragHandle() },
-                windowInsets = WindowInsets.navigationBars
-            ) {
-                Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
-                    Text("Opsi ${user.namaPengguna}", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-
-                    MenuItemAction(Icons.Rounded.Edit, "Edit Data", textColor) {
-                        selectedUserForAction = null
-                        onNavigateToForm(user.id)
-                    }
-
-                    val toggleText = if (user.aktif) "Nonaktifkan Pengguna" else "Aktifkan Pengguna"
-                    val toggleColor = if (user.aktif) warningColor else successColor
-                    MenuItemAction(Icons.Rounded.PowerSettingsNew, toggleText, toggleColor) {
-                        selectedUserForAction = null
-                        onShowConfirmation(
-                            if (user.aktif) "Nonaktifkan pengguna?" else "Aktifkan pengguna?",
-                            "Pengguna ${user.namaPengguna} akan di${if (user.aktif) "non" else ""}aktifkan.",
-                            if (user.aktif) "Nonaktifkan" else "Aktifkan"
-                        ) {
-                            firestore.collection("Pengguna").document(user.id)
-                                .update(mapOf("aktif" to !user.aktif, "bolehMasuk" to !user.aktif, "diperbaruiPada" to Timestamp.now()))
-                                .addOnSuccessListener {
-                                    onShowMessage("Status pengguna berhasil diubah.")
-                                    triggerRefresh++
-                                }
-                                .addOnFailureListener { e -> onShowMessage("Gagal mengubah status: ${e.message}") }
-                        }
-                    }
-
-                    MenuItemAction(Icons.Rounded.DeleteForever, "Hapus Pengguna", dangerColor) {
-                        selectedUserForAction = null
-                        onShowConfirmation("Hapus pengguna?", "Pengguna ${user.namaPengguna} akan disembunyikan dari daftar aktif. Riwayat lama tetap aman.", "Hapus") {
-                            firestore.collection("Pengguna").document(user.id)
-                                .update(mapOf(
-                                    "dihapus" to true,
-                                    "aktif" to false,
-                                    "bolehMasuk" to false,
-                                    "dihapusPada" to Timestamp.now(),
-                                    "diperbaruiPada" to Timestamp.now()
-                                ))
-                                .addOnSuccessListener {
-                                    onShowMessage("Pengguna berhasil dihapus dari daftar aktif.")
-                                    triggerRefresh++
-                                }
-                                .addOnFailureListener { e -> onShowMessage("Gagal menghapus pengguna: ${e.message}") }
-                        }
-                    }
+// === DIALOG FILTER MODERN ---
+        if (showFilterDialog) {
+            ModernUserFilterDialog(
+                roleOptions = roleOptions,
+                initialRole = roleAktif,
+                statusOptions = statusOptions,
+                initialStatus = statusAktif,
+                primaryColor = primaryColor,
+                surfaceColor = surfaceColor,
+                bgColor = bgColor,
+                textColor = textColor,
+                mutedColor = mutedColor,
+                borderColor = borderColor,
+                onDismiss = { showFilterDialog = false },
+                onReset = {
+                    roleAktif = "Semua"
+                    statusAktif = "Semua"
+                    showFilterDialog = false
+                },
+                onApply = { r, s ->
+                    roleAktif = r
+                    statusAktif = s
+                    showFilterDialog = false
                 }
-            }
+            )
         }
     }
 }
 
 @Composable
-private fun MenuItemAction(icon: ImageVector, title: String, color: Color, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+private fun PaginationListCard(
+    halamanSaatIni: Int,
+    totalHalaman: Int,
+    primaryColor: Color,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    onPrev: () -> Unit,
+    onNext: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = surfaceColor,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 80.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
-        Text(title, color = color, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyLarge)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            TextButton(onClick = onPrev, enabled = halamanSaatIni > 1) {
+                Text("Sebelumnya", color = if (halamanSaatIni > 1) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
+            }
+            Text("Hal $halamanSaatIni dari $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onNext, enabled = halamanSaatIni < totalHalaman) {
+                Text("Selanjutnya", color = if (halamanSaatIni < totalHalaman) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+// === KOMPONEN UI REUSABLE & MODERN ===
+
+@Composable
+private fun FilterChipVisual(label: String, onRemove: () -> Unit, primaryColor: Color) {
+    Surface(shape = RoundedCornerShape(8.dp), color = primaryColor.copy(alpha = 0.1f), modifier = Modifier.clickable(onClick = onRemove)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, color = primaryColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            Icon(Icons.Rounded.Close, "Hapus", tint = primaryColor, modifier = Modifier.size(14.dp))
+        }
     }
 }
 
@@ -432,13 +453,16 @@ private fun UserCard(
     user: DataBarisPengguna,
     surfaceColor: Color, borderColor: Color, textColor: Color, mutedColor: Color,
     primaryColor: Color, successColor: Color, dangerColor: Color, warningColor: Color,
-    onClick: () -> Unit, onActionClick: () -> Unit
+    onClick: () -> Unit, onEdit: () -> Unit, onToggleStatus: () -> Unit, onDelete: () -> Unit
 ) {
     val isAdmin = user.peranAsli == "ADMIN"
     val roleColor = if (isAdmin) primaryColor else warningColor
     val icon = if (isAdmin) Icons.Rounded.AdminPanelSettings else Icons.Rounded.Person
     val statusColor = if (user.aktif) successColor else dangerColor
     val statusText = if (user.aktif) "Akun Aktif" else "Akun Nonaktif"
+
+    // State untuk mengontrol Dropdown Menu Titik Tiga
+    var showMenu by remember { mutableStateOf(false) }
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -459,8 +483,37 @@ private fun UserCard(
                     Text(user.nomorTelepon.ifBlank { "-" }, color = mutedColor, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
 
-                IconButton(onClick = onActionClick, modifier = Modifier.size(28.dp).offset(x = 8.dp, y = (-8).dp)) {
-                    Icon(Icons.Rounded.MoreVert, "Opsi", tint = mutedColor)
+                // Dropdown Menu Titik Tiga
+                Box {
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.size(28.dp).offset(x = 8.dp, y = (-8).dp)
+                    ) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "Opsi", tint = mutedColor)
+                    }
+
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        modifier = Modifier.background(surfaceColor)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit Data", color = textColor) },
+                            onClick = { showMenu = false; onEdit() }
+                        )
+
+                        val toggleText = if (user.aktif) "Nonaktifkan Pengguna" else "Aktifkan Pengguna"
+                        val toggleColor = if (user.aktif) warningColor else successColor
+                        DropdownMenuItem(
+                            text = { Text(toggleText, color = toggleColor) },
+                            onClick = { showMenu = false; onToggleStatus() }
+                        )
+
+                        DropdownMenuItem(
+                            text = { Text("Hapus Pengguna", color = dangerColor, fontWeight = FontWeight.SemiBold) },
+                            onClick = { showMenu = false; onDelete() }
+                        )
+                    }
                 }
             }
 
@@ -477,4 +530,87 @@ private fun UserCard(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModernUserFilterDialog(
+    roleOptions: List<String>,
+    initialRole: String,
+    statusOptions: List<String>,
+    initialStatus: String,
+    primaryColor: Color,
+    surfaceColor: Color,
+    bgColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    borderColor: Color,
+    onDismiss: () -> Unit,
+    onReset: () -> Unit,
+    onApply: (role: String, status: String) -> Unit
+) {
+    var draftRole by remember { mutableStateOf(initialRole) }
+    var draftStatus by remember { mutableStateOf(initialStatus) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = surfaceColor,
+        title = { Text("Filter Pengguna", fontWeight = FontWeight.Bold, color = textColor) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("Peran Pengguna", fontWeight = FontWeight.SemiBold, color = textColor, style = MaterialTheme.typography.bodyMedium)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    roleOptions.forEach { pilihan ->
+                        val isSelected = draftRole == pilihan
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) primaryColor.copy(alpha = 0.15f) else Color.Transparent,
+                            border = BorderStroke(1.dp, if (isSelected) primaryColor else borderColor),
+                            modifier = Modifier.weight(1f).clickable { draftRole = pilihan }
+                        ) {
+                            Text(
+                                text = pilihan.lowercase().replaceFirstChar { it.uppercase() },
+                                color = if (isSelected) primaryColor else textColor,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
+
+                Text("Status Akun", fontWeight = FontWeight.SemiBold, color = textColor, style = MaterialTheme.typography.bodyMedium)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    statusOptions.forEach { pilihan ->
+                        val isSelected = draftStatus == pilihan
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) primaryColor.copy(alpha = 0.15f) else Color.Transparent,
+                            border = BorderStroke(1.dp, if (isSelected) primaryColor else borderColor),
+                            modifier = Modifier.weight(1f).clickable { draftStatus = pilihan }
+                        ) {
+                            Text(
+                                text = pilihan.lowercase().replaceFirstChar { it.uppercase() },
+                                color = if (isSelected) primaryColor else textColor,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onApply(draftRole, draftStatus) },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+            ) { Text("Terapkan", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onReset) { Text("Reset", color = mutedColor) } }
+    )
 }

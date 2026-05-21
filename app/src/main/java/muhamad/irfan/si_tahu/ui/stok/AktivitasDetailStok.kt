@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
@@ -75,6 +76,18 @@ class AktivitasDetailStok : AktivitasDasar() {
                         intent.putExtra(AktivitasStockAdjustment.EXTRA_PRODUCT_ID, productId)
                         if (isExpiredMode) intent.putExtra(AktivitasStockAdjustment.EXTRA_EXPIRED_MODE, true)
                         startActivity(intent)
+                    },
+                    onCancelAdjustment = { movement, onSuccess ->
+                        showInputModal("Batalkan penyesuaian", "Alasan pembatalan", "Batalkan") { alasan ->
+                            lifecycleScope.launch {
+                                runCatching { RepositoriFirebaseUtama.batalkanPenyesuaianStok(movement.referensiId, alasan, currentUserId()) }
+                                    .onSuccess {
+                                        showMessage("Penyesuaian stok berhasil dibatalkan")
+                                        onSuccess()
+                                    }
+                                    .onFailure { showMessage(it.message ?: "Gagal membatalkan penyesuaian stok") }
+                            }
+                        }
                     }
                 )
             }
@@ -99,9 +112,12 @@ private data class ProductDetail(
 
 private data class StockMovement(
     val id: String,
+    val referensiId: String,
     val title: String,
     val dateLabel: String,
-    val amountText: String
+    val amountText: String,
+    val isCanceled: Boolean,
+    val canCancel: Boolean
 )
 
 // Extension untuk animasi Shimmer / Skeleton
@@ -125,7 +141,8 @@ private fun StockDetailScreen(
     productId: String,
     onNavigateBack: () -> Unit,
     onShowMessage: (String) -> Unit,
-    onNavigateToAdjustment: (Boolean) -> Unit
+    onNavigateToAdjustment: (Boolean) -> Unit,
+    onCancelAdjustment: (StockMovement, () -> Unit) -> Unit
 ) {
     val firestore = FirebaseFirestore.getInstance()
     val coroutineScope = rememberCoroutineScope()
@@ -133,6 +150,7 @@ private fun StockDetailScreen(
     var productDetail by remember { mutableStateOf<ProductDetail?>(null) }
     var movements by remember { mutableStateOf<List<StockMovement>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var triggerRefresh by remember { mutableStateOf(0) }
 
     var showDetailDialog by remember { mutableStateOf(false) }
     var detailTitle by remember { mutableStateOf("") }
@@ -169,7 +187,11 @@ private fun StockDetailScreen(
 
     fun tampilkanDetailRiwayat(move: StockMovement) {
         detailTitle = productDetail?.name ?: "Produk"
-        detailBadge = if (move.title.contains("ED", true)) "BUANG ED" else "OPNAME"
+        detailBadge = when {
+            move.title.contains("Pembatalan", true) -> "BATAL"
+            move.title.contains("ED", true) -> "BUANG KEDALUWARSA"
+            else -> "ADJUSTMENT"
+        }
         detailText = ""
         isDetailLoading = true
         showDetailDialog = true
@@ -186,9 +208,20 @@ private fun StockDetailScreen(
         }
     }
 
+    // Muat ulang otomatis saat stok produk ini, batch, atau riwayat penyesuaian berubah.
+    DisposableEffect(productId) {
+        val registrations = listOf(
+            firestore.collection("Produk").document(productId).addSnapshotListener { _, _ -> triggerRefresh++ },
+            firestore.collection("BatchStok").whereEqualTo("idProduk", productId).addSnapshotListener { _, _ -> triggerRefresh++ },
+            firestore.collection("RiwayatStok").whereEqualTo("idProduk", productId).addSnapshotListener { _, _ -> triggerRefresh++ },
+            firestore.collection("PenyesuaianStok").whereEqualTo("idProduk", productId).addSnapshotListener { _, _ -> triggerRefresh++ }
+        )
+        onDispose { registrations.forEach { it.remove() } }
+    }
+
     // Logika Pengambilan Data (Tetap)
-    LaunchedEffect(productId) {
-        isLoading = true
+    LaunchedEffect(productId, triggerRefresh) {
+        isLoading = productDetail == null
         firestore.collection("Produk").document(productId).get()
             .addOnSuccessListener { doc ->
                 if (!doc.exists()) {
@@ -247,7 +280,7 @@ private fun StockDetailScreen(
                             safeStock <= 0L -> "Habis"
                             kadaluarsa > 0L -> "Perlu Tindakan"
                             edHariIni > 0L -> "ED Hari Ini"
-                            hampir > 0L -> "Hampir Kadaluarsa"
+                            hampir > 0L -> "Hampir Kedaluwarsa"
                             safeStock <= minStock -> "Menipis"
                             else -> "Aman"
                         }
@@ -264,7 +297,11 @@ private fun StockDetailScreen(
                 firestore.collection("RiwayatStok").whereEqualTo("idProduk", productId).get()
                     .addOnSuccessListener { mutasiSnap ->
                         movements = mutasiSnap.documents
-                            .filter { mDoc -> mDoc.getString("jenisMutasi").orEmpty().contains("ADJUSTMENT", ignoreCase = true) }
+                            .filter { mDoc ->
+                                val jenisMutasi = mDoc.getString("jenisMutasi").orEmpty()
+                                jenisMutasi.contains("ADJUSTMENT", ignoreCase = true) &&
+                                    !jenisMutasi.contains("PEMBATALAN", ignoreCase = true)
+                            }
                             .sortedByDescending { (it.getTimestamp("tanggalMutasi") ?: it.getTimestamp("dibuatPada"))?.toDate()?.time ?: 0L }
                             .map { mDoc ->
                                 val jenisMutasi = mDoc.getString("jenisMutasi").orEmpty()
@@ -273,10 +310,17 @@ private fun StockDetailScreen(
                                 val waktuMutasi = mDoc.getTimestamp("tanggalMutasi") ?: mDoc.getTimestamp("dibuatPada") ?: Timestamp.now()
                                 val tanggalLabel = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale("id", "ID")).format(waktuMutasi.toDate())
 
+                                val referensiId = mDoc.getString("referensiId").orEmpty()
+                                val sumberMutasi = mDoc.getString("sumberMutasi").orEmpty()
+                                val isCancellationRow = jenisMutasi.contains("PEMBATALAN", ignoreCase = true)
+                                val isCanceled = mDoc.getBoolean("dibatalkan") == true || isCancellationRow
+
                                 val title = when {
-                                    jenisMutasi.contains("ADJUSTMENT_KADALUARSA", ignoreCase = true) -> "Buang ED / Kadaluarsa"
-                                    jenisMutasi.contains("ADJUSTMENT_KURANG", ignoreCase = true) -> "Adjustment Kurang Stok"
-                                    else -> "Adjustment Stok"
+                                    isCancellationRow && jenisMutasi.contains("KADALUARSA", ignoreCase = true) -> "Pembatalan Buang Produk Kedaluwarsa"
+                                    isCancellationRow -> "Pembatalan Penyesuaian"
+                                    jenisMutasi.contains("ADJUSTMENT_KADALUARSA", ignoreCase = true) -> "Buang Produk Kedaluwarsa"
+                                    jenisMutasi.contains("ADJUSTMENT_KURANG", ignoreCase = true) -> "Koreksi Pengurangan Stok"
+                                    else -> "Penyesuaian Stok"
                                 }
 
                                 val amountText = when {
@@ -285,7 +329,18 @@ private fun StockDetailScreen(
                                     else -> "0 $unit"
                                 }
 
-                                StockMovement(id = mDoc.id, title = title, amountText = amountText, dateLabel = tanggalLabel)
+                                StockMovement(
+                                    id = mDoc.id,
+                                    referensiId = referensiId,
+                                    title = title,
+                                    amountText = amountText,
+                                    dateLabel = tanggalLabel,
+                                    isCanceled = isCanceled,
+                                    canCancel = referensiId.isNotBlank() &&
+                                        sumberMutasi.equals("PenyesuaianStok", ignoreCase = true) &&
+                                        !isCanceled &&
+                                        !isCancellationRow
+                                )
                             }
                         isLoading = false
                     }
@@ -352,9 +407,9 @@ private fun StockDetailScreen(
                     // Rincian Batch (Font Diperkecil)
                     val amanStock = product.totalPhysical - product.nearExpiredStock - product.edTodayStock - product.expiredStock
                     CompactMetricRow("Aman", "${Formatter.ribuan(amanStock)} ${product.unit}", Color(0xFF10B981), mutedColor)
-                    CompactMetricRow("Hampir ED", "${Formatter.ribuan(product.nearExpiredStock)} ${product.unit}", Color(0xFFF59E0B), mutedColor)
+                    CompactMetricRow("Hampir Kedaluwarsa", "${Formatter.ribuan(product.nearExpiredStock)} ${product.unit}", Color(0xFFF59E0B), mutedColor)
                     CompactMetricRow("ED Hari Ini", "${Formatter.ribuan(product.edTodayStock)} ${product.unit}", Color(0xFFF59E0B), mutedColor)
-                    CompactMetricRow("Kadaluarsa", "${Formatter.ribuan(product.expiredStock)} ${product.unit}", Color(0xFFEF4444), mutedColor)
+                    CompactMetricRow("Kedaluwarsa", "${Formatter.ribuan(product.expiredStock)} ${product.unit}", Color(0xFFEF4444), mutedColor)
 
                     if (product.nearestExpiryDate.isNotBlank()) {
                         Text("ED terdekat: ${Formatter.readableDate(product.nearestExpiryDate)}", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
@@ -371,7 +426,7 @@ private fun StockDetailScreen(
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                             border = BorderStroke(1.dp, Color(0xFF3B82F6))
                         ) {
-                            Text("Adjustment", color = Color(0xFF3B82F6), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            Text("Penyesuaian", color = Color(0xFF3B82F6), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                         }
 
                         if (product.expiredStock > 0) {
@@ -382,7 +437,7 @@ private fun StockDetailScreen(
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
                             ) {
-                                Text("Buang ED", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text("Buang Produk Kedaluwarsa", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -395,7 +450,7 @@ private fun StockDetailScreen(
                 // --- AREA BAWAH: RIWAYAT STOK ---
                 Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     Text(
-                        text = "Riwayat Adjustment",
+                        text = "Riwayat Penyesuaian",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = textColor,
@@ -404,7 +459,7 @@ private fun StockDetailScreen(
 
                     if (movements.isEmpty()) {
                         Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text("Belum ada riwayat adjustment.", color = mutedColor, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                            Text("Belum ada riwayat penyesuaian.", color = mutedColor, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
                         }
                     } else {
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -414,7 +469,10 @@ private fun StockDetailScreen(
                                     textColor = textColor,
                                     mutedColor = mutedColor,
                                     borderColor = borderColor,
-                                    onClick = { tampilkanDetailRiwayat(move) }
+                                    onClick = { tampilkanDetailRiwayat(move) },
+                                    onCancel = if (move.canCancel) {
+                                        { onCancelAdjustment(move) { triggerRefresh++ } }
+                                    } else null
                                 )
                             }
 
@@ -461,22 +519,45 @@ private fun CompactMetricRow(label: String, value: String, valueColor: Color, la
 }
 
 @Composable
-private fun CompactMovementRow(move: StockMovement, textColor: Color, mutedColor: Color, borderColor: Color, onClick: () -> Unit) {
+private fun CompactMovementRow(
+    move: StockMovement,
+    textColor: Color,
+    mutedColor: Color,
+    borderColor: Color,
+    onClick: () -> Unit,
+    onCancel: (() -> Unit)? = null
+) {
     val isPositive = move.amountText.startsWith("+")
     val amountColor = if (isPositive) Color(0xFF10B981) else if (move.amountText.startsWith("-")) Color(0xFFEF4444) else textColor
+    val cancelColor = Color(0xFFEF4444)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp) // Padding dalam list dikurangi
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(move.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = textColor)
-            Text(move.amountText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = amountColor)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(move.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (move.isCanceled) {
+                        Surface(shape = RoundedCornerShape(50), color = cancelColor.copy(alpha = 0.10f), border = BorderStroke(1.dp, cancelColor.copy(alpha = 0.22f))) {
+                            Text("Batal", color = cancelColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
+                        }
+                    }
+                }
+                Text(move.dateLabel, style = MaterialTheme.typography.labelSmall, color = mutedColor)
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(move.amountText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = amountColor)
+                if (onCancel != null) {
+                    TextButton(onClick = onCancel, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp), modifier = Modifier.height(28.dp)) {
+                        Text("Batalkan", color = cancelColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(2.dp))
-        Text(move.dateLabel, style = MaterialTheme.typography.labelSmall, color = mutedColor)
 
         HorizontalDivider(Modifier.padding(top = 10.dp), thickness = 0.5.dp, color = borderColor)
     }
@@ -553,7 +634,7 @@ private fun ProDetailDialog(
                     ) {
                         SelectionContainer {
                             Text(
-                                text = detailText.ifBlank { "Detail belum tersedia." },
+                                text = detailText.ifBlank { "Detail data belum tersedia." },
                                 color = textColor,
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.bodySmall,

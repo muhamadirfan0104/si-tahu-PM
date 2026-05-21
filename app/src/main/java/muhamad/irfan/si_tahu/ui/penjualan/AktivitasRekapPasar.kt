@@ -67,6 +67,7 @@ import muhamad.irfan.si_tahu.ui.utama.TabIds
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.InputAngka
 import muhamad.irfan.si_tahu.util.PembantuPilihTanggalWaktu
+import muhamad.irfan.si_tahu.util.PembantuCetak
 import java.util.concurrent.TimeUnit
 
 class AktivitasRekapPasar : AktivitasDasar() {
@@ -166,16 +167,16 @@ private fun MarketRecapScreen(
     // Fungsi Logika Stok
     fun stokLayakJual(product: Produk): Int = product.safeStock + product.nearExpiredStock + product.edTodayStock
     fun labelStatusStokRekap(product: Produk): String = when {
-        stokLayakJual(product) <= 0 && product.expiredStock > 0 -> "Kadaluarsa"
+        stokLayakJual(product) <= 0 && product.expiredStock > 0 -> "Kedaluwarsa"
         stokLayakJual(product) <= 0 -> "Habis"
         product.edTodayStock > 0 -> "ED Hari Ini"
-        product.nearExpiredStock > 0 -> "Hampir ED"
+        product.nearExpiredStock > 0 -> "Hampir Kedaluwarsa"
         product.producedToday -> "Produksi Baru"
         else -> "Sisa Stok"
     }
     fun warnaStatusStok(status: String): Color = when (status) {
-        "Kadaluarsa", "Habis" -> dangerColor
-        "ED Hari Ini", "Hampir ED" -> warningColor
+        "Kedaluwarsa", "Habis" -> dangerColor
+        "ED Hari Ini", "Hampir Kedaluwarsa" -> warningColor
         else -> successColor
     }
     fun labelProduksiTerakhirRekap(product: Produk): String {
@@ -200,15 +201,17 @@ private fun MarketRecapScreen(
     }
 
     fun opsiHargaUntukRekap(product: Produk): List<OpsiHargaRekap> {
-        val aktif = product.channels
+        // Rekap pasar boleh memakai semua harga aktif yang terpasang di produk.
+        // Harga dengan label pasar tetap diprioritaskan di urutan atas, tetapi pilihan lain
+        // seperti kasir, grosir, rumahan, atau titipan tetap bisa dipilih.
+        return product.channels
             .filter { it.active && it.price > 0L }
             .sortedWith(
                 compareByDescending<muhamad.irfan.si_tahu.data.HargaKanal> { isHargaPasar(it.label) }
                     .thenByDescending { it.defaultCashier }
                     .thenBy { it.label.lowercase() }
             )
-        val prioritasPasar = aktif.filter { isHargaPasar(it.label) }
-        return (prioritasPasar.ifEmpty { aktif }).map { OpsiHargaRekap(it.label, it.price, it.defaultCashier) }
+            .map { OpsiHargaRekap(it.label, it.price, it.defaultCashier) }
     }
 
     fun mintaKembali(showConfirm: () -> Unit) {
@@ -224,7 +227,7 @@ private fun MarketRecapScreen(
                     .filter { product -> stokLayakJual(product) > 0 && opsiHargaUntukRekap(product).isNotEmpty() }
                     .sortedWith(
                         compareBy<Produk> { labelStatusStokRekap(it) != "ED Hari Ini" }
-                            .thenBy { labelStatusStokRekap(it) != "Hampir Kadaluarsa" }
+                            .thenBy { labelStatusStokRekap(it) != "Hampir Kedaluwarsa" }
                             .thenBy { it.name.lowercase() }
                     )
             }.onSuccess { result ->
@@ -619,13 +622,13 @@ private fun MarketRecapScreen(
                                     "Stok: ${Formatter.ribuan(stokLayakJual(it).toLong())} ${it.unit} • $status"
                                 } ?: "Ketuk untuk memilih"
 
-                                Text(text = meta, color = if(status == "ED Hari Ini" || status == "Hampir Kadaluarsa") warningColor else if(status == "Kadaluarsa" || status == "Habis") dangerColor else mutedColor, style = MaterialTheme.typography.labelMedium)
+                                Text(text = meta, color = if(status == "ED Hari Ini" || status == "Hampir Kedaluwarsa") warningColor else if(status == "Kedaluwarsa" || status == "Habis") dangerColor else mutedColor, style = MaterialTheme.typography.labelMedium)
 
                                 selectedProduk?.let { produk ->
                                     val infoProduksi = labelProduksiTerakhirRekap(produk)
                                     val infoEd = when (labelStatusStokRekap(produk)) {
                                         "ED Hari Ini" -> listOf("Prioritaskan dijual", "Prod: $infoProduksi").filter { it.isNotBlank() }.joinToString(" • ")
-                                        "Hampir Kadaluarsa" -> listOf("Mendekati ED", "Prod: $infoProduksi").filter { it.isNotBlank() }.joinToString(" • ")
+                                        "Hampir Kedaluwarsa" -> listOf("Mendekati ED", "Prod: $infoProduksi").filter { it.isNotBlank() }.joinToString(" • ")
                                         else -> "Prod: $infoProduksi"
                                     }
                                     if (infoEd.isNotBlank()) Text(text = infoEd, color = mutedColor, style = MaterialTheme.typography.labelSmall)
@@ -859,13 +862,16 @@ private fun ProReceiptSuccessDialog(
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     DialogActionButton(Icons.Rounded.Share, "Bagikan", primaryColor) {
-                        Toast.makeText(context, "Fitur Bagikan PDF segera hadir", Toast.LENGTH_SHORT).show()
+                        runCatching { PembantuCetak.shareStrukPdf(context, "Nota Rekap Pasar", receiptText) }
+                            .onFailure { Toast.makeText(context, it.message ?: "Gagal membagikan PDF nota", Toast.LENGTH_SHORT).show() }
                     }
                     DialogActionButton(Icons.Rounded.Download, "Unduh", primaryColor) {
-                        Toast.makeText(context, "Fitur Unduh PDF segera hadir", Toast.LENGTH_SHORT).show()
+                        runCatching { PembantuCetak.downloadStrukPdf(context, "Nota Rekap Pasar", receiptText) }
+                            .onFailure { Toast.makeText(context, it.message ?: "Gagal download PDF nota", Toast.LENGTH_SHORT).show() }
                     }
                     DialogActionButton(Icons.Rounded.Print, "Cetak", primaryColor) {
-                        Toast.makeText(context, "Fitur Cetak Struk segera hadir", Toast.LENGTH_SHORT).show()
+                        runCatching { PembantuCetak.printNota(context, "Nota Rekap Pasar", receiptText) }
+                            .onFailure { Toast.makeText(context, it.message ?: "Gagal mencetak nota", Toast.LENGTH_SHORT).show() }
                     }
                 }
 
@@ -947,7 +953,7 @@ private fun ProdukRekapPickerDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Pilih Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                Text("Daftar produk dengan harga pasar", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                Text("Daftar produk dengan semua harga aktif", color = mutedColor, style = MaterialTheme.typography.bodySmall)
             }
         },
         text = {

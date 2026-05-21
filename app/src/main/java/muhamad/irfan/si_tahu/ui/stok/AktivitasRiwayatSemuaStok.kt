@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
+import muhamad.irfan.si_tahu.util.DialogPilihBulanRiwayat
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
@@ -78,14 +79,14 @@ class AktivitasRiwayatSemuaStok : AktivitasDasar() {
                     onNavigateBack = { finish() },
                     onShowMessage = { pesan -> showMessage(pesan) },
                     onCancelAdjustment = { row, onSuccess ->
-                        showInputModal("Batalkan adjustment", "Alasan pembatalan", "Batalkan") { alasan ->
+                        showInputModal("Batalkan penyesuaian", "Alasan pembatalan", "Batalkan") { alasan ->
                             lifecycleScope.launch {
                                 runCatching { RepositoriFirebaseUtama.batalkanPenyesuaianStok(row.referensiId, alasan, currentUserId()) }
                                     .onSuccess {
-                                        showMessage("Adjustment berhasil dibatalkan")
+                                        showMessage("Penyesuaian stok berhasil dibatalkan")
                                         onSuccess()
                                     }
-                                    .onFailure { showMessage(it.message ?: "Gagal membatalkan adjustment") }
+                                    .onFailure { showMessage(it.message ?: "Gagal membatalkan penyesuaian stok") }
                             }
                         }
                     },
@@ -109,13 +110,14 @@ data class RiwayatStokGlobalUi(
     val kategori: String,
     val dibuatPada: Timestamp,
     val isMasuk: Boolean,
+    val isDibatalkan: Boolean,
     val bisaDibatalkan: Boolean
 )
 
 // === KONSTANTA FILTER ===
-private const val FILTER_SEMUA = "Semua Adjustment"
+private const val FILTER_SEMUA = "Semua Penyesuaian"
 private const val FILTER_ADJUSTMENT_KURANG = "Kurangi Stok"
-private const val FILTER_ADJUSTMENT_ED = "Buang ED"
+private const val FILTER_ADJUSTMENT_ED = "Buang Produk Kedaluwarsa"
 
 // Extension untuk animasi Shimmer / Skeleton
 private fun Modifier.adminShimmerEffect(): Modifier = composed {
@@ -165,7 +167,7 @@ private fun StockHistoryScreen(
 
     // State Paginasi
     var halamanSaatIni by remember { mutableStateOf(1) }
-    val itemPerHalaman = 15
+    val itemPerHalaman = 10
 
     // Tema Warna
     val isDark = isSystemInDarkTheme()
@@ -181,7 +183,7 @@ private fun StockHistoryScreen(
 
     fun tampilkanDetailRiwayat(row: RiwayatStokGlobalUi) {
         detailTitle = row.namaProduk
-        detailBadge = if (row.title.contains("ED", true)) "BUANG ED" else "OPNAME"
+        detailBadge = if (row.title.contains("ED", true)) "BUANG KEDALUWARSA" else "OPNAME"
         detailText = ""
         isDetailLoading = true
         showDetailDialog = true
@@ -200,13 +202,26 @@ private fun StockHistoryScreen(
         }
     }
 
+    // Muat ulang otomatis saat riwayat atau dokumen penyesuaian stok berubah.
+    DisposableEffect(Unit) {
+        val registrations = listOf(
+            firestore.collection("RiwayatStok").addSnapshotListener { _, _ -> triggerRefresh++ },
+            firestore.collection("PenyesuaianStok").addSnapshotListener { _, _ -> triggerRefresh++ }
+        )
+        onDispose { registrations.forEach { it.remove() } }
+    }
+
     // Fungsi Fetch Data
     LaunchedEffect(triggerRefresh) {
-        isLoading = true
+        isLoading = rows.isEmpty()
         firestore.collection("RiwayatStok").get()
             .addOnSuccessListener { snapshot ->
                 rows = snapshot.documents
-                    .filter { doc -> doc.getString("jenisMutasi").orEmpty().contains("ADJUSTMENT", ignoreCase = true) }
+                    .filter { doc ->
+                        val jenisMutasi = doc.getString("jenisMutasi").orEmpty()
+                        jenisMutasi.contains("ADJUSTMENT", ignoreCase = true) &&
+                            !jenisMutasi.contains("PEMBATALAN", ignoreCase = true)
+                    }
                     .map { doc ->
                         val jenisMutasi = doc.getString("jenisMutasi").orEmpty()
                         val qtyMasuk = doc.getLong("qtyMasuk") ?: 0L
@@ -219,11 +234,12 @@ private fun StockHistoryScreen(
                         val namaProduk = doc.getString("namaProduk").orEmpty().ifBlank { "Produk" }
                         val produkId = doc.getString("idProduk").orEmpty()
                         val waktuMutasi = doc.getTimestamp("tanggalMutasi") ?: doc.getTimestamp("dibuatPada") ?: Timestamp.now()
+                        val isDibatalkan = doc.getBoolean("dibatalkan") == true
 
                         val title = when {
-                            jenisMutasi.contains("ADJUSTMENT_KADALUARSA", ignoreCase = true) -> "Buang ED / Kadaluarsa"
-                            jenisMutasi.contains("ADJUSTMENT_KURANG", ignoreCase = true) -> "Adjustment Kurang Stok"
-                            else -> "Adjustment Stok"
+                            jenisMutasi.contains("ADJUSTMENT_KADALUARSA", ignoreCase = true) -> "Buang Produk Kedaluwarsa"
+                            jenisMutasi.contains("ADJUSTMENT_KURANG", ignoreCase = true) -> "Koreksi Pengurangan Stok"
+                            else -> "Penyesuaian Stok"
                         }
 
                         RiwayatStokGlobalUi(
@@ -239,14 +255,16 @@ private fun StockHistoryScreen(
                             },
                             badge = Formatter.readableDateTime(isoFromTimestamp(waktuMutasi)),
                             amount = when {
+                                isDibatalkan -> "BATAL"
                                 qtyMasuk > 0L -> "+${Formatter.ribuan(qtyMasuk)}"
                                 qtyKeluar > 0L -> "-${Formatter.ribuan(qtyKeluar)}"
                                 else -> "0"
                             },
                             isMasuk = qtyMasuk > 0L,
+                            isDibatalkan = isDibatalkan,
                             kategori = kategoriUntuk(jenisMutasi, qtyMasuk, qtyKeluar),
                             dibuatPada = waktuMutasi,
-                            bisaDibatalkan = referensiId.isNotBlank() && sumberMutasi.equals("PenyesuaianStok", true) && !jenisMutasi.contains("PEMBATALAN", true) && doc.getBoolean("dibatalkan") != true
+                            bisaDibatalkan = referensiId.isNotBlank() && sumberMutasi.equals("PenyesuaianStok", true) && !isDibatalkan
                         )
                     }.sortedByDescending { it.dibuatPada.toDate().time }
                 isLoading = false
@@ -270,7 +288,7 @@ private fun StockHistoryScreen(
 
                 val cocokKategori = when (kategoriAktif) {
                     FILTER_ADJUSTMENT_KURANG -> row.title.contains("Kurang", true)
-                    FILTER_ADJUSTMENT_ED -> row.title.contains("ED", true) || row.title.contains("Kadaluarsa", true)
+                    FILTER_ADJUSTMENT_ED -> row.title.contains("ED", true) || row.title.contains("Kedaluwarsa", true)
                     else -> true
                 }
 
@@ -299,8 +317,8 @@ private fun StockHistoryScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text("Riwayat Opname Stok", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Log adjustment dan buang produk ED", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Riwayat Penyesuaian Stok", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
+                            Text("Riwayat penyesuaian stok dan produk kedaluwarsa", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -376,7 +394,7 @@ private fun StockHistoryScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Tidak ada riwayat ditemukan", "Coba hapus kriteria filter atau ubah pencarian.")
+                    EmptyDataView("Belum ada riwayat yang sesuai", "Coba ubah pencarian, filter, atau rentang tanggal.")
                 }
             } else {
                 LazyColumn(
@@ -385,8 +403,12 @@ private fun StockHistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(paginatedRows) { row ->
-                        val itemColor = if (row.title.contains("ED", true) || row.title.contains("Kadaluarsa", true)) warningColor else dangerColor
-                        val iconVector = if (row.title.contains("ED", true) || row.title.contains("Kadaluarsa", true)) Icons.Rounded.DeleteForever else Icons.Rounded.SyncAlt
+                        val itemColor = when {
+                            row.isDibatalkan -> mutedColor
+                            row.title.contains("ED", true) || row.title.contains("Kedaluwarsa", true) -> warningColor
+                            else -> dangerColor
+                        }
+                        val iconVector = if (row.title.contains("ED", true) || row.title.contains("Kedaluwarsa", true)) Icons.Rounded.DeleteForever else Icons.Rounded.SyncAlt
 
                         StockHistoryCard(
                             row = row,
@@ -547,7 +569,14 @@ private fun StockHistoryCard(
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(row.namaProduk, fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(row.title, color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(row.title, color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    if (row.isDibatalkan) {
+                        Surface(shape = RoundedCornerShape(50), color = Color(0xFFEF4444).copy(alpha = 0.10f), border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.22f))) {
+                            Text("Batal", color = Color(0xFFEF4444), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
+                        }
+                    }
+                }
                 Text(row.subtitle, color = mutedColor, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -657,7 +686,7 @@ private fun ProDetailDialog(
                     ) {
                         SelectionContainer {
                             Text(
-                                text = detailText.ifBlank { "Detail belum tersedia." },
+                                text = detailText.ifBlank { "Detail data belum tersedia." },
                                 color = textColor,
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.bodySmall,
@@ -708,6 +737,7 @@ private fun ModernMobileFilterDialog(
     var draftMulai by remember { mutableStateOf(initialRentangMulai.orEmpty()) }
     var draftSelesai by remember { mutableStateOf(initialRentangSelesai.orEmpty()) }
     var showDateRangePicker by remember { mutableStateOf(false) }
+    var showMonthPicker by remember { mutableStateOf(false) }
 
     fun formatDateToLocalId(dateStr: String): String {
         if (dateStr.isBlank()) return ""
@@ -731,7 +761,7 @@ private fun ModernMobileFilterDialog(
         title = { Text("Filter Lanjutan", fontWeight = FontWeight.Bold, color = textColor) },
         text = {
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Jenis Adjustment", fontWeight = FontWeight.SemiBold, color = textColor, style = MaterialTheme.typography.bodyMedium)
+                Text("Jenis Penyesuaian", fontWeight = FontWeight.SemiBold, color = textColor, style = MaterialTheme.typography.bodyMedium)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     kategoriOpsi.chunked(2).forEach { rowItems ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -762,6 +792,18 @@ private fun ModernMobileFilterDialog(
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
                         Text(text = dateLabel, color = if (draftMulai.isNotBlank()) textColor else mutedColor, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clickable { showMonthPicker = true },
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
+                        Text("Pilih satu bulan penuh", color = textColor, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -859,6 +901,24 @@ private fun ModernMobileFilterDialog(
                 }
             }
         }
+    }
+
+    if (showMonthPicker) {
+        DialogPilihBulanRiwayat(
+            initialDate = draftMulai.ifBlank { null },
+            primaryColor = primaryColor,
+            surfaceColor = surfaceColor,
+            bgColor = bgColor,
+            textColor = textColor,
+            mutedColor = mutedColor,
+            borderColor = borderColor,
+            onDismiss = { showMonthPicker = false },
+            onApply = { mulai, selesai, _ ->
+                draftMulai = mulai
+                draftSelesai = selesai
+                showMonthPicker = false
+            }
+        )
     }
 }
 

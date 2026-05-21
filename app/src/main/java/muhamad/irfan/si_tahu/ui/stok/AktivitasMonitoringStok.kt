@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.data.Produk
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
@@ -137,9 +138,21 @@ private fun StockMonitoringScreen(
     val dangerColor = if (isDark) Color(0xFFEF4444) else Color(0xFFDC2626)
     val warningColor = if (isDark) Color(0xFFF59E0B) else Color(0xFFD97706)
 
+    // Muat ulang otomatis saat produk, batch, atau penyesuaian stok berubah.
+    DisposableEffect(Unit) {
+        val firestoreRealtime = FirebaseFirestore.getInstance()
+        val registrations = listOf(
+            firestoreRealtime.collection("Produk").addSnapshotListener { _, _ -> triggerRefresh++ },
+            firestoreRealtime.collection("BatchStok").addSnapshotListener { _, _ -> triggerRefresh++ },
+            firestoreRealtime.collection("PenyesuaianStok").addSnapshotListener { _, _ -> triggerRefresh++ },
+            firestoreRealtime.collection("RiwayatStok").addSnapshotListener { _, _ -> triggerRefresh++ }
+        )
+        onDispose { registrations.forEach { it.remove() } }
+    }
+
     // Load Data
     LaunchedEffect(triggerRefresh) {
-        isLoading = true
+        isLoading = allProducts.isEmpty()
         runCatching { RepositoriFirebaseUtama.muatSemuaProduk() }
             .onSuccess { result ->
                 allProducts = result.filter { !it.deleted }.sortedBy { it.name.lowercase() }
@@ -209,7 +222,7 @@ private fun StockMonitoringScreen(
                     title = {
                         Column {
                             Text("Monitoring Stok", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Fisik, jual, dan kadaluarsa", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Fisik, jual, dan kedaluwarsa", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -552,10 +565,10 @@ private fun StockCard(
                         Text("ED Hari Ini: ${Formatter.ribuan(produk.edTodayStock.toLong())} ${produk.unit}", color = warningColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     }
                     if (produk.nearExpiredStock > 0) {
-                        Text("Hampir ED: ${Formatter.ribuan(produk.nearExpiredStock.toLong())} ${produk.unit}", color = warningColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text("Hampir Kedaluwarsa: ${Formatter.ribuan(produk.nearExpiredStock.toLong())} ${produk.unit}", color = warningColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     }
                     if (produk.expiredStock > 0) {
-                        Text("Kadaluarsa: ${Formatter.ribuan(produk.expiredStock.toLong())} ${produk.unit}", color = dangerColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text("Kedaluwarsa: ${Formatter.ribuan(produk.expiredStock.toLong())} ${produk.unit}", color = dangerColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     }
                 }
 

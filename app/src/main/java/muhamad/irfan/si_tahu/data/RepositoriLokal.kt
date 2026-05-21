@@ -229,7 +229,7 @@ object RepositoriLokal {
             rows += BarisTransaksi(
                 id = item.id,
                 date = item.date,
-                type = "Adjustment",
+                type = "Penyesuaian",
                 subtitle = (product?.name ?: "Produk") + " • " + qtyLabel + " " + (product?.unit ?: "pcs"),
                 valueText = if (item.type == "add") "Tambah" else "Kurang",
                 source = "ADJUSTMENT"
@@ -259,7 +259,7 @@ object RepositoriLokal {
         }
         database.stockAdjustments.filter { it.productId == productId }.forEach {
             val sign = if (it.type == "add") "+" else "-"
-            rows += PergerakanStok(it.id, it.date, "Adjustment ${if (it.type == "add") "masuk" else "keluar"}", it.note, "$sign${Formatter.ribuan(it.qty.toLong())} ${product.unit}", if (it.type == "add") "green" else "orange")
+            rows += PergerakanStok(it.id, it.date, "Penyesuaian ${if (it.type == "add") "masuk" else "keluar"}", it.note, "$sign${Formatter.ribuan(it.qty.toLong())} ${product.unit}", if (it.type == "add") "green" else "orange")
         }
         return rows.sortedByDescending { Formatter.parseDate(it.date) }.take(8)
     }
@@ -450,7 +450,7 @@ object RepositoriLokal {
         )
         database.stockAdjustments.add(0, item)
         persist()
-        addActivity("Adjustment stok ${product.name} ${if (type == "add") "+" else "-"}${Formatter.ribuan(qty.toLong())} ${product.unit}.", if (type == "add") "green" else "orange")
+        addActivity("Penyesuaian stok ${product.name} ${if (type == "add") "+" else "-"}${Formatter.ribuan(qty.toLong())} ${product.unit}.", if (type == "add") "green" else "orange")
         return item
     }
 
@@ -718,11 +718,11 @@ object RepositoriLokal {
     }
 
     fun deleteAdjustment(adjustmentId: String): PenyesuaianStok {
-        val item = getAdjustment(adjustmentId) ?: throw IllegalArgumentException("Adjustment tidak ditemukan")
-        val product = getProduct(item.productId) ?: throw IllegalArgumentException("Produk adjustment tidak ditemukan")
+        val item = getAdjustment(adjustmentId) ?: throw IllegalArgumentException("Penyesuaian tidak ditemukan")
+        val product = getProduct(item.productId) ?: throw IllegalArgumentException("Produk penyesuaian tidak ditemukan")
         if (item.type == "add") {
             if (product.stock < item.qty) {
-                throw IllegalStateException("Stok hasil adjustment sudah terpakai, data tidak bisa dihapus")
+                throw IllegalStateException("Stok hasil penyesuaian sudah terpakai, data tidak bisa dihapus")
             }
             product.stock -= item.qty
         } else {
@@ -730,7 +730,7 @@ object RepositoriLokal {
         }
         database.stockAdjustments.removeAll { it.id == adjustmentId }
         persist()
-        addActivity("Adjustment ${item.id} dihapus.", "orange")
+        addActivity("Penyesuaian ${item.id} dihapus.", "orange")
         return item
     }
 
@@ -821,14 +821,14 @@ object RepositoriLokal {
     }
 
     fun buildAdjustmentDetailText(adjustmentId: String): String {
-        val item = getAdjustment(adjustmentId) ?: return "Detail adjustment tidak ditemukan"
+        val item = getAdjustment(adjustmentId) ?: return "Detail penyesuaian tidak ditemukan"
         val product = getProduct(item.productId)
         val user = getUser(item.createdBy)
         val direction = if (item.type == "add") "Tambah" else "Kurangi"
         return buildString {
             appendLine("DETAIL ADJUSTMENT STOK")
             appendLine(separator())
-            appendLine(detailLine("ID Adjustment", item.id))
+            appendLine(detailLine("ID Penyesuaian", item.id))
             appendLine(detailLine("Tanggal", Formatter.readableDateTime(item.date)))
             appendLine(detailLine("Produk", product?.name ?: item.productId))
             appendLine(detailLine("Jenis", direction))
@@ -843,7 +843,7 @@ object RepositoriLokal {
         "Produksi" -> buildProductionDetailText(rowId)
         "Produk Olahan" -> buildConversionDetailText(rowId)
         "Pengeluaran" -> buildExpenseDetailText(rowId)
-        "Adjustment" -> buildAdjustmentDetailText(rowId)
+        "Penyesuaian" -> buildAdjustmentDetailText(rowId)
         else -> "Detail belum tersedia"
     }
 
