@@ -2,6 +2,7 @@ package muhamad.irfan.si_tahu.util
 
 import android.app.Dialog
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -31,16 +32,19 @@ object PembantuModal {
         onClosed: (() -> Unit)? = null
     ): Dialog {
         val dialog = Dialog(context)
-        val container = modalContainer(context)
+        val palette = modalPalette(context)
+        val container = modalContainer(context, palette)
 
-        container.addView(titleView(context, title))
+        container.addView(headerView(context, title, palette.primary, "i", palette))
 
         val body = TextView(context).apply {
             text = message
             textSize = 13f
-            setTextColor(Color.rgb(35, 35, 35))
+            setTextColor(palette.text)
             typeface = if (monospace) Typeface.MONOSPACE else Typeface.SANS_SERIF
             setLineSpacing(2f, 1.0f)
+            setPadding(dp(context, 14), dp(context, 14), dp(context, 14), dp(context, 14))
+            background = roundedStroke(context, palette.inputFill, palette.border, 18f)
         }
         val scroll = ScrollView(context).apply {
             addView(body)
@@ -55,6 +59,7 @@ object PembantuModal {
             actionsRow(
                 context = context,
                 primaryLabel = positiveLabel,
+                primaryColor = palette.primary,
                 onPrimary = {
                     onPositive?.invoke()
                     dialog.dismiss()
@@ -68,7 +73,8 @@ object PembantuModal {
                 onNegative = {
                     onNegative?.invoke()
                     dialog.dismiss()
-                }
+                },
+                palette = palette
             )
         )
 
@@ -87,9 +93,21 @@ object PembantuModal {
         onConfirm: (String) -> Unit
     ): Dialog {
         val dialog = Dialog(context)
-        val container = modalContainer(context)
+        val palette = modalPalette(context)
+        val isDanger = isDestructiveAction(confirmLabel) || title.contains("batal", ignoreCase = true)
+        val accent = if (isDanger) palette.danger else palette.primary
+        val container = modalContainer(context, palette)
 
-        container.addView(titleView(context, title))
+        container.addView(headerView(context, title, accent, if (isDanger) "!" else "?", palette))
+
+        val helper = TextView(context).apply {
+            text = hint
+            textSize = 13f
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(palette.text)
+            setPadding(0, 0, 0, dp(context, 8))
+        }
+        container.addView(helper)
 
         val input = EditText(context).apply {
             setText(initialValue)
@@ -99,10 +117,11 @@ object PembantuModal {
             gravity = Gravity.TOP or Gravity.START
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             setSingleLine(false)
-            background = roundedStroke(context, Color.WHITE, Color.rgb(205, 205, 205), 14f)
-            setPadding(dp(context, 12), dp(context, 10), dp(context, 12), dp(context, 10))
+            background = roundedStroke(context, palette.inputFill, palette.border, 16f)
+            setPadding(dp(context, 14), dp(context, 12), dp(context, 14), dp(context, 12))
             textSize = 14f
-            setTextColor(Color.rgb(30, 30, 30))
+            setTextColor(palette.text)
+            setHintTextColor(palette.muted)
         }
         container.addView(
             input,
@@ -114,8 +133,9 @@ object PembantuModal {
 
         val error = TextView(context).apply {
             textSize = 12f
-            setTextColor(Color.rgb(190, 40, 40))
+            setTextColor(palette.danger)
             visibility = View.GONE
+            setPadding(dp(context, 2), dp(context, 8), dp(context, 2), 0)
         }
         container.addView(error)
 
@@ -123,6 +143,7 @@ object PembantuModal {
             actionsRow(
                 context = context,
                 primaryLabel = confirmLabel,
+                primaryColor = accent,
                 onPrimary = {
                     val trimmed = input.text?.toString()?.trim().orEmpty()
                     if (trimmed.isBlank()) {
@@ -133,8 +154,9 @@ object PembantuModal {
                         dialog.dismiss()
                     }
                 },
-                negativeLabel = "Tutup",
-                onNegative = { dialog.dismiss() }
+                negativeLabel = "Batal",
+                onNegative = { dialog.dismiss() },
+                palette = palette
             )
         )
 
@@ -152,26 +174,33 @@ object PembantuModal {
         cancelLabel: String = "Batal"
     ): Dialog {
         val dialog = Dialog(context)
-        val container = modalContainer(context)
+        val palette = modalPalette(context)
+        val isDanger = isDestructiveAction(confirmLabel) || title.contains("hapus", ignoreCase = true) || title.contains("batal", ignoreCase = true)
+        val accent = if (isDanger) palette.danger else palette.primary
+        val container = modalContainer(context, palette)
 
-        container.addView(titleView(context, title))
+        container.addView(headerView(context, title, accent, if (isDanger) "!" else "?", palette))
         container.addView(TextView(context).apply {
             text = message
             textSize = 14f
-            setTextColor(Color.rgb(45, 45, 45))
-            setLineSpacing(2f, 1.0f)
+            setTextColor(palette.text)
+            setLineSpacing(3f, 1.0f)
+            setPadding(dp(context, 14), dp(context, 14), dp(context, 14), dp(context, 14))
+            background = roundedStroke(context, palette.inputFill, palette.border, 18f)
         })
 
         container.addView(
             actionsRow(
                 context = context,
                 primaryLabel = confirmLabel,
+                primaryColor = accent,
                 onPrimary = {
                     onConfirm()
                     dialog.dismiss()
                 },
                 negativeLabel = cancelLabel,
-                onNegative = { dialog.dismiss() }
+                onNegative = { dialog.dismiss() },
+                palette = palette
             )
         )
 
@@ -180,11 +209,50 @@ object PembantuModal {
         return dialog
     }
 
-    private fun modalContainer(context: Context): LinearLayout {
+    private data class Palette(
+        val surface: Int,
+        val inputFill: Int,
+        val border: Int,
+        val text: Int,
+        val muted: Int,
+        val primary: Int,
+        val danger: Int,
+        val secondaryButton: Int
+    )
+
+    private fun modalPalette(context: Context): Palette {
+        val isNight = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        return if (isNight) {
+            Palette(
+                surface = Color.rgb(31, 41, 55),
+                inputFill = Color.rgb(17, 24, 39),
+                border = Color.rgb(55, 65, 81),
+                text = Color.rgb(249, 250, 251),
+                muted = Color.rgb(156, 163, 175),
+                primary = Color.rgb(59, 130, 246),
+                danger = Color.rgb(239, 68, 68),
+                secondaryButton = Color.rgb(55, 65, 81)
+            )
+        } else {
+            Palette(
+                surface = Color.WHITE,
+                inputFill = Color.rgb(248, 250, 252),
+                border = Color.rgb(226, 232, 240),
+                text = Color.rgb(17, 24, 39),
+                muted = Color.rgb(107, 114, 128),
+                primary = Color.rgb(37, 99, 235),
+                danger = Color.rgb(220, 38, 38),
+                secondaryButton = Color.rgb(243, 244, 246)
+            )
+        }
+    }
+
+    private fun modalContainer(context: Context, palette: Palette): LinearLayout {
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(context, 18), dp(context, 18), dp(context, 18), dp(context, 18))
-            background = roundedStroke(context, Color.WHITE, Color.TRANSPARENT, 26f)
+            setPadding(dp(context, 20), dp(context, 20), dp(context, 20), dp(context, 20))
+            background = roundedStroke(context, palette.surface, palette.border, 28f)
+            elevation = dp(context, 10).toFloat()
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -194,37 +262,54 @@ object PembantuModal {
         }
     }
 
-    private fun titleView(context: Context, title: String): TextView {
-        return TextView(context).apply {
-            text = title
-            textSize = 20f
-            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-            setTextColor(Color.rgb(25, 25, 25))
-            setPadding(0, 0, 0, dp(context, 12))
+    private fun headerView(context: Context, title: String, accentColor: Int, iconText: String, palette: Palette): LinearLayout {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(context, 16))
+
+            addView(TextView(context).apply {
+                text = iconText
+                gravity = Gravity.CENTER
+                textSize = 18f
+                setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                setTextColor(accentColor)
+                background = roundedStroke(context, withAlpha(accentColor, 28), Color.TRANSPARENT, 16f)
+            }, LinearLayout.LayoutParams(dp(context, 44), dp(context, 44)))
+
+            addView(TextView(context).apply {
+                text = title
+                textSize = 20f
+                setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                setTextColor(palette.text)
+                setPadding(dp(context, 12), 0, 0, 0)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
     }
 
     private fun actionsRow(
         context: Context,
         primaryLabel: String,
+        primaryColor: Int,
         onPrimary: () -> Unit,
         neutralLabel: String? = null,
         onNeutral: (() -> Unit)? = null,
         negativeLabel: String? = null,
-        onNegative: (() -> Unit)? = null
+        onNegative: (() -> Unit)? = null,
+        palette: Palette
     ): LinearLayout {
         return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END
-            setPadding(0, dp(context, 14), 0, 0)
+            setPadding(0, dp(context, 16), 0, 0)
 
             if (!negativeLabel.isNullOrBlank()) {
-                addView(actionButton(context, negativeLabel, false) { onNegative?.invoke() })
+                addView(actionButton(context, negativeLabel, false, primaryColor, palette) { onNegative?.invoke() })
             }
             if (!neutralLabel.isNullOrBlank()) {
-                addView(actionButton(context, neutralLabel, false) { onNeutral?.invoke() })
+                addView(actionButton(context, neutralLabel, false, primaryColor, palette) { onNeutral?.invoke() })
             }
-            addView(actionButton(context, primaryLabel, true) { onPrimary() })
+            addView(actionButton(context, primaryLabel, true, primaryColor, palette) { onPrimary() })
         }
     }
 
@@ -232,23 +317,37 @@ object PembantuModal {
         context: Context,
         label: String,
         primary: Boolean,
+        primaryColor: Int,
+        palette: Palette,
         onClick: () -> Unit
     ): Button {
         return Button(context).apply {
             text = label
             isAllCaps = false
             textSize = 14f
-            setTextColor(if (primary) Color.WHITE else Color.rgb(45, 45, 45))
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(if (primary) Color.WHITE else palette.text)
             background = if (primary) {
-                roundedStroke(context, Color.rgb(199, 154, 61), Color.TRANSPARENT, 14f)
+                roundedStroke(context, primaryColor, Color.TRANSPARENT, 16f)
             } else {
-                roundedStroke(context, Color.rgb(246, 246, 246), Color.rgb(220, 220, 220), 14f)
+                roundedStroke(context, palette.secondaryButton, palette.border, 16f)
             }
             setOnClickListener { onClick() }
-            layoutParams = LinearLayout.LayoutParams(0, dp(context, 48), 1f).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(context, 50), 1f).apply {
                 marginStart = dp(context, 8)
             }
         }
+    }
+
+    private fun isDestructiveAction(label: String): Boolean {
+        return label.contains("hapus", ignoreCase = true) ||
+            label.contains("batalkan", ignoreCase = true) ||
+            label.contains("delete", ignoreCase = true) ||
+            label.contains("batal", ignoreCase = true)
+    }
+
+    private fun withAlpha(color: Int, alpha: Int): Int {
+        return Color.argb(alpha.coerceIn(0, 255), Color.red(color), Color.green(color), Color.blue(color))
     }
 
     private fun roundedStroke(context: Context, fill: Int, stroke: Int, radiusDp: Float): GradientDrawable {

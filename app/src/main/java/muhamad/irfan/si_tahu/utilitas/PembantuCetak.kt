@@ -3,6 +3,7 @@ package muhamad.irfan.si_tahu.util
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -12,6 +13,7 @@ import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Base64
 import android.print.PrintAttributes
 import android.print.PrintManager
 import android.webkit.WebView
@@ -26,7 +28,7 @@ import java.util.Date
 import java.util.Locale
 
 object PembantuCetak {
-    private const val STRUK_FOLDER = "SI Tahu/Struk"
+    private const val STRUK_FOLDER = "Si Tahu/Nota"
 
     fun printPlainText(context: Context, jobName: String, text: String) {
         printNota(context, jobName, text)
@@ -49,16 +51,52 @@ object PembantuCetak {
         webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
     }
 
+    fun printQris(context: Context, jobName: String, title: String, nominal: String, orderId: String, expiredLabel: String, qrBitmap: Bitmap) {
+        val pngBytes = ByteArrayOutputStream().use { out ->
+            qrBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            out.toByteArray()
+        }
+        val qrBase64 = Base64.encodeToString(pngBytes, Base64.NO_WRAP)
+        val html = buildString {
+            append("<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>")
+            append("<style>")
+            append("@page{size:80mm auto;margin:2mm;} body{margin:0;background:#fff;font-family:Arial,sans-serif;color:#111;text-align:center;}")
+            append(".wrap{width:72mm;margin:0 auto;padding:3mm 2mm;} .title{font-weight:700;font-size:15px;margin-bottom:4px;} .nominal{font-weight:800;font-size:18px;margin:8px 0;} .meta{font-size:10px;color:#333;margin:3px 0;} img{width:58mm;height:58mm;object-fit:contain;margin:4px auto;display:block;} .note{font-size:9px;color:#555;margin-top:8px;}")
+            append("</style></head><body><div class=\"wrap\">")
+            append("<div class=\"title\">QRIS SI TAHU</div>")
+            append("<div class=\"meta\">").append(escapeHtml(title)).append("</div>")
+            append("<div class=\"nominal\">").append(escapeHtml(nominal)).append("</div>")
+            append("<img src=\"data:image/png;base64,").append(qrBase64).append("\"/>")
+            append("<div class=\"meta\">Kode: ").append(escapeHtml(orderId.ifBlank { "-" })).append("</div>")
+            append("<div class=\"meta\">").append(escapeHtml(expiredLabel)).append("</div>")
+            append("<div class=\"note\">Scan QRIS ini untuk menyelesaikan pembayaran. Nota hanya dicetak setelah pembayaran sukses.</div>")
+            append("</div></body></html>")
+        }
+        val webView = WebView(context)
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView, url: String?) {
+                val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
+                val mediaSize = PrintAttributes.MediaSize("SI_TAHU_QRIS_80MM", "QRIS 80mm", 3150, 7200)
+                val attributes = PrintAttributes.Builder()
+                    .setMediaSize(mediaSize)
+                    .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                    .build()
+                printManager.print(jobName, view.createPrintDocumentAdapter(jobName), attributes)
+            }
+        }
+        webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+    }
+
     fun downloadStrukPdf(context: Context, title: String, text: String): String {
-        val fileName = safeFileName("struk_${title}_${timestamp()}.pdf")
+        val fileName = safeFileName("nota_${title}_${timestamp()}.pdf")
         val bytes = buildReceiptPdf(title, text)
         saveBytesToDownloads(context, STRUK_FOLDER, fileName, "application/pdf", bytes)
-        Toast.makeText(context, "Struk tersimpan di Download/$STRUK_FOLDER: $fileName", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, "Nota tersimpan di Unduh/$STRUK_FOLDER: $fileName", Toast.LENGTH_LONG).show()
         return fileName
     }
 
     fun shareStrukPdf(context: Context, title: String, text: String) {
-        val fileName = safeFileName("struk_${title}_${timestamp()}.pdf")
+        val fileName = safeFileName("nota_${title}_${timestamp()}.pdf")
         val file = File(context.cacheDir, fileName)
         file.writeBytes(buildReceiptPdf(title, text))
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
@@ -185,7 +223,7 @@ object PembantuCetak {
             }
             val resolver = context.contentResolver
             val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: error("Gagal membuat file di folder Download")
+                ?: error("Gagal membuat file di folder Unduh")
             try {
                 resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("Gagal menulis file")
                 values.clear()
@@ -217,6 +255,6 @@ object PembantuCetak {
             .replace(Regex("[^a-z0-9._-]+"), "_")
             .replace(Regex("_+"), "_")
             .trim('_')
-            .ifBlank { "struk_sitahu_${timestamp()}.pdf" }
+            .ifBlank { "nota_sitahu_${timestamp()}.pdf" }
     }
 }

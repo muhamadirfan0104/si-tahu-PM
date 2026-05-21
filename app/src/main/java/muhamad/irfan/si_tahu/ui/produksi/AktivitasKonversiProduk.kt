@@ -53,10 +53,10 @@ import muhamad.irfan.si_tahu.util.PembantuPilihTanggalWaktu
 private fun stokLayakPakaiBahan(produk: Produk): Int = produk.safeStock + produk.nearExpiredStock + produk.edTodayStock
 
 private fun labelStatusLayakPakai(produk: Produk): String = when {
-    stokLayakPakaiBahan(produk) <= 0 && produk.expiredStock > 0 -> "Kadaluarsa"
+    stokLayakPakaiBahan(produk) <= 0 && produk.expiredStock > 0 -> "Kedaluwarsa"
     stokLayakPakaiBahan(produk) <= 0 -> "Habis"
     produk.edTodayStock > 0 -> "ED Hari Ini"
-    produk.nearExpiredStock > 0 -> "Hampir ED"
+    produk.nearExpiredStock > 0 -> "Hampir Kedaluwarsa"
     produk.producedToday -> "Produksi Hari Ini"
     else -> "Aman"
 }
@@ -141,8 +141,8 @@ private fun ConversionScreen(
             selectedProdukOlahan = produkOlahan.firstOrNull()
             isLoading = false
             when {
-                produkDasar.isEmpty() || produkOlahan.isEmpty() -> onShowMessage("Produk DASAR/OLAHAN belum lengkap di Firebase.")
-                produkDasarLayak.isEmpty() -> onShowMessage("Semua bahan dasar habis atau kadaluarsa. Tidak ada stok layak pakai untuk produksi olahan.")
+                produkDasar.isEmpty() || produkOlahan.isEmpty() -> onShowMessage("Produk dasar atau olahan belum lengkap di sistem.")
+                produkDasarLayak.isEmpty() -> onShowMessage("Semua bahan dasar habis atau kedaluwarsa. Tidak ada stok layak pakai untuk produksi olahan.")
             }
         }.onFailure {
             isLoading = false
@@ -219,7 +219,7 @@ private fun ConversionScreen(
                             val jumlahHasil = inputHasilInt
                             val stokLayakBahan = stokLayakPakaiBahan(bahanTerpilih)
                             if (jumlahBahan > stokLayakBahan) {
-                                onShowMessage("Stok layak pakai ${bahanTerpilih.name} hanya ${Formatter.ribuan(stokLayakBahan.toLong())} ${bahanTerpilih.unit}. Stok kadaluarsa tidak bisa dipakai.")
+                                onShowMessage("Stok layak pakai ${bahanTerpilih.name} hanya ${Formatter.ribuan(stokLayakBahan.toLong())} ${bahanTerpilih.unit}. Stok kedaluwarsa tidak bisa dipakai.")
                                 return@Button
                             }
                             val dateTime = Formatter.isoDate(tanggal, "$waktu:00")
@@ -532,7 +532,7 @@ private fun ProductDropdownFieldKonversi(
     var showPicker by remember { mutableStateOf(false) }
     val enabled = !isLoading && produk.isNotEmpty()
     val valueText = when {
-        isLoading -> "Memuat produk dari Firebase..."
+        isLoading -> "Memuat produk dari sistem..."
         produk.isEmpty() -> emptyMessage
         else -> selectedProduk?.name ?: "Pilih produk"
     }

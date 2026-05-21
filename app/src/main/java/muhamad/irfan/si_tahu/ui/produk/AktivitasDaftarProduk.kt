@@ -373,7 +373,7 @@ private fun ProductListScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Produk tidak ditemukan", "Coba hapus kriteria filter atau ubah pencarian.")
+                    EmptyDataView("Produk tidak ditemukan", "Coba ubah pencarian, filter, atau rentang tanggal.")
                 }
             } else {
                 LazyColumn(

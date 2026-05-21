@@ -78,6 +78,7 @@ import muhamad.irfan.si_tahu.ui.stok.AktivitasMonitoringStok
 import muhamad.irfan.si_tahu.ui.stok.AktivitasRiwayatSemuaStok
 import muhamad.irfan.si_tahu.ui.stok.AktivitasStockAdjustment
 import muhamad.irfan.si_tahu.util.Formatter
+import muhamad.irfan.si_tahu.util.PembantuCetak
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -85,17 +86,17 @@ internal data class MainTab(val id: Int, val label: String, val icon: ImageVecto
 internal data class SpeedDialItem(val label: String, val icon: ImageVector, val onClick: () -> Unit)
 private val adminTabs = listOf(
     MainTab(TabIds.ADMIN_DASHBOARD, "Dasbor", Icons.Rounded.Dashboard),
-    MainTab(TabIds.ADMIN_PRODUCTION, "Produksi", Icons.Rounded.Build),
+    MainTab(TabIds.ADMIN_PRODUCTION, "Produksi", Icons.Rounded.Factory),
     MainTab(TabIds.ADMIN_SALES, "Penjualan", Icons.Rounded.ShoppingCart),
-    MainTab(TabIds.ADMIN_STOCK, "Stok", Icons.Rounded.List),
+    MainTab(TabIds.ADMIN_STOCK, "Stok", Icons.Rounded.Inventory),
     MainTab(TabIds.ADMIN_MENU, "Menu", Icons.Rounded.Menu)
 )
 private fun titleForAdminTab(tabId: Int): String = when (tabId) {
     TabIds.ADMIN_PRODUCTION -> "Pusat Produksi"
     TabIds.ADMIN_SALES -> "Pusat Penjualan"
-    TabIds.ADMIN_STOCK -> "Pusat Inventori"
-    TabIds.ADMIN_MENU -> "Pengaturan Sistem"
-    else -> "Ringkasan Admin"
+    TabIds.ADMIN_STOCK -> "Manajemen Stok"
+    TabIds.ADMIN_MENU -> "Menu Aplikasi"
+    else -> "Ringkasan Usaha"
 }
 private fun String.shortHeaderName(): String = trim().substringBefore('@').split(' ', '.', '_', '-').firstOrNull { it.isNotBlank() } ?: "User"
 private fun String.initials(): String = split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercaseChar().toString() }.ifBlank { "A" }
@@ -118,7 +119,15 @@ class AktivitasUtamaAdmin : AktivitasDasar() {
             finish()
             return
         }
-        selectedTabId = consumePendingAdminTab() ?: (intent?.getIntExtra(EXTRA_TAB_ID, TabIds.ADMIN_DASHBOARD) ?: TabIds.ADMIN_DASHBOARD)
+
+        pastikanAksesAdmin {
+            selectedTabId = consumePendingAdminTab() ?: (intent?.getIntExtra(EXTRA_TAB_ID, TabIds.ADMIN_DASHBOARD) ?: TabIds.ADMIN_DASHBOARD)
+            tampilkanKontenAdmin()
+            loadNamaLogin()
+        }
+    }
+
+    private fun tampilkanKontenAdmin() {
         setContent {
             SiTahuProTheme {
                 AdminMainScreen(
@@ -131,7 +140,45 @@ class AktivitasUtamaAdmin : AktivitasDasar() {
                 )
             }
         }
-        loadNamaLogin()
+    }
+
+    private fun pastikanAksesAdmin(onAllowed: () -> Unit) {
+        val uid = auth.currentUser?.uid.orEmpty()
+        if (uid.isBlank()) {
+            startActivity(Intent(this, AktivitasMasuk::class.java))
+            finish()
+            return
+        }
+
+        PenggunaFirestoreCompat.findByAuthUid(
+            firestore = firestore,
+            authUid = uid,
+            onFound = { doc ->
+                val role = listOf(
+                    doc.getString("peranAsli"),
+                    doc.getString("modeAplikasi")
+                ).firstOrNull { !it.isNullOrBlank() }?.trim()?.uppercase().orEmpty()
+
+                if (role == "ADMIN") {
+                    onAllowed()
+                } else {
+                    Toast.makeText(this, "Akun kasir hanya dapat mengakses mode kasir.", Toast.LENGTH_SHORT).show()
+                    startActivity(AktivitasUtamaKasir.intent(this, clearTop = true))
+                    finish()
+                }
+            },
+            onNotFound = {
+                Toast.makeText(this, "Data pengguna tidak ditemukan. Silakan masuk ulang.", Toast.LENGTH_SHORT).show()
+                auth.signOut()
+                startActivity(Intent(this, AktivitasMasuk::class.java))
+                finish()
+            },
+            onError = {
+                Toast.makeText(this, "Gagal memeriksa hak akses akun.", Toast.LENGTH_SHORT).show()
+                startActivity(AktivitasUtamaKasir.intent(this, clearTop = true))
+                finish()
+            }
+        )
     }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -285,8 +332,21 @@ private fun AdminMainScreen(
     val context = LocalContext.current
     var notifikasiAdmin by remember { mutableStateOf<List<RepositoriFirebaseUtama.NotifikasiAdmin>>(emptyList()) }
     var isNotificationLoading by remember { mutableStateOf(false) }
+    var notifRealtimeTick by remember { mutableIntStateOf(0) }
+    val firestoreRealtime = remember { FirebaseFirestore.getInstance() }
 
-    LaunchedEffect(dashboardRefreshKey, productionRefreshKey, salesRefreshKey, stockRefreshKey) {
+    DisposableEffect(Unit) {
+        val registrations = listOf(
+            firestoreRealtime.collection("Penjualan").addSnapshotListener { _, _ -> notifRealtimeTick++ },
+            firestoreRealtime.collection("Pengeluaran").addSnapshotListener { _, _ -> notifRealtimeTick++ },
+            firestoreRealtime.collection("Produk").addSnapshotListener { _, _ -> notifRealtimeTick++ },
+            firestoreRealtime.collection("BatchStok").addSnapshotListener { _, _ -> notifRealtimeTick++ },
+            firestoreRealtime.collection("HargaJual").addSnapshotListener { _, _ -> notifRealtimeTick++ }
+        )
+        onDispose { registrations.forEach { it.remove() } }
+    }
+
+    LaunchedEffect(dashboardRefreshKey, productionRefreshKey, salesRefreshKey, stockRefreshKey, notifRealtimeTick) {
         isNotificationLoading = true
         runCatching { RepositoriFirebaseUtama.muatNotifikasiAdmin() }.onSuccess { notifikasiAdmin = it }.onFailure { notifikasiAdmin = emptyList() }
         isNotificationLoading = false
@@ -294,20 +354,20 @@ private fun AdminMainScreen(
 
     val currentFabItems = when (selectedTabId) {
         TabIds.ADMIN_SALES -> listOf(
-            SpeedDialItem("Catat Rekap Pasar", Icons.Rounded.Edit) { context.startActivity(Intent(context, AktivitasRekapPasar::class.java)) },
-            SpeedDialItem("Riwayat Pasar", Icons.Rounded.DateRange) {
+            SpeedDialItem("Catat Rekap Pasar", Icons.Rounded.Storefront) { context.startActivity(Intent(context, AktivitasRekapPasar::class.java)) },
+            SpeedDialItem("Riwayat Pasar", Icons.Rounded.ReceiptLong) {
                 context.startActivity(Intent(context, AktivitasRiwayatPenjualan::class.java).putExtra(AktivitasRiwayatPenjualan.EXTRA_SCREEN_TITLE, "Riwayat Rekap Pasar").putExtra(AktivitasRiwayatPenjualan.EXTRA_SCREEN_SUBTITLE, "Hanya transaksi dari rekap pasar").putExtra(AktivitasRiwayatPenjualan.EXTRA_DEFAULT_FILTER, AktivitasRiwayatPenjualan.FILTER_PASAR).putExtra(AktivitasRiwayatPenjualan.EXTRA_LOCK_FILTER, true))
             }
         )
         TabIds.ADMIN_PRODUCTION -> listOf(
-            SpeedDialItem("Produksi Tahu", Icons.Rounded.Add) { context.startActivity(Intent(context, AktivitasProduksiTahuDasar::class.java)) },
-            SpeedDialItem("Konversi Produk", Icons.Rounded.Refresh) { context.startActivity(Intent(context, AktivitasKonversiProduk::class.java)) },
-            SpeedDialItem("Riwayat Produksi", Icons.Rounded.DateRange) { context.startActivity(Intent(context, AktivitasRiwayatProduksi::class.java)) }
+            SpeedDialItem("Produksi Dasar", Icons.Rounded.Factory) { context.startActivity(Intent(context, AktivitasProduksiTahuDasar::class.java)) },
+            SpeedDialItem("Produksi Olahan", Icons.Rounded.Fastfood) { context.startActivity(Intent(context, AktivitasKonversiProduk::class.java)) },
+            SpeedDialItem("Riwayat Produksi", Icons.Rounded.History) { context.startActivity(Intent(context, AktivitasRiwayatProduksi::class.java)) }
         )
         TabIds.ADMIN_STOCK -> listOf(
-            SpeedDialItem("Monitoring Stok", Icons.Rounded.Search) { context.startActivity(Intent(context, AktivitasMonitoringStok::class.java)) },
-            SpeedDialItem("Opname Stok", Icons.Rounded.CheckCircle) { context.startActivity(Intent(context, AktivitasStockAdjustment::class.java)) },
-            SpeedDialItem("Riwayat Mutasi", Icons.Rounded.DateRange) { context.startActivity(Intent(context, AktivitasRiwayatSemuaStok::class.java)) }
+            SpeedDialItem("Monitoring Stok", Icons.Rounded.Inventory) { context.startActivity(Intent(context, AktivitasMonitoringStok::class.java)) },
+            SpeedDialItem("Penyesuaian Stok", Icons.Rounded.SyncAlt) { context.startActivity(Intent(context, AktivitasStockAdjustment::class.java)) },
+            SpeedDialItem("Riwayat Stok", Icons.Rounded.History) { context.startActivity(Intent(context, AktivitasRiwayatSemuaStok::class.java)) }
         )
         else -> emptyList()
     }
@@ -362,7 +422,7 @@ internal fun MainHeader(
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             ProfileBubble(subtitle.initials())
             Column(Modifier.weight(1f)) {
-                Text("Sistem SiTahu • ${subtitle.shortHeaderName()}", color = if (isSystemInDarkTheme()) ProTheme.muted else ProTheme.primaryLight, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
+                Text("Si Tahu • ${subtitle.shortHeaderName()}", color = if (isSystemInDarkTheme()) ProTheme.muted else ProTheme.primaryLight, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
                 Text(title, color = if (isSystemInDarkTheme()) ProTheme.text else Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             NotificationIcon(items = notifikasiAdmin, isLoading = isNotificationLoading, onNotificationClick = onNotificationClick)
@@ -394,7 +454,7 @@ internal fun SpeedDialMenu(items: List<SpeedDialItem>, modifier: Modifier = Modi
     val rotation by animateFloatAsState(targetValue = if (expanded) 45f else 0f, label = "fab_rotate")
     Box(modifier = modifier.fillMaxSize()) {
         AnimatedVisibility(visible = expanded, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.Center)) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable { expanded = false })
+            Box(modifier = Modifier.fillMaxSize().background(Color.Transparent).clickable { expanded = false })
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 100.dp, end = 20.dp)) {
             AnimatedVisibility(visible = expanded, enter = fadeIn() + slideInVertically(initialOffsetY = { 50 }), exit = fadeOut() + slideOutVertically(targetOffsetY = { 50 })) {
@@ -425,9 +485,22 @@ private fun AdminDashboardPage(dashboardRefreshKey: Int, onSwitchCashier: () -> 
     var grafikPenjualan by remember { mutableStateOf<List<RepositoriFirebaseUtama.TitikGrafikPenjualan>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var realtimeTick by remember { mutableIntStateOf(0) }
+    val firestoreRealtime = remember { FirebaseFirestore.getInstance() }
 
-    LaunchedEffect(dashboardRefreshKey) {
-        isLoading = true
+    DisposableEffect(Unit) {
+        val registrations = listOf(
+            firestoreRealtime.collection("Penjualan").addSnapshotListener { _, _ -> realtimeTick++ },
+            firestoreRealtime.collection("CatatanProduksi").addSnapshotListener { _, _ -> realtimeTick++ },
+            firestoreRealtime.collection("Pengeluaran").addSnapshotListener { _, _ -> realtimeTick++ },
+            firestoreRealtime.collection("Produk").addSnapshotListener { _, _ -> realtimeTick++ },
+            firestoreRealtime.collection("BatchStok").addSnapshotListener { _, _ -> realtimeTick++ }
+        )
+        onDispose { registrations.forEach { it.remove() } }
+    }
+
+    LaunchedEffect(dashboardRefreshKey, realtimeTick) {
+        isLoading = ringkasan == null
         errorMessage = null
         runCatching { RepositoriFirebaseUtama.muatRingkasanDashboard() to RepositoriFirebaseUtama.muatGrafikPenjualan7Hari() }
             .onSuccess { (summary, salesChart) -> ringkasan = summary; grafikPenjualan = salesChart; isLoading = false }
@@ -439,19 +512,19 @@ private fun AdminDashboardPage(dashboardRefreshKey: Int, onSwitchCashier: () -> 
     SummaryTodayCard(ringkasan, isLoading)
 
     Spacer(Modifier.height(16.dp))
-    SectionTitle("Aksi Cepat", "Jalan pintas menu operasional")
+    SectionTitle("Akses Cepat", "Buka proses utama usaha dari satu tempat")
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        QuickTile("Katalog", Icons.Rounded.Category, ProTheme.primary, Modifier.weight(1f)) { context.startActivity(Intent(context, AktivitasDaftarProduk::class.java)) }
+        QuickTile("Data Produk", Icons.Rounded.Inventory, ProTheme.primary, Modifier.weight(1f)) { context.startActivity(Intent(context, AktivitasDaftarProduk::class.java)) }
         QuickTile("Kasir", Icons.Rounded.PointOfSale, ProTheme.success, Modifier.weight(1f), onSwitchCashier)
     }
     Spacer(Modifier.height(12.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        QuickTile("Laporan", Icons.Rounded.BarChart, ProTheme.pro, Modifier.weight(1f)) { context.startActivity(Intent(context, AktivitasLaporan::class.java)) }
-        QuickTile("Pengeluaran", Icons.Rounded.Receipt, ProTheme.warning, Modifier.weight(1f)) { context.startActivity(Intent(context, AktivitasDaftarPengeluaran::class.java)) }
+        QuickTile("Pusat Laporan", Icons.Rounded.PieChart, ProTheme.pro, Modifier.weight(1f)) { context.startActivity(Intent(context, AktivitasLaporan::class.java)) }
+        QuickTile("Pengeluaran", Icons.Rounded.AccountBalanceWallet, ProTheme.warning, Modifier.weight(1f)) { context.startActivity(Intent(context, AktivitasDaftarPengeluaran::class.java)) }
     }
 
     Spacer(Modifier.height(16.dp))
-    SectionTitle("Status Stok", "Produk menipis dan hampir kadaluarsa")
+    SectionTitle("Pantauan Stok", "Produk yang perlu diprioritaskan hari ini")
     StockAttentionCard(
         stokMenipis = ringkasan?.stokMenipis.orEmpty(), hampirEd = ringkasan?.hampirEd.orEmpty(), isLoading = isLoading,
         onOpenStock = { productId -> context.startActivity(Intent(context, AktivitasDetailStok::class.java).putExtra(AktivitasMonitoringStok.EXTRA_PRODUCT_ID, productId)) }
@@ -466,12 +539,12 @@ private fun AdminDashboardPage(dashboardRefreshKey: Int, onSwitchCashier: () -> 
     )
 
     Spacer(Modifier.height(16.dp))
-    SectionTitle("Produk Terlaris", "Produk paling banyak terjual hari ini")
+    SectionTitle("Produk Terlaris Hari Ini", "Produk dengan penjualan terbanyak hari ini")
     ProductSalesCard(rows = ringkasan?.topProducts.orEmpty(), isLoading = isLoading, title = "Top Produk Hari Ini", emptyText = "Belum ada produk terjual hari ini")
 
     Spacer(Modifier.height(16.dp))
-    SectionTitle("Pengeluaran Terbesar", "Pengeluaran terbesar hari ini")
-    ProductSalesCard(rows = ringkasan?.expenseCategories.orEmpty(), isLoading = isLoading, title = "Kategori Pengeluaran", emptyText = "Belum ada pengeluaran hari ini")
+    SectionTitle("Pengeluaran Terbesar Hari Ini", "Pengeluaran operasional terbesar hari ini")
+    ProductSalesCard(rows = ringkasan?.expenseCategories.orEmpty(), isLoading = isLoading, title = "Kategori Pengeluaran Hari Ini", emptyText = "Belum ada pengeluaran hari ini")
 
     Spacer(Modifier.height(16.dp))
     RecentActivityCard(ringkasan?.recentItems.orEmpty(), isLoading)
@@ -484,16 +557,23 @@ private fun AdminSalesPage(salesRefreshKey: Int) {
     var grafik by remember { mutableStateOf<List<RepositoriFirebaseUtama.TitikGrafikPenjualan>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var realtimeTick by remember { mutableIntStateOf(0) }
+    val firestoreRealtime = remember { FirebaseFirestore.getInstance() }
 
-    LaunchedEffect(salesRefreshKey) {
-        isLoading = true
+    DisposableEffect(Unit) {
+        val registration = firestoreRealtime.collection("Penjualan").addSnapshotListener { _, _ -> realtimeTick++ }
+        onDispose { registration.remove() }
+    }
+
+    LaunchedEffect(salesRefreshKey, realtimeTick) {
+        isLoading = ringkasan == null
         errorMessage = null
         runCatching { RepositoriFirebaseUtama.muatRingkasanPenjualan(sourceFilter = "PASAR") to RepositoriFirebaseUtama.muatGrafikPenjualan7Hari(sourceFilter = "PASAR") }
             .onSuccess { (summary, chart) -> ringkasan = summary; grafik = chart; isLoading = false }
             .onFailure { error -> isLoading = false; errorMessage = error.message ?: "Gagal memuat data penjualan" }
     }
 
-    SectionTitle("Performa Hari Ini", "Data rekap pasar dari Cloud Firestore")
+    SectionTitle("Ringkasan Hari Ini", "Ringkasan rekap penjualan pasar hari ini")
     if (errorMessage != null) InfoStateCard(errorMessage.orEmpty())
 
     if (isLoading) {
@@ -514,11 +594,11 @@ private fun AdminSalesPage(salesRefreshKey: Int) {
     SalesChartCard(isLoading = isLoading, trend = if(isLoading) "" else trenPenjualanLabel(grafik), chartTitle = "Penjualan Pasar", chartSubtitle = "Tren penjualan pasar 7 hari terakhir", points = grafikPenjualanPoints(grafik), labels = grafikPenjualanLabels(grafik), yLabels = grafikPenjualanYLabels(grafik), rawValues = rawSalesValues)
 
     Spacer(Modifier.height(16.dp))
-    SectionTitle("Produk Terlaris", "Kontributor omzet rekap pasar")
+    SectionTitle("Produk Terlaris Hari Ini", "Produk penyumbang omzet rekap pasar")
     ProductSalesCard(ringkasan?.topProducts.orEmpty(), isLoading)
 
     Spacer(Modifier.height(16.dp))
-    SectionTitle("Transaksi Terbaru", "Log rekap pasar terbaru")
+    SectionTitle("Transaksi Terbaru", "Riwayat rekap pasar terbaru")
     RecentSalesActivityCard(ringkasan?.recentRows.orEmpty(), isLoading)
 }
 
@@ -529,16 +609,26 @@ private fun AdminProductionPage(productionRefreshKey: Int) {
     var grafik by remember { mutableStateOf<List<RepositoriFirebaseUtama.TitikGrafikProduksi>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var realtimeTick by remember { mutableIntStateOf(0) }
+    val firestoreRealtime = remember { FirebaseFirestore.getInstance() }
 
-    LaunchedEffect(productionRefreshKey) {
-        isLoading = true
+    DisposableEffect(Unit) {
+        val registrations = listOf(
+            firestoreRealtime.collection("CatatanProduksi").addSnapshotListener { _, _ -> realtimeTick++ },
+            firestoreRealtime.collection("BatchStok").addSnapshotListener { _, _ -> realtimeTick++ }
+        )
+        onDispose { registrations.forEach { it.remove() } }
+    }
+
+    LaunchedEffect(productionRefreshKey, realtimeTick) {
+        isLoading = ringkasan == null
         errorMessage = null
         runCatching { RepositoriFirebaseUtama.muatRingkasanProduksi() to RepositoriFirebaseUtama.muatGrafikProduksi7Hari() }
             .onSuccess { (summary, chart) -> ringkasan = summary; grafik = chart; isLoading = false }
             .onFailure { error -> isLoading = false; errorMessage = error.message ?: "Gagal memuat data produksi" }
     }
 
-    SectionTitle("Ringkasan Hari Ini", "Data produksi dari Cloud Firestore")
+    SectionTitle("Ringkasan Hari Ini", "Ringkasan pencatatan produksi hari ini")
     if (errorMessage != null) InfoStateCard(errorMessage.orEmpty())
     ProductionSummaryGrid(ringkasan, isLoading)
 
@@ -548,7 +638,7 @@ private fun AdminProductionPage(productionRefreshKey: Int) {
     ProductionChartCard(isLoading = isLoading, value = if (isLoading) "" else totalProduksiGrafikLabel(grafik, ringkasan), trend = if(isLoading) "" else trenProduksiLabel(grafik), points = grafikProduksiPoints(grafik), labels = grafikProduksiLabels(grafik), rawValues = rawProdValues)
 
     Spacer(Modifier.height(16.dp))
-    SectionTitle("Aktivitas Dapur", "Log pencatatan produksi terbaru")
+    SectionTitle("Aktivitas Produksi", "Riwayat produksi terbaru")
     RecentProductionCard(ringkasan?.recentRows.orEmpty(), isLoading)
 }
 
@@ -559,16 +649,28 @@ private fun AdminStockPage(refreshKey: Int) {
     var ringkasan by remember { mutableStateOf<RepositoriFirebaseUtama.RingkasanStokDashboard?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var realtimeTick by remember { mutableIntStateOf(0) }
+    val firestoreRealtime = remember { FirebaseFirestore.getInstance() }
 
-    LaunchedEffect(refreshKey) {
-        isLoading = true
+    DisposableEffect(Unit) {
+        val registrations = listOf(
+            firestoreRealtime.collection("Produk").addSnapshotListener { _, _ -> realtimeTick++ },
+            firestoreRealtime.collection("BatchStok").addSnapshotListener { _, _ -> realtimeTick++ },
+            firestoreRealtime.collection("PenyesuaianStok").addSnapshotListener { _, _ -> realtimeTick++ },
+            firestoreRealtime.collection("RiwayatStok").addSnapshotListener { _, _ -> realtimeTick++ }
+        )
+        onDispose { registrations.forEach { it.remove() } }
+    }
+
+    LaunchedEffect(refreshKey, realtimeTick) {
+        isLoading = ringkasan == null
         errorMessage = null
         runCatching { RepositoriFirebaseUtama.muatRingkasanStokDashboard() }
             .onSuccess { ringkasan = it; isLoading = false }
             .onFailure { errorMessage = it.message ?: "Gagal memuat ringkasan stok"; ringkasan = null; isLoading = false }
     }
 
-    SectionTitle("Ketersediaan", "Ringkasan inventori dari Firebase")
+    SectionTitle("Ketersediaan", "Ringkasan stok produk saat ini")
     if (errorMessage != null) {
         Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = ProTheme.danger.copy(alpha = 0.08f)), border = BorderStroke(1.dp, ProTheme.danger.copy(alpha = 0.25f))) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -586,7 +688,7 @@ private fun AdminStockPage(refreshKey: Int) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) { KpiCardSkeleton(Modifier.weight(1f)); KpiCardSkeleton(Modifier.weight(1f)) }
         }
         Spacer(Modifier.height(24.dp))
-        SectionTitle("Stok Perlu Diperhatikan", "Prioritas tindakan gudang")
+        SectionTitle("Stok Perlu Tindakan", "Produk yang perlu dicek atau diproses lebih dulu")
         Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = ProTheme.surface), border = BorderStroke(1.dp, ProTheme.border)) {
             Column(Modifier.padding(vertical = 8.dp)) { repeat(4) { idx -> StockDashboardItemRowSkeleton(); if (idx < 3) HorizontalDivider(color = ProTheme.border, modifier = Modifier.padding(horizontal = 20.dp)) } }
         }
@@ -596,17 +698,17 @@ private fun AdminStockPage(refreshKey: Int) {
     val data = ringkasan ?: return
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            KpiCard("Stok Layak", Formatter.ribuan(data.totalStokLayakJual), "${data.totalProdukAktif} produk aktif", ProTheme.primary, Modifier.weight(1f))
-            KpiCard("Stok Fisik", Formatter.ribuan(data.totalStokFisik), "Termasuk ED", ProTheme.pro, Modifier.weight(1f))
+            KpiCard("Layak Jual", Formatter.ribuan(data.totalStokLayakJual), "${data.totalProdukAktif} produk aktif", ProTheme.primary, Modifier.weight(1f))
+            KpiCard("Stok Fisik", Formatter.ribuan(data.totalStokFisik), "Termasuk stok kedaluwarsa", ProTheme.pro, Modifier.weight(1f))
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            KpiCard("Hampir ED", Formatter.ribuan(data.totalHampirKadaluarsa), "Perlu diprioritaskan", ProTheme.warning, Modifier.weight(1f))
-            KpiCard("Kadaluarsa", Formatter.ribuan(data.totalKadaluarsa), "Perlu tindakan", ProTheme.danger, Modifier.weight(1f))
+            KpiCard("Hampir Kedaluwarsa", Formatter.ribuan(data.totalHampirKadaluarsa), "Perlu diprioritaskan", ProTheme.warning, Modifier.weight(1f))
+            KpiCard("Kedaluwarsa", Formatter.ribuan(data.totalKadaluarsa), "Perlu tindakan", ProTheme.danger, Modifier.weight(1f))
         }
     }
 
     Spacer(Modifier.height(24.dp))
-    SectionTitle("Stok Perlu Diperhatikan", "Prioritas tindakan gudang")
+    SectionTitle("Stok Perlu Tindakan", "Produk yang perlu dicek atau diproses lebih dulu")
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = ProTheme.surface), border = BorderStroke(1.dp, ProTheme.border)) {
         Column(Modifier.padding(vertical = 8.dp)) {
             val items = data.produkKritis.ifEmpty { data.produkTerbanyak }
@@ -628,7 +730,7 @@ private fun StockDashboardItemRow(item: RepositoriFirebaseUtama.BarisStokDashboa
         "Aman" -> ProTheme.success
         "Menipis" -> ProTheme.warning
         "Habis" -> ProTheme.danger
-        "Hampir ED" -> ProTheme.warning
+        "Hampir Kedaluwarsa" -> ProTheme.warning
         "ED Hari Ini" -> ProTheme.warning
         else -> ProTheme.danger
     }
@@ -643,7 +745,7 @@ private fun StockDashboardItemRow(item: RepositoriFirebaseUtama.BarisStokDashboa
             if (item.stokEdHariIni > 0 || item.stokHampirKadaluarsa > 0 || item.stokKadaluarsa > 0 || item.edTerdekat.isNotBlank()) {
                 Text(buildString {
                     if (item.stokEdHariIni > 0) append("ED Hari Ini ${Formatter.ribuan(item.stokEdHariIni.toLong())}  ")
-                    if (item.stokHampirKadaluarsa > 0) append("Hampir ED ${Formatter.ribuan(item.stokHampirKadaluarsa.toLong())}  ")
+                    if (item.stokHampirKadaluarsa > 0) append("Hampir Kedaluwarsa ${Formatter.ribuan(item.stokHampirKadaluarsa.toLong())}  ")
                     if (item.stokKadaluarsa > 0) append("ED ${Formatter.ribuan(item.stokKadaluarsa.toLong())}  ")
                     if (item.edTerdekat.isNotBlank()) append("ED terdekat ${Formatter.readableShortDate(item.edTerdekat)}")
                 }.trim(), color = statusColor, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -659,14 +761,14 @@ private fun AdminMenuPage(onLogout: () -> Unit, onSwitchCashier: () -> Unit) {
     val context = LocalContext.current
     MenuSection("Data Master") {
         MenuItemRow(Icons.Rounded.Category, "Daftar Produk") { context.startActivity(Intent(context, AktivitasDaftarProduk::class.java)) }
-        MenuItemRow(Icons.Rounded.AttachMoney, "Harga Jual") { context.startActivity(Intent(context, AktivitasDaftarHarga::class.java)) }
-        MenuItemRow(Icons.Rounded.Tune, "Parameter Sistem", isLast = true) { context.startActivity(Intent(context, AktivitasDaftarParameter::class.java)) }
+        MenuItemRow(Icons.Rounded.MonetizationOn, "Harga Jual") { context.startActivity(Intent(context, AktivitasDaftarHarga::class.java)) }
+        MenuItemRow(Icons.Rounded.Tune, "Parameter Produksi", isLast = true) { context.startActivity(Intent(context, AktivitasDaftarParameter::class.java)) }
     }
     Spacer(Modifier.height(24.dp))
     MenuSection("Laporan & Keuangan") {
-        MenuItemRow(Icons.Rounded.Receipt, "Catatan Pengeluaran") { context.startActivity(Intent(context, AktivitasDaftarPengeluaran::class.java)) }
+        MenuItemRow(Icons.Rounded.AccountBalanceWallet, "Pengeluaran Operasional") { context.startActivity(Intent(context, AktivitasDaftarPengeluaran::class.java)) }
         MenuItemRow(Icons.Rounded.History, "Riwayat Transaksi") { context.startActivity(AktivitasRiwayatTransaksi.intent(context)) }
-        MenuItemRow(Icons.Rounded.BarChart, "Laporan Penjualan", isLast = true) { context.startActivity(Intent(context, AktivitasLaporan::class.java)) }
+        MenuItemRow(Icons.Rounded.PieChart, "Pusat Laporan", isLast = true) { context.startActivity(Intent(context, AktivitasLaporan::class.java)) }
     }
     Spacer(Modifier.height(24.dp))
     MenuSection("Akun & Keamanan") {
@@ -674,9 +776,9 @@ private fun AdminMenuPage(onLogout: () -> Unit, onSwitchCashier: () -> Unit) {
         MenuItemRow(Icons.Rounded.Settings, "Pengaturan Usaha", isLast = true) { context.startActivity(Intent(context, AktivitasPengaturanUsaha::class.java)) }
     }
     Spacer(Modifier.height(32.dp))
-    ActionButton("Masuk Mode Kasir", ProTheme.surface, onClick = onSwitchCashier)
+    ActionButton("Buka Halaman Kasir", ProTheme.surface, onClick = onSwitchCashier)
     Spacer(Modifier.height(12.dp))
-    ActionButton("Keluar Sistem", ProTheme.danger, isDestructive = true, onClick = onLogout)
+    ActionButton("Keluar Akun", ProTheme.danger, isDestructive = true, onClick = onLogout)
     Spacer(Modifier.height(32.dp))
 }
 
@@ -729,7 +831,7 @@ private fun ProDetailDialog(
                         shape = RoundedCornerShape(16.dp), color = if (isSystemInDarkTheme()) Color(0xFF111827) else Color(0xFFF8FAFC),
                         border = BorderStroke(1.dp, ProTheme.border), modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(text = detailText.ifBlank { "Detail belum tersedia." }, color = ProTheme.text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp).verticalScroll(rememberScrollState()).padding(16.dp))
+                        Text(text = detailText.ifBlank { "Detail data belum tersedia." }, color = ProTheme.text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp).verticalScroll(rememberScrollState()).padding(16.dp))
                     }
                 }
             }
@@ -932,7 +1034,7 @@ private fun StockAttentionCard(stokMenipis: List<RepositoriFirebaseUtama.ItemDas
             }
             when {
                 isLoading -> repeat(3) { ActivityRowSkeleton() }
-                stokMenipis.isEmpty() && hampirEd.isEmpty() -> StockWarningRow("Stok aman", "Belum ada stok menipis atau produk hampir ED", "Aman", "OK", ProTheme.success) {}
+                stokMenipis.isEmpty() && hampirEd.isEmpty() -> StockWarningRow("Stok aman", "Belum ada stok menipis atau produk hampir kedaluwarsa", "Aman", "OK", ProTheme.success) {}
                 else -> {
                     if (stokMenipis.isNotEmpty()) {
                         Text("Stok Menipis", color = ProTheme.danger, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
@@ -940,8 +1042,8 @@ private fun StockAttentionCard(stokMenipis: List<RepositoriFirebaseUtama.ItemDas
                     }
                     if (hampirEd.isNotEmpty()) {
                         if (stokMenipis.isNotEmpty()) Spacer(Modifier.height(2.dp))
-                        Text("Hampir ED / ED Hari Ini", color = ProTheme.warning, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                        hampirEd.forEach { item -> StockWarningRow(item.title, item.subtitle, item.amount, item.badge, if (item.badge.equals("Kadaluarsa", ignoreCase = true)) ProTheme.danger else ProTheme.warning) { onOpenStock(item.id) } }
+                        Text("Hampir Kedaluwarsa / ED Hari Ini", color = ProTheme.warning, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                        hampirEd.forEach { item -> StockWarningRow(item.title, item.subtitle, item.amount, item.badge, if (item.badge.equals("Kedaluwarsa", ignoreCase = true)) ProTheme.danger else ProTheme.warning) { onOpenStock(item.id) } }
                     }
                 }
             }
@@ -1051,13 +1153,22 @@ private fun RecentSalesActivityCard(rows: List<RepositoriFirebaseUtama.ItemBaris
             isLoading = isLoadingDetail,
             extraActions = {
                 DialogActionButton(Icons.Rounded.Share, "Bagikan PDF", ProTheme.pro) {
-                    Toast.makeText(context, "Fitur Bagikan PDF segera hadir", Toast.LENGTH_SHORT).show()
+                    if (detailText.isNotBlank()) {
+                        runCatching { PembantuCetak.shareStrukPdf(context, "Penjualan ${item.title}", detailText) }
+                            .onFailure { Toast.makeText(context, it.message ?: "Gagal membagikan PDF nota", Toast.LENGTH_SHORT).show() }
+                    }
                 }
-                DialogActionButton(Icons.Rounded.Download, "Download PDF", ProTheme.primary) {
-                    Toast.makeText(context, "Fitur Download PDF segera hadir", Toast.LENGTH_SHORT).show()
+                DialogActionButton(Icons.Rounded.Download, "Unduh PDF", ProTheme.primary) {
+                    if (detailText.isNotBlank()) {
+                        runCatching { PembantuCetak.downloadStrukPdf(context, "Penjualan ${item.title}", detailText) }
+                            .onFailure { Toast.makeText(context, it.message ?: "Gagal download PDF nota", Toast.LENGTH_SHORT).show() }
+                    }
                 }
-                DialogActionButton(Icons.Rounded.Print, "Cetak Struk", ProTheme.warning) {
-                    Toast.makeText(context, "Fitur Cetak Struk segera hadir", Toast.LENGTH_SHORT).show()
+                DialogActionButton(Icons.Rounded.Print, "Cetak Nota", ProTheme.warning) {
+                    if (detailText.isNotBlank()) {
+                        runCatching { PembantuCetak.printNota(context, "Penjualan ${item.title}", detailText) }
+                            .onFailure { Toast.makeText(context, it.message ?: "Gagal mencetak nota", Toast.LENGTH_SHORT).show() }
+                    }
                 }
             },
             onDismiss = { selectedItem = null }
@@ -1124,68 +1235,177 @@ internal fun SectionTitle(title: String, subtitle: String) {
 private fun StatusPill(text: String, color: Color, bg: Color) {
     Surface(shape = RoundedCornerShape(6.dp), color = bg) { Text(text, color = color, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
 }
-
 @Composable
-private fun NotificationIcon(items: List<RepositoriFirebaseUtama.NotifikasiAdmin>, isLoading: Boolean, onNotificationClick: (RepositoriFirebaseUtama.NotifikasiAdmin) -> Unit) {
+private fun NotificationIcon(
+    items: List<RepositoriFirebaseUtama.NotifikasiAdmin>,
+    isLoading: Boolean,
+    onNotificationClick: (RepositoriFirebaseUtama.NotifikasiAdmin) -> Unit
+) {
     val isDark = isSystemInDarkTheme()
     var showDialog by remember { mutableStateOf(false) }
 
-    Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(if (isDark) ProTheme.background else Color.White.copy(alpha = 0.2f)).clickable { showDialog = true }, contentAlignment = Alignment.Center) {
+    // Icon Button Notifikasi
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (isDark) ProTheme.background else Color.White.copy(alpha = 0.2f))
+            .clickable { showDialog = true },
+        contentAlignment = Alignment.Center
+    ) {
         Icon(Icons.Rounded.Notifications, contentDescription = "Notifikasi", tint = if (isDark) ProTheme.text else Color.White, modifier = Modifier.size(24.dp))
         if (items.isNotEmpty()) {
-            Box(Modifier.align(Alignment.TopEnd).padding(4.dp).size(18.dp).clip(CircleShape).background(ProTheme.danger), contentAlignment = Alignment.Center) {
-                Text(if (items.size > 9) "9+" else items.size.toString(), color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(4.dp).size(18.dp).clip(CircleShape).background(ProTheme.danger),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (items.size > 9) "9+" else items.size.toString(),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
 
+    // Dialog Notifikasi Seragam dengan ProDetailDialog
     if (showDialog) {
         AlertDialog(
-            onDismissRequest = { showDialog = false }, confirmButton = { TextButton({ showDialog = false }) { Text("Tutup") } },
+            onDismissRequest = { showDialog = false },
+            containerColor = ProTheme.surface,
+            titleContentColor = ProTheme.text,
+            textContentColor = ProTheme.text,
+            shape = RoundedCornerShape(24.dp), // Mengikuti shape ProDetailDialog
             title = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Notifikasi", fontWeight = FontWeight.Bold, color = ProTheme.text)
-                    Text(if (items.isEmpty()) "Tidak ada pemberitahuan penting" else "${items.size} hal perlu diperhatikan", color = ProTheme.muted, style = MaterialTheme.typography.bodySmall)
+                    Text("Notifikasi Sistem", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        text = if (isLoading) "Memuat pemberitahuan..." else if (items.isEmpty()) "Semua sistem berjalan lancar" else "${items.size} hal perlu perhatian",
+                        color = ProTheme.muted,
+                        style = MaterialTheme.typography.labelMedium
+                    )
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp) // Membatasi tinggi agar tidak memenuhi layar
+                        .verticalScroll(rememberScrollState())
+                        .padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     when {
-                        isLoading -> repeat(3) { Box(Modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(14.dp)).adminShimmerEffect()) }
+                        isLoading -> repeat(4) { NotifikasiRowSkeleton() }
                         items.isEmpty() -> {
-                            Surface(shape = RoundedCornerShape(16.dp), color = ProTheme.success.copy(alpha = 0.10f), border = BorderStroke(1.dp, ProTheme.success.copy(alpha = 0.20f))) {
-                                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Icon(Icons.Rounded.CheckCircle, null, tint = ProTheme.success)
-                                    Column {
-                                        Text("Semua aman", fontWeight = FontWeight.Bold, color = ProTheme.text)
-                                        Text("Tidak ada stok ED, stok menipis, atau harga yang perlu dicek.", color = ProTheme.muted, style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-                            }
+                            // Menggunakan empty state bawaan aplikasi
+                            EmptyDataView(
+                                title = "Semua Aman",
+                                subtitle = "Tidak ada stok ED, stok menipis, atau harga yang perlu dicek."
+                            )
                         }
                         else -> items.forEach { item ->
-                            val tone = when (item.warna) { "danger" -> ProTheme.danger "warning" -> ProTheme.warning "orange" -> ProTheme.warning else -> ProTheme.primary }
-                            Surface(
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { showDialog = false; onNotificationClick(item) },
-                                shape = RoundedCornerShape(16.dp), color = tone.copy(alpha = 0.10f), border = BorderStroke(1.dp, tone.copy(alpha = 0.24f))
-                            ) {
-                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(tone.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
-                                        Text(item.jumlah.coerceAtMost(99).toString(), color = tone, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                                    }
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text(item.judul, color = ProTheme.text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                        Text(item.isi, color = ProTheme.muted, style = MaterialTheme.typography.bodySmall)
-                                        Text(if (item.tujuan == "harga") "Ketuk untuk buka Harga Kanal" else "Ketuk untuk buka Monitoring Stok", color = tone, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelSmall)
-                                    }
-                                    Icon(Icons.Rounded.KeyboardArrowRight, null, tint = tone, modifier = Modifier.size(22.dp))
-                                }
+                            NotifikasiItemRow(item = item) {
+                                showDialog = false
+                                onNotificationClick(item)
                             }
                         }
                     }
                 }
+            },
+            confirmButton = {
+                // Tombol aksi lebar penuh yang seragam
+                Button(
+                    onClick = { showDialog = false },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ProTheme.primary, contentColor = Color.White),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                ) {
+                    Text("Tutup", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
+                }
             }
         )
+    }
+}
+
+// === KOMPONEN PENDUKUNG NOTIFIKASI ===
+
+@Composable
+private fun NotifikasiItemRow(
+    item: RepositoriFirebaseUtama.NotifikasiAdmin,
+    onClick: () -> Unit
+) {
+    val tone = when (item.warna) {
+        "danger" -> ProTheme.danger
+        "warning", "orange" -> ProTheme.warning
+        "success" -> ProTheme.success
+        else -> ProTheme.primary
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = tone.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, tone.copy(alpha = 0.20f))
+    ) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Bubble Angka/Icon
+            Box(
+                Modifier.size(42.dp).clip(CircleShape).background(tone.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = item.jumlah.coerceAtMost(99).toString(),
+                    color = tone,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            // Teks Konten
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(item.judul, color = ProTheme.text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(item.isi, color = ProTheme.muted, style = MaterialTheme.typography.labelSmall, lineHeight = MaterialTheme.typography.labelSmall.lineHeight)
+                Text(
+                    text = if (item.tujuan == "harga") "Lihat Harga Kanal" else "Buka Monitoring Stok",
+                    color = tone,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+
+            // Panah Aksi
+            Icon(Icons.Rounded.ChevronRight, contentDescription = "Buka", tint = tone, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun NotifikasiRowSkeleton() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = ProTheme.surface,
+        border = BorderStroke(1.dp, ProTheme.border)
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(Modifier.size(42.dp).clip(CircleShape).adminShimmerEffect())
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.height(14.dp).fillMaxWidth(0.7f).clip(RoundedCornerShape(4.dp)).adminShimmerEffect())
+                Box(Modifier.height(12.dp).fillMaxWidth(0.9f).clip(RoundedCornerShape(4.dp)).adminShimmerEffect())
+                Box(Modifier.height(10.dp).fillMaxWidth(0.4f).clip(RoundedCornerShape(4.dp)).adminShimmerEffect())
+            }
+        }
     }
 }
 
@@ -1358,15 +1578,15 @@ private fun ProductionSummaryGrid(summary: RepositoriFirebaseUtama.RingkasanProd
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = ProTheme.surface), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), border = BorderStroke(1.dp, ProTheme.border)) {
         Column {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                GridMetricItem("Total Produksi", Formatter.ribuan((totalDasar + totalOlahan).toLong()), "Pcs", ProTheme.primary, Icons.Rounded.CheckCircle, Modifier.weight(1f))
+                GridMetricItem("Total Produksi", Formatter.ribuan((totalDasar + totalOlahan).toLong()), "pcs", ProTheme.primary, Icons.Rounded.Factory, Modifier.weight(1f))
                 Box(Modifier.width(1.dp).height(72.dp).background(ProTheme.border))
-                GridMetricItem("Total Masak", Formatter.ribuan(totalMasak.toLong()), "Batch", ProTheme.success, Icons.Rounded.Done, Modifier.weight(1f))
+                GridMetricItem("Total Masak", Formatter.ribuan(totalMasak.toLong()), "proses", ProTheme.success, Icons.Rounded.PrecisionManufacturing, Modifier.weight(1f))
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(ProTheme.border))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                GridMetricItem("Tahu Dasar", Formatter.ribuan(totalDasar.toLong()), "Pcs", ProTheme.text, Icons.Rounded.Add, Modifier.weight(1f))
+                GridMetricItem("Tahu Dasar", Formatter.ribuan(totalDasar.toLong()), "pcs", ProTheme.text, Icons.Rounded.Inventory, Modifier.weight(1f))
                 Box(Modifier.width(1.dp).height(72.dp).background(ProTheme.border))
-                GridMetricItem("Olahan", Formatter.ribuan(totalOlahan.toLong()), "Pcs", ProTheme.pro, Icons.Rounded.Refresh, Modifier.weight(1f))
+                GridMetricItem("Olahan", Formatter.ribuan(totalOlahan.toLong()), "pcs", ProTheme.pro, Icons.Rounded.Fastfood, Modifier.weight(1f))
             }
         }
     }

@@ -129,7 +129,7 @@ private fun BasicProductionScreen(
                 selectedProduk = products.firstOrNull()
                 isLoading = false
                 if (products.isEmpty()) {
-                    onShowMessage("Belum ada produk DASAR di Firebase.")
+                    onShowMessage("Belum ada produk dasar yang aktif di sistem.")
                 }
             }
             .onFailure {
@@ -208,7 +208,7 @@ private fun BasicProductionScreen(
 
                             val produkTerpilih = selectedProduk
                             if (produkTerpilih == null) return@Button
-                            val jumlahMasak = inputDouble
+                            val jumlahBatch = inputDouble
                             val dateTime = Formatter.isoDate(tanggal, "$waktu:00")
                             isSaving = true
 
@@ -217,7 +217,7 @@ private fun BasicProductionScreen(
                                     RepositoriFirebaseUtama.simpanProduksiDasar(
                                         dateTime = dateTime,
                                         productId = produkTerpilih.id,
-                                        batches = jumlahMasak,
+                                        batches = jumlahBatch,
                                         note = catatan,
                                         userAuthId = getCurrentUserId()
                                     )
@@ -318,7 +318,7 @@ private fun BasicProductionScreen(
                     OutlinedTextField(
                         value = batches,
                         onValueChange = { batches = InputAngka.formatInputDesimal(it) },
-                        label = { Text("Jumlah Masak (Batches)") },
+                        label = { Text("Jumlah Masak (Masakes)") },
                         placeholder = { Text("Contoh: 1,5 atau 1.000") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
                         shape = RoundedCornerShape(16.dp),
@@ -470,7 +470,7 @@ private fun ProductDropdownFieldProduksiDasar(
     var showPicker by remember { mutableStateOf(false) }
     val enabled = !isLoading && produk.isNotEmpty()
     val valueText = when {
-        isLoading -> "Memuat produk dari Firebase..."
+        isLoading -> "Memuat produk dari sistem..."
         produk.isEmpty() -> emptyMessage
         else -> selectedProduk?.name ?: "Pilih produk"
     }

@@ -832,7 +832,7 @@ internal fun ListHandleView(handle: ComposeRecyclerState, modifier: Modifier = M
         is AdapterBarisUmum -> GenericRowList(adapter, modifier)
         is AdapterProduk -> ProductList(adapter, modifier)
         is AdapterKeranjang -> CartList(adapter, modifier)
-        else -> EmptyState("Belum ada data")
+        else -> EmptyState("Belum ada data yang ditampilkan")
     }
 }
 
@@ -970,7 +970,7 @@ private fun ProductCard(product: Produk, adapter: AdapterProduk, modifier: Modif
     val status = adapter.getStatus(product)
     val harga = adapter.getHarga(product)
     val stokLayakJual = product.safeStock + product.nearExpiredStock + product.edTodayStock
-    val bisaDitambah = stokLayakJual > 0 && harga > 0L && status != "Habis" && status != "Kadaluarsa"
+    val bisaDitambah = stokLayakJual > 0 && harga > 0L && status != "Habis" && status != "Kedaluwarsa"
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(28.dp),
@@ -1016,8 +1016,8 @@ private fun ProductCard(product: Produk, adapter: AdapterProduk, modifier: Modif
                 "Produksi Hari Ini" -> WarnaBaris.GREEN
                 "Stok Sisa" -> WarnaBaris.GOLD
                 "ED Hari Ini" -> WarnaBaris.ORANGE
-                "Hampir Kadaluarsa" -> WarnaBaris.ORANGE
-                "Kadaluarsa", "Habis" -> WarnaBaris.RED
+                "Hampir Kedaluwarsa" -> WarnaBaris.ORANGE
+                "Kedaluwarsa", "Habis" -> WarnaBaris.RED
                 else -> WarnaBaris.DEFAULT
             })
         }

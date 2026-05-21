@@ -82,7 +82,17 @@ class AktivitasLaporan : AktivitasDasar() {
         }
     }
 
-    private fun safeRangeName(key: String): String = key.replace(Regex("[^A-Za-z0-9_-]"), "_")
+    private fun safeRangeName(key: String): String = key.replace(Regex("[^A-Za-z0-9_-]"), "_").trim('_').ifBlank { "periode" }
+
+    private fun metaDariText(text: String, key: String): String {
+        val prefix = "@@$key="
+        return text.lineSequence().firstOrNull { it.startsWith(prefix) }?.substringAfter("=")?.trim().orEmpty()
+    }
+
+    private fun namaFilePeriode(text: String, fallbackRangeKey: String): String {
+        val periode = metaDariText(text, "PERIODE").ifBlank { fallbackRangeKey }
+        return safeRangeName(periode.replace(" - ", "_sampai_"))
+    }
 
     private fun exportBukuHarianExcel(rangeKey: String, setLoading: (Boolean) -> Unit) {
         lifecycleScope.launch {
@@ -90,10 +100,10 @@ class AktivitasLaporan : AktivitasDasar() {
             showMessage("Menyiapkan Excel buku harian...")
             runCatching {
                 val text = RepositoriFirebaseUtama.buildBukuHarianPdfText(rangeKey)
-                buildBukuHarianXlsxFromText(text)
-            }.onSuccess { bytes ->
+                namaFilePeriode(text, rangeKey) to buildBukuHarianXlsxFromText(text)
+            }.onSuccess { (periodeFile, bytes) ->
                 setLoading(false)
-                saveBytesToDownloads("buku_harian_sitahu_${safeRangeName(rangeKey)}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes)
+                saveBytesToDownloads("buku_harian_sitahu_${periodeFile}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes)
             }.onFailure {
                 setLoading(false)
                 showMessage(it.message ?: "Gagal membuat buku harian Excel")
@@ -107,7 +117,8 @@ class AktivitasLaporan : AktivitasDasar() {
             showMessage("Menyiapkan PDF buku harian...")
             runCatching {
                 val text = RepositoriFirebaseUtama.buildBukuHarianPdfText(rangeKey)
-                savePdfTextToDownloads("Download Buku Harian PDF", "buku_harian_sitahu_${safeRangeName(rangeKey)}.pdf", text)
+                val periodeFile = namaFilePeriode(text, rangeKey)
+                savePdfTextToDownloads("Buku Harian SI Tahu", "buku_harian_sitahu_${periodeFile}.pdf", text)
             }.onSuccess { setLoading(false) }.onFailure {
                 setLoading(false)
                 showMessage(it.message ?: "Gagal membuat buku harian PDF")
@@ -138,7 +149,7 @@ class AktivitasLaporan : AktivitasDasar() {
             showMessage("Menyiapkan PDF stok produk...")
             runCatching {
                 val text = RepositoriFirebaseUtama.buildStokProdukPdfText(rangeKey)
-                savePdfTextToDownloads("Download Stok Produk PDF", "stok_produk_sitahu_${safeRangeName(rangeKey)}.pdf", text)
+                savePdfTextToDownloads("Unduh Stok Produk PDF", "stok_produk_sitahu_${safeRangeName(rangeKey)}.pdf", text)
             }.onSuccess { setLoading(false) }.onFailure {
                 setLoading(false)
                 showMessage(it.message ?: "Gagal membuat stok produk PDF")
@@ -173,7 +184,7 @@ class AktivitasLaporan : AktivitasDasar() {
                 resolver.openOutputStream(uri)?.use { output -> output.write(bytes) }
                 values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0)
                 resolver.update(uri, values, null, null)
-                showMessage("Tersimpan di Download/$folderName: $fileName")
+                showMessage("Tersimpan di Unduh/$folderName: $fileName")
             } catch (e: Exception) {
                 resolver.delete(uri, null, null); throw e
             }
@@ -183,7 +194,7 @@ class AktivitasLaporan : AktivitasDasar() {
             val file = File(directory, fileName)
             FileOutputStream(file).use { output -> output.write(bytes) }
             MediaScannerConnection.scanFile(this, arrayOf(file.absolutePath), arrayOf(mimeType), null)
-            showMessage("Tersimpan di Download/$folderName: $fileName")
+            showMessage("Tersimpan di Unduh/$folderName: $fileName")
         }
     }
 }
@@ -346,7 +357,7 @@ private fun ReportDashboardScreen(
                 Text("Pusat Analitik & Laporan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 16.dp))
                 Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor), modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
                     Column {
-                        ActionMenuItem(Icons.Rounded.Description, successColor, "Export Laporan Excel", "Unduh buku transaksi, laporan, dan stok", textColor, mutedColor) { showExportSheet = true }
+                        ActionMenuItem(Icons.Rounded.Description, successColor, "Ekspor Laporan Excel", "Unduh buku transaksi, laporan, dan stok", textColor, mutedColor) { showExportSheet = true }
                         HorizontalDivider(color = borderColor)
                         ActionMenuItem(Icons.Rounded.PieChart, warningColor, "Grafik & Statistik", "Analisis tren penjualan, laba, dan performa", textColor, mutedColor) { showStatsSheet = true }
                     }
@@ -492,7 +503,7 @@ private fun ReportDashboardScreen(
 
             ModalBottomSheet(onDismissRequest = { showExportSheet = false }, containerColor = bgColor, dragHandle = { BottomSheetDefaults.DragHandle() }, windowInsets = WindowInsets.navigationBars) {
                 Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("Export Laporan (${selectedRange.first})", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
+                    Text("Ekspor Laporan (${selectedRange.first})", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
 
                     Text("Buku Harian", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
                     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor)) {
@@ -549,7 +560,7 @@ private fun ReportDashboardScreen(
                         Text("Tren Harian", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
                         TrendHarianCard(d.trenHarian, surfaceColor, borderColor, textColor, mutedColor, primaryColor, warningColor)
 
-                        Text("Produk Terlaris", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
+                        Text("Produk Terlaris Hari Ini", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
                         AnalitikList("Belum ada produk terjual.", d.laporan.produkTerlaris, surfaceColor, borderColor, textColor, mutedColor, primaryColor)
 
                         Text("Kesehatan Stok", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
@@ -746,7 +757,7 @@ private fun StokAnalysisCard(stok: RepositoriFirebaseUtama.RingkasanStokDashboar
             }
             HorizontalDivider(color = borderColor)
             Text("Rincian ED & Stok", color = textColor, fontWeight = FontWeight.Bold)
-            Text("Aman ${Formatter.ribuan(stok.totalStokAman)} pcs • ED/Hampir ED ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs • Kadaluarsa ${Formatter.ribuan(stok.totalKadaluarsa)} pcs", color = mutedColor)
+            Text("Aman ${Formatter.ribuan(stok.totalStokAman)} pcs • ED/Hampir Kedaluwarsa ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs • Kedaluwarsa ${Formatter.ribuan(stok.totalKadaluarsa)} pcs", color = mutedColor)
         }
     }
 }
@@ -827,8 +838,8 @@ private fun bangunStatistikLengkap(laporan: RepositoriFirebaseUtama.RingkasanLap
     if (hariTerbaik != null) insight += "Hari terbaik pada data tren adalah ${hariTerbaik.label} dengan pemasukan ${Formatter.currency(hariTerbaik.pemasukan)}."
 
     val rekomendasi = mutableListOf<String>()
-    if (stok.totalKadaluarsa > 0) rekomendasi += "Segera tindak ${Formatter.ribuan(stok.totalKadaluarsa)} pcs stok kadaluarsa agar tidak tercampur dengan stok layak jual."
-    if (stok.totalHampirKadaluarsa > 0) rekomendasi += "Prioritaskan penjualan ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs stok ED hari ini/hampir ED dengan prinsip stok lama keluar lebih dulu."
+    if (stok.totalKadaluarsa > 0) rekomendasi += "Segera tindak ${Formatter.ribuan(stok.totalKadaluarsa)} pcs stok kedaluwarsa agar tidak tercampur dengan stok layak jual."
+    if (stok.totalHampirKadaluarsa > 0) rekomendasi += "Prioritaskan penjualan ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs stok ED hari ini/hampir kedaluwarsa dengan prinsip stok lama keluar lebih dulu."
     if (stok.totalMenipis > 0 || stok.totalHabis > 0) rekomendasi += "Ada ${stok.totalMenipis + stok.totalHabis} produk menipis/habis. Jadwalkan produksi atau restock bahan untuk produk prioritas."
     if (rasioBiaya > 70.0) rekomendasi += "Rasio pengeluaran tinggi. Periksa biaya terbesar dan bandingkan dengan omzet produk terlaris."
     if (rekomendasi.isEmpty()) rekomendasi += "Kondisi periode ini relatif aman. Pertahankan pencatatan produksi, penjualan, pengeluaran, dan stok secara konsisten."
@@ -865,7 +876,7 @@ private fun bangunAnalisisAiStatistik(laporan: RepositoriFirebaseUtama.Ringkasan
     val prioritas = mutableListOf<String>()
     if (laporan.labaRugi < 0) prioritas += "Pulihkan laba: cek harga jual, biaya bahan, dan pengeluaran terbesar."
     if (rasioBiaya > 70.0) prioritas += "Tekan pengeluaran: rasio biaya ${formatPersen(rasioBiaya)} cukup tinggi."
-    if (stok.totalKadaluarsa > 0) prioritas += "Tindak stok kadaluarsa: ${Formatter.ribuan(stok.totalKadaluarsa)} pcs perlu dipisah."
+    if (stok.totalKadaluarsa > 0) prioritas += "Tindak stok kedaluwarsa: ${Formatter.ribuan(stok.totalKadaluarsa)} pcs perlu dipisah."
     if (prioritas.isEmpty()) prioritas += "Tidak ada prioritas kritis. Pertahankan pencatatan."
 
     val peluang = mutableListOf<String>()
@@ -882,9 +893,10 @@ private fun buildBukuHarianXlsxFromText(text: String): ByteArray {
     sheetRows += listOf("BUKU HARIAN SI TAHU")
     sheetRows += listOf("Tanggal Laporan", meta["tanggal"].orEmpty())
     sheetRows += listOf("Periode Transaksi", meta["periode"].orEmpty())
+    sheetRows += listOf("Saldo Awal", meta["saldoAwal"].orEmpty())
     sheetRows += emptyList<String>()
     sheetRows += listOf("Tanggal Transaksi", "Uraian Transaksi", "User", "Debit/Pengeluaran", "Kredit/Pemasukan", "Saldo")
-    if (rows.isEmpty()) sheetRows += listOf("Belum ada data pada periode ini.") else rows.forEach { sheetRows += listOf(it.tanggal, it.uraian, it.user, it.debit, it.kredit, it.saldo) }
+    if (rows.isEmpty()) sheetRows += listOf("Belum ada data yang ditampilkan pada periode ini.") else rows.forEach { sheetRows += listOf(it.tanggal, it.uraian, it.user, it.debit, it.kredit, it.saldo) }
     sheetRows += emptyList<String>()
     sheetRows += listOf("Saldo Akhir", meta["saldo"].orEmpty())
     return buildXlsxWorkbook(listOf("Buku Harian" to sheetRows))
@@ -897,15 +909,15 @@ private fun buildStokProdukXlsxFromText(text: String): ByteArray {
     sumRows += listOf("RINGKASAN STOK PRODUK SI TAHU")
     sumRows += listOf("Tanggal Laporan", meta["tanggal"].orEmpty())
     sumRows += emptyList<String>()
-    sumRows += listOf("Produk", "Kode", "Fisik", "Layak", "ED", "Hampir ED", "Kadaluarsa")
-    if (products.isEmpty()) sumRows += listOf("Belum ada produk aktif.") else products.forEach { sumRows += listOf(it.nama, it.kodeKategori, it.stokSaatIni, it.stokLayak, angkaRincianEd(it.rincianEd, "ED Hari Ini").toString(), angkaRincianEd(it.rincianEd, "Hampir ED").toString(), angkaRincianEd(it.rincianEd, "Kadaluarsa").toString()) }
+    sumRows += listOf("Produk", "Kode", "Fisik", "Layak", "ED", "Hampir Kedaluwarsa", "Kedaluwarsa")
+    if (products.isEmpty()) sumRows += listOf("Belum ada produk aktif.") else products.forEach { sumRows += listOf(it.nama, it.kodeKategori, it.stokSaatIni, it.stokLayak, angkaRincianEd(it.rincianEd, "ED Hari Ini").toString(), angkaRincianEd(it.rincianEd, "Hampir Kedaluwarsa").toString(), angkaRincianEd(it.rincianEd, "Kedaluwarsa").toString()) }
     sheets += "Ringkasan" to sumRows
     val used = mutableSetOf("ringkasan")
     products.forEachIndexed { i, p ->
         val rows = mutableListOf<List<String>>()
         rows += listOf("MUTASI STOK PRODUK")
         rows += listOf("Produk", p.nama)
-        rows += listOf("Stok Layak", p.stokLayak)
+        rows += listOf("Layak Jual", p.stokLayak)
         rows += emptyList<String>()
         rows += listOf("Tanggal Transaksi", "Uraian Transaksi", "User", "Masuk", "Keluar", "Saldo", "Catatan")
         if (p.mutasi.isEmpty()) rows += listOf("Belum ada mutasi.") else p.mutasi.forEach { rows += listOf(it.tanggal, it.uraian, it.user, it.masuk, it.keluar, it.saldo, it.catatan) }
@@ -946,10 +958,14 @@ private fun buildBukuHarianPdf(title: String, text: String): PdfDocument {
     return createLandscapePdf(title) { state ->
         state.drawTitle("BUKU HARIAN SI TAHU")
         state.drawMeta("Tanggal Laporan", meta["tanggal"].orEmpty())
+        state.drawMeta("Periode Transaksi", meta["periode"].orEmpty())
+        state.drawMeta("Saldo Awal", meta["saldoAwal"].orEmpty())
         state.space(10f)
         val c = floatArrayOf(96f, 300f, 88f, 86f, 86f, 86f); val h = listOf("Tanggal", "Uraian", "User", "Debit", "Kredit", "Saldo")
         state.drawTableHeader(h, c, listOf(0, 0, 0, 1, 1, 1))
         rows.forEach { state.drawTableRow(listOf(it.tanggal, it.uraian, it.user, it.debit, it.kredit, it.saldo), c, listOf(0, 0, 0, 1, 1, 1)) { state.drawTableHeader(h, c, listOf(0, 0, 0, 1, 1, 1)) } }
+        state.space(8f)
+        state.drawMeta("Saldo Akhir", meta["saldo"].orEmpty())
     }
 }
 private fun buildStokProdukPdf(title: String, text: String): PdfDocument {
@@ -969,7 +985,13 @@ private fun buildPlainTextPdf(title: String, text: String): PdfDocument = create
 
 private fun parseBukuRows(text: String): Pair<Map<String, String>, List<PdfBukuRow>> {
     val meta = mutableMapOf<String, String>(); val rows = mutableListOf<PdfBukuRow>()
-    text.lineSequence().forEach { val l = it.trimEnd(); when { l.startsWith("@@TANGGAL=") -> meta["tanggal"] = l.substringAfter("=").trim(); l.startsWith("@@ROW=") -> { val f = l.substringAfter("=").trim().split('\t'); rows += PdfBukuRow(f.getOrElse(0){""}, f.getOrElse(1){""}, f.getOrElse(2){""}, f.getOrElse(3){""}, f.getOrElse(4){""}, f.getOrElse(5){""}) } } }
+    text.lineSequence().forEach { val l = it.trimEnd(); when {
+        l.startsWith("@@TANGGAL=") -> meta["tanggal"] = l.substringAfter("=").trim()
+        l.startsWith("@@PERIODE=") -> meta["periode"] = l.substringAfter("=").trim()
+        l.startsWith("@@SALDO_AWAL=") -> meta["saldoAwal"] = l.substringAfter("=").trim()
+        l.startsWith("@@SALDO=") -> meta["saldo"] = l.substringAfter("=").trim()
+        l.startsWith("@@ROW=") -> { val f = l.substringAfter("=").trim().split('	'); rows += PdfBukuRow(f.getOrElse(0){""}, f.getOrElse(1){""}, f.getOrElse(2){""}, f.getOrElse(3){""}, f.getOrElse(4){""}, f.getOrElse(5){""}) }
+    } }
     return meta to rows
 }
 private fun parseStokProduk(text: String): Pair<Map<String, String>, List<PdfStokProduk>> {

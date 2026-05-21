@@ -47,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
@@ -54,15 +55,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.lifecycleScope
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
+import muhamad.irfan.si_tahu.util.DialogPilihBulanRiwayat
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.PembuatQrBitmap
+import muhamad.irfan.si_tahu.util.PembantuCetak
 import muhamad.irfan.si_tahu.util.WarnaBaris
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -74,7 +78,6 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import java.util.concurrent.TimeUnit
 
 private const val XENDIT_API_BASE_RIWAYAT = "https://xendit-sitahu-api.vercel.app"
 
@@ -110,11 +113,20 @@ class AktivitasRiwayatPenjualan : AktivitasDasar() {
                     onLoadDetail = { item -> RepositoriFirebaseUtama.buildReceiptText(item.id) },
                     onShare = { item, text ->
                         lifecycleScope.launch {
-                            sharePlainText("Penjualan ${item.title}", text)
+                            runCatching { PembantuCetak.shareStrukPdf(this@AktivitasRiwayatPenjualan, "Penjualan ${item.title}", text) }
+                                .onFailure { showMessage(it.message ?: "Gagal membagikan PDF nota") }
                         }
                     },
-                    onCancelSale = { item, onSuccess -> confirmCancel(item, onSuccess) },
-                    onDeleteSale = { item, onSuccess -> confirmDelete(item, onSuccess) },
+                    onConfirmCancel = { item, alasan, onSuccess ->
+                        lifecycleScope.launch {
+                            runCatching { RepositoriFirebaseUtama.batalkanPenjualan(item.id, alasan, currentUserId()) }
+                                .onSuccess {
+                                    showMessage("Penjualan berhasil dibatalkan")
+                                    onSuccess()
+                                }
+                                .onFailure { showMessage(it.message ?: "Gagal membatalkan penjualan") }
+                        }
+                    },
                     onCheckQrisStatus = { item, onSuccess -> cekStatusQrisPending(item, onSuccess) },
                     onGetQrisData = { id -> RepositoriFirebaseUtama.muatInfoQrisPending(id) },
                     getCurrentUserId = { currentUserId() }
@@ -132,23 +144,6 @@ class AktivitasRiwayatPenjualan : AktivitasDasar() {
         tampilkanTombolRekapPasar = intent.getBooleanExtra(EXTRA_SHOW_RECAP_BUTTON, true)
         izinkanHapus = intent.getBooleanExtra(EXTRA_ALLOW_DELETE, true)
         hanyaKasirLogin = intent.getBooleanExtra(EXTRA_ONLY_CURRENT_CASHIER, false)
-    }
-
-    private fun confirmCancel(item: ItemBaris, onSuccess: () -> Unit) {
-        showInputModal("Batalkan penjualan", "Alasan pembatalan", "Batalkan") { alasan ->
-            lifecycleScope.launch {
-                runCatching { RepositoriFirebaseUtama.batalkanPenjualan(item.id, alasan, currentUserId()) }
-                    .onSuccess {
-                        showMessage("Penjualan berhasil dibatalkan")
-                        onSuccess()
-                    }
-                    .onFailure { showMessage(it.message ?: "Gagal membatalkan penjualan") }
-            }
-        }
-    }
-
-    private fun confirmDelete(item: ItemBaris, onSuccess: () -> Unit) {
-        confirmCancel(item, onSuccess)
     }
 
     private fun cekStatusQrisPending(item: ItemBaris, onSuccess: () -> Unit) {
@@ -291,8 +286,7 @@ private fun SalesHistoryScreen(
     onShowMessage: (String) -> Unit,
     onLoadDetail: suspend (ItemBaris) -> String,
     onShare: (ItemBaris, String) -> Unit,
-    onCancelSale: (ItemBaris, () -> Unit) -> Unit,
-    onDeleteSale: (ItemBaris, () -> Unit) -> Unit,
+    onConfirmCancel: (ItemBaris, String, () -> Unit) -> Unit,
     onCheckQrisStatus: (ItemBaris, () -> Unit) -> Unit,
     onGetQrisData: suspend (String) -> RepositoriFirebaseUtama.QrisPendingInfo,
     getCurrentUserId: () -> String
@@ -307,6 +301,9 @@ private fun SalesHistoryScreen(
     var selectedDetailItem by remember { mutableStateOf<ItemBaris?>(null) }
     var detailText by remember { mutableStateOf("") }
     var isLoadingDetail by remember { mutableStateOf(false) }
+
+    // State Dialog Batalkan Transaksi
+    var itemToCancel by remember { mutableStateOf<ItemBaris?>(null) }
 
     // State Filter Dialog Modern
     var showFilterDialog by remember { mutableStateOf(false) }
@@ -327,7 +324,7 @@ private fun SalesHistoryScreen(
 
     // State Paginasi
     var halamanSaatIni by remember { mutableStateOf(1) }
-    val itemPerHalaman = 15
+    val itemPerHalaman = 10
     val coroutineScope = rememberCoroutineScope()
 
     // Tema Warna
@@ -367,6 +364,7 @@ private fun SalesHistoryScreen(
                     val statusLabel = when {
                         it.statusPenjualan.equals("BATAL", true) -> "Batal"
                         it.statusPenjualan.equals("PENDING", true) -> "Pending"
+                        it.statusPenjualan.equals("TIDAK_TERBAYAR", true) -> "Belum Terbayar"
                         else -> "Selesai"
                     }
                     RiwayatPenjualanUiRow(
@@ -375,7 +373,7 @@ private fun SalesHistoryScreen(
                             id = it.id, title = it.title, subtitle = it.subtitle, amount = it.amount, badge = it.badge,
                             tone = if (it.badge.equals(AktivitasRiwayatPenjualan.FILTER_RUMAHAN, true)) WarnaBaris.GREEN else WarnaBaris.BLUE,
                             parameterStatus = statusLabel,
-                            parameterTone = when (statusLabel) { "Batal" -> WarnaBaris.RED; "Pending" -> WarnaBaris.GOLD; else -> WarnaBaris.GREEN },
+                            parameterTone = when (statusLabel) { "Batal" -> WarnaBaris.RED; "Pending" -> WarnaBaris.GOLD; "Belum Terbayar" -> WarnaBaris.DEFAULT; else -> WarnaBaris.GREEN },
                             actionLabel = "⋮"
                         )
                     )
@@ -428,7 +426,7 @@ private fun SalesHistoryScreen(
             coroutineScope.launch {
                 runCatching { onGetQrisData(item.id) }.onSuccess { info ->
                     if (!info.statusPenjualan.equals("PENDING", true)) {
-                        onShowMessage("Transaksi ini tidak lagi pending")
+                        onShowMessage("Transaksi ini sudah tidak menunggu pembayaran")
                         triggerRefresh++
                     } else if (info.paymentQrString.isBlank()) {
                         onShowMessage("QRIS transaksi lama belum menyimpan data QR. Batalkan lalu buat QRIS baru.")
@@ -436,7 +434,7 @@ private fun SalesHistoryScreen(
                         val bitmap = PembuatQrBitmap.buat(info.paymentQrString, 1000)
                         qrisDialogData = QrisDialogData(item, info, bitmap)
                     }
-                }.onFailure { onShowMessage(it.message ?: "Gagal memuat QRIS") }
+                }.onFailure { onShowMessage(it.message ?: "Gagal memuat pembayaran QRIS") }
             }
         } else {
             selectedDetailItem = item
@@ -556,6 +554,7 @@ private fun SalesHistoryScreen(
                         val statusColor = when (item.parameterStatus) {
                             "Batal" -> dangerColor
                             "Pending" -> warningColor
+                            "Belum Terbayar" -> mutedColor
                             else -> successColor
                         }
 
@@ -570,8 +569,8 @@ private fun SalesHistoryScreen(
                             mutedColor = mutedColor,
                             izinkanHapus = izinkanHapus,
                             onClick = { handleRowClick(item) },
-                            onCancel = { onCancelSale(item) { triggerRefresh++ } },
-                            onDelete = { onDeleteSale(item) { triggerRefresh++ } },
+                            onCancel = { itemToCancel = item },
+                            onDelete = { itemToCancel = item },
                             onShowQris = {
                                 coroutineScope.launch {
                                     runCatching { onGetQrisData(item.id) }.onSuccess { info ->
@@ -615,6 +614,26 @@ private fun SalesHistoryScreen(
                     }
                 }
             }
+        }
+
+        // === DIALOG KONFIRMASI PEMBATALAN (MODERN INPUT MODAL) ===
+        if (itemToCancel != null) {
+            ModernCancelInputDialog(
+                item = itemToCancel!!,
+                surfaceColor = surfaceColor,
+                textColor = textColor,
+                mutedColor = mutedColor,
+                borderColor = borderColor,
+                dangerColor = dangerColor,
+                bgColor = bgColor,
+                onDismiss = { itemToCancel = null },
+                onConfirm = { alasan ->
+                    onConfirmCancel(itemToCancel!!, alasan) {
+                        triggerRefresh++
+                    }
+                    itemToCancel = null
+                }
+            )
         }
 
         // === DIALOG FILTER MODERN ===
@@ -684,10 +703,16 @@ private fun SalesHistoryScreen(
                         if (detailText.isNotBlank()) onShare(detailItem, detailText)
                     }
                     DialogActionButton(Icons.Rounded.Download, "Unduh PDF", primaryColor) {
-                        Toast.makeText(context, "Fitur Unduh PDF segera hadir", Toast.LENGTH_SHORT).show()
+                        if (detailText.isNotBlank()) {
+                            runCatching { PembantuCetak.downloadStrukPdf(context, "Penjualan ${detailItem.title}", detailText) }
+                                .onFailure { Toast.makeText(context, it.message ?: "Gagal download PDF nota", Toast.LENGTH_SHORT).show() }
+                        }
                     }
-                    DialogActionButton(Icons.Rounded.Print, "Cetak Struk", warningColor) {
-                        Toast.makeText(context, "Fitur Cetak Struk segera hadir", Toast.LENGTH_SHORT).show()
+                    DialogActionButton(Icons.Rounded.Print, "Cetak Nota", warningColor) {
+                        if (detailText.isNotBlank()) {
+                            runCatching { PembantuCetak.printNota(context, "Penjualan ${detailItem.title}", detailText) }
+                                .onFailure { Toast.makeText(context, it.message ?: "Gagal mencetak nota", Toast.LENGTH_SHORT).show() }
+                        }
                     }
                 },
                 onDismiss = { if (!isLoadingDetail) selectedDetailItem = null }
@@ -738,10 +763,10 @@ private fun SalesHistoryScreen(
                                 modifier = Modifier.fillMaxWidth().height(52.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
-                            ) { Text("Cek Status Pembayaran", fontWeight = FontWeight.Bold) }
+                            ) { Text("Cek Pembayaran", fontWeight = FontWeight.Bold) }
 
                             OutlinedButton(
-                                onClick = { qrisDialogData = null; onCancelSale(data.item) { triggerRefresh++ } },
+                                onClick = { qrisDialogData = null; itemToCancel = data.item },
                                 modifier = Modifier.fillMaxWidth().height(52.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 border = BorderStroke(1.dp, dangerColor),
@@ -758,6 +783,81 @@ private fun SalesHistoryScreen(
 }
 
 // === KOMPONEN UI REUSABLE & MODERNA ===
+
+@Composable
+private fun ModernCancelInputDialog(
+    item: ItemBaris,
+    surfaceColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    borderColor: Color,
+    dangerColor: Color,
+    bgColor: Color,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var reasonText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = surfaceColor,
+        title = {
+            Text(
+                "Batalkan Transaksi?",
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Nota ${item.title} akan dibatalkan dan statusnya berubah. Silakan masukkan alasan pembatalan untuk pencatatan:",
+                    color = mutedColor,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                OutlinedTextField(
+                    value = reasonText,
+                    onValueChange = { reasonText = it },
+                    placeholder = { Text("Misal: Salah input harga/produk", color = mutedColor) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = dangerColor,
+                        unfocusedBorderColor = borderColor,
+                        focusedContainerColor = bgColor,
+                        unfocusedContainerColor = bgColor,
+                        cursorColor = dangerColor
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(reasonText.trim()) },
+                enabled = reasonText.trim().isNotBlank(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = dangerColor,
+                    disabledContainerColor = dangerColor.copy(alpha = 0.5f)
+                )
+            ) {
+                Text("Batalkan Transaksi", fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Kembali", color = mutedColor, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
 
 @Composable
 private fun HistoryRowSkeleton(surfaceColor: Color, borderColor: Color) {
@@ -842,7 +942,7 @@ private fun ProDetailDialog(
                     ) {
                         SelectionContainer {
                             Text(
-                                text = detailText.ifBlank { "Detail belum tersedia." },
+                                text = detailText.ifBlank { "Detail data belum tersedia." },
                                 color = textColor,
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.bodySmall,
@@ -961,6 +1061,7 @@ private fun ModernMobileFilterDialog(
     var draftMulai by remember { mutableStateOf(initialRentangMulai.orEmpty()) }
     var draftSelesai by remember { mutableStateOf(initialRentangSelesai.orEmpty()) }
     var showDateRangePicker by remember { mutableStateOf(false) }
+    var showMonthPicker by remember { mutableStateOf(false) }
 
     fun formatDateToLocalId(dateStr: String): String {
         if (dateStr.isBlank()) return ""
@@ -1028,6 +1129,22 @@ private fun ModernMobileFilterDialog(
                     ) {
                         Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
                         Text(text = dateLabel, color = if (draftMulai.isNotBlank()) textColor else mutedColor, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clickable { showMonthPicker = true },
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
+                        Text("Pilih satu bulan penuh", color = textColor, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -1200,6 +1317,24 @@ private fun ModernMobileFilterDialog(
             }
         }
     }
+
+    if (showMonthPicker) {
+        DialogPilihBulanRiwayat(
+            initialDate = draftMulai.ifBlank { null },
+            primaryColor = primaryColor,
+            surfaceColor = surfaceColor,
+            bgColor = bgColor,
+            textColor = textColor,
+            mutedColor = mutedColor,
+            borderColor = borderColor,
+            onDismiss = { showMonthPicker = false },
+            onApply = { mulai, selesai, _ ->
+                draftMulai = mulai
+                draftSelesai = selesai
+                showMonthPicker = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -1273,14 +1408,14 @@ private fun SalesHistoryCard(
                 Box {
                     IconButton(onClick = { showMenu = true }, modifier = Modifier.size(32.dp)) { Icon(Icons.Rounded.MoreVert, "Opsi", tint = mutedColor) }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }, modifier = Modifier.background(surfaceColor)) {
-                        DropdownMenuItem(text = { Text("Lihat Detail & Struk", color = textColor) }, onClick = { showMenu = false; onClick() })
+                        DropdownMenuItem(text = { Text("Lihat Detail & Nota", color = textColor) }, onClick = { showMenu = false; onClick() })
 
                         if (isPending) {
                             DropdownMenuItem(text = { Text("Lihat QRIS", color = textColor) }, onClick = { showMenu = false; onShowQris() })
-                            DropdownMenuItem(text = { Text("Cek Status QRIS", color = textColor) }, onClick = { showMenu = false; onCheckQrisStatus() })
+                            DropdownMenuItem(text = { Text("Cek Pembayaran QRIS", color = textColor) }, onClick = { showMenu = false; onCheckQrisStatus() })
                             DropdownMenuItem(text = { Text("Batalkan Transaksi", color = Color.Red) }, onClick = { showMenu = false; onCancel() })
                         } else if (!isBatal && izinkanHapus) {
-                            DropdownMenuItem(text = { Text("Batalkan Penjualan", color = Color.Red) }, onClick = { showMenu = false; onCancel() })
+                            DropdownMenuItem(text = { Text("Batalkan Transaksi", color = Color.Red) }, onClick = { showMenu = false; onCancel() })
                         }
                     }
                 }

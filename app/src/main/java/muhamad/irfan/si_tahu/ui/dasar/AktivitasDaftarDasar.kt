@@ -187,7 +187,7 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         return binding.spSecondaryFilter.selectedItem?.toString().orEmpty()
     }
 
-    protected fun submitRows(rows: List<ItemBaris>, emptyMessage: String = "Belum ada data") {
+    protected fun submitRows(rows: List<ItemBaris>, emptyMessage: String = "Belum ada data yang ditampilkan") {
         rowAdapter.submitList(rows)
         binding.tvEmpty.isVisible = rows.isEmpty()
         binding.tvEmpty.text = emptyMessage

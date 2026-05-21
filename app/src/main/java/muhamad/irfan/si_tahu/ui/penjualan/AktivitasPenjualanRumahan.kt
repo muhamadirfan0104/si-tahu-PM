@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -30,6 +32,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
@@ -86,12 +89,12 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         const val STATUS_PRODUCED_TODAY = "Produksi Hari Ini"
         const val STATUS_LEFTOVER = "Stok Sisa"
         const val STATUS_ED_TODAY = "ED Hari Ini"
-        const val STATUS_NEAR_EXPIRED = "Hampir Kadaluarsa"
-        const val STATUS_EXPIRED = "Kadaluarsa"
+        const val STATUS_NEAR_EXPIRED = "Hampir Kedaluwarsa"
+        const val STATUS_EXPIRED = "Kedaluwarsa"
         const val STATUS_EMPTY = "Habis"
 
         private const val XENDIT_API_BASE = "https://xendit-sitahu-api.vercel.app"
-        private const val XENDIT_TEST_MODE = false
+        private const val XENDIT_TEST_MODE = true
         private const val QRIS_EXPIRE_MS = 15 * 60 * 1000L
     }
 
@@ -100,6 +103,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
     private var pendingQris by mutableStateOf<XenditQris?>(null)
     private var pendingItems: List<ItemKeranjang> = emptyList()
     private var isProcessing by mutableStateOf(false)
+    private var successReceiptPending by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -197,6 +201,21 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         val dangerColor = if (isDark) Color(0xFFEF4444) else Color(0xFFDC2626)
         val warningColor = if (isDark) Color(0xFFF59E0B) else Color(0xFFD97706)
 
+        val successReceipt = successReceiptPending
+        if (successReceipt != null) {
+            PaymentSuccessAnimationDialog(
+                successColor = successColor,
+                surfaceColor = surfaceColor,
+                textColor = textColor,
+                mutedColor = mutedColor,
+                onFinished = {
+                    val receipt = successReceiptPending
+                    successReceiptPending = null
+                    receipt?.let { showReceiptDialogAndReset(it) }
+                }
+            )
+        }
+
         var products by remember { mutableStateOf<List<Produk>>(emptyList()) }
         var categoryOptions by remember { mutableStateOf(listOf("Semua Kategori")) }
         var isLoading by remember { mutableStateOf(true) }
@@ -210,7 +229,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         val modeOptions = listOf(MODE_ALL, MODE_READY, MODE_EMPTY)
 
         var currentPage by remember { mutableStateOf(1) }
-        val pageSize = 12
+        val pageSize = 15
 
         val lifecycleTrigger by uiRefreshTrigger.collectAsState()
         var localCartTrigger by remember { mutableStateOf(0) }
@@ -378,7 +397,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                                     onAddClick = {
                                         val stok = stokLayakJual(product)
                                         if (stok <= 0) {
-                                            onShowMessage(if (product.expiredStock > 0) "Stok sudah kadaluarsa" else "Stok habis")
+                                            onShowMessage(if (product.expiredStock > 0) "Stok sudah kedaluwarsa" else "Stok habis")
                                         } else {
                                             val success = SessionKeranjangRumahan.addOrIncrease(product.id, defaultPrice(product), stok)
                                             if (success) {
@@ -434,6 +453,8 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         var selectedMethod by remember { mutableStateOf("Tunai") }
         var cashInputString by remember { mutableStateOf("") }
         var showQrisEnlarged by remember { mutableStateOf(false) }
+        var selectedQrisTab by remember(pendingQris?.externalId) { mutableStateOf("QRIS") }
+        var selectedQrisDialogTab by remember(pendingQris?.externalId) { mutableStateOf("QRIS") }
 
         var remainingQrisTime by remember { mutableLongStateOf(0L) }
         LaunchedEffect(pendingQris) {
@@ -441,8 +462,13 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                 remainingQrisTime = pendingQris!!.remainingMs()
                 delay(1000)
             }
-            if (pendingQris?.isExpired() == true) {
+            val expiredQris = pendingQris
+            if (expiredQris?.isExpired() == true) {
                 remainingQrisTime = 0L
+                runCatching { RepositoriFirebaseUtama.tandaiQrisTidakTerbayarJikaKadaluarsa(expiredQris.saleId) }
+                pendingQris = null
+                pendingItems = emptyList()
+                onShowMessage("QRIS habis waktu. Transaksi ditandai Belum Terbayar.")
             }
         }
 
@@ -455,17 +481,42 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
             Dialog(onDismissRequest = { showQrisEnlarged = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
                 Card(modifier = Modifier.fillMaxWidth(0.9f), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor)) {
                     Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Scan QRIS Xendit", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge, color = textColor)
+                        Text("Pembayaran QRIS", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge, color = textColor)
                         Text(Formatter.currency(pendingQris!!.total), fontWeight = FontWeight.Bold, color = primaryColor, style = MaterialTheme.typography.headlineMedium)
 
-                        val qrBitmap = remember(pendingQris!!.qrString) { PembuatQrBitmap.buat(pendingQris!!.qrString, 800) }
-                        Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "QRIS", modifier = Modifier.size(260.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).padding(8.dp))
+                        QrisSegmentedTabs(
+                            selectedTab = selectedQrisDialogTab,
+                            onTabSelected = { selectedQrisDialogTab = it },
+                            primaryColor = primaryColor,
+                            surfaceColor = surfaceColor,
+                            borderColor = borderColor,
+                            mutedColor = mutedColor
+                        )
 
-                        Text("Order: ${pendingQris!!.externalId}", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                        if (selectedQrisDialogTab == "QRIS") {
+                            val qrBitmap = remember(pendingQris!!.qrString) { PembuatQrBitmap.buat(pendingQris!!.qrString, 800) }
+                            Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "QRIS", modifier = Modifier.size(260.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).padding(8.dp))
+                            Text("Tunjukkan QRIS ini ke pelanggan untuk discan.", color = mutedColor, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                        } else {
+                            QrisBayarTabContent(
+                                total = pendingQris!!.total,
+                                orderId = pendingQris!!.externalId,
+                                remainingText = formatDurasi(remainingQrisTime),
+                                isProcessing = isProcessing,
+                                primaryColor = primaryColor,
+                                warningColor = warningColor,
+                                successColor = successColor,
+                                textColor = textColor,
+                                mutedColor = mutedColor,
+                                borderColor = borderColor,
+                                onPay = { simulasiBayarXendit(onTransactionSuccess, onShowMessage) },
+                                onCheck = { showQrisEnlarged = false; cekStatusQrisXendit(onTransactionSuccess, onShowMessage) }
+                            )
+                        }
+
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedButton(onClick = { showQrisEnlarged = false }, modifier = Modifier.weight(1f)) { Text("Tutup") }
-
-                            Button(onClick = { showQrisEnlarged = false; cekStatusQrisXendit(onTransactionSuccess, onShowMessage) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = primaryColor)) { Text("Cek Status", fontWeight = FontWeight.Bold) }
+                            Button(onClick = { showQrisEnlarged = false; cekStatusQrisXendit(onTransactionSuccess, onShowMessage) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = primaryColor)) { Text("Cek Pembayaran", fontWeight = FontWeight.Bold) }
                         }
                     }
                 }
@@ -631,18 +682,45 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                             if (pendingQris == null) {
                                 Icon(Icons.Rounded.QrCodeScanner, null, tint = primaryColor, modifier = Modifier.size(64.dp))
                                 Text("Pembayaran Non-Tunai", fontWeight = FontWeight.Bold, color = textColor)
-                                Text("Tekan Konfirmasi di bawah untuk membuat kode QRIS bagi pelanggan.", textAlign = TextAlign.Center, color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                                Text("Tekan tombol Buat QRIS Pembayaran untuk menampilkan QRIS bagi pelanggan.", textAlign = TextAlign.Center, color = mutedColor, style = MaterialTheme.typography.bodySmall)
                             } else {
                                 val isExpired = remainingQrisTime <= 0L
-                                Text(if (isExpired) "QRIS Kedaluwarsa" else "Menunggu Pembayaran...", fontWeight = FontWeight.Bold, color = if (isExpired) dangerColor else warningColor)
+                                Text(if (isExpired) "QRIS Kedaluwarsa" else "Menunggu Pembayaran", fontWeight = FontWeight.Bold, color = if (isExpired) dangerColor else warningColor)
 
-                                val qrBitmap = remember(pendingQris!!.qrString) { PembuatQrBitmap.buat(pendingQris!!.qrString, 600) }
-                                Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "QRIS", modifier = Modifier.size(180.dp).clip(RoundedCornerShape(12.dp)).background(Color.White).padding(8.dp).clickable { showQrisEnlarged = true })
+                                QrisSegmentedTabs(
+                                    selectedTab = selectedQrisTab,
+                                    onTabSelected = { selectedQrisTab = it },
+                                    primaryColor = primaryColor,
+                                    surfaceColor = bgColor,
+                                    borderColor = borderColor,
+                                    mutedColor = mutedColor
+                                )
+
+                                if (selectedQrisTab == "QRIS") {
+                                    val qrBitmap = remember(pendingQris!!.qrString) { PembuatQrBitmap.buat(pendingQris!!.qrString, 600) }
+                                    Image(bitmap = qrBitmap.asImageBitmap(), contentDescription = "QRIS", modifier = Modifier.size(180.dp).clip(RoundedCornerShape(12.dp)).background(Color.White).padding(8.dp).clickable { showQrisEnlarged = true })
+                                    Text("Ketuk QRIS untuk memperbesar tampilan.", color = mutedColor, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+                                } else {
+                                    QrisBayarTabContent(
+                                        total = pendingQris!!.total,
+                                        orderId = pendingQris!!.externalId,
+                                        remainingText = formatDurasi(remainingQrisTime),
+                                        isProcessing = isProcessing,
+                                        primaryColor = primaryColor,
+                                        warningColor = warningColor,
+                                        successColor = successColor,
+                                        textColor = textColor,
+                                        mutedColor = mutedColor,
+                                        borderColor = borderColor,
+                                        onPay = { simulasiBayarXendit(onTransactionSuccess, onShowMessage) },
+                                        onCheck = { cekStatusQrisXendit(onTransactionSuccess, onShowMessage) }
+                                    )
+                                }
 
                                 Text("Sisa Waktu: ${formatDurasi(remainingQrisTime)}", fontWeight = FontWeight.Bold, color = textColor)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(onClick = { konfirmasiBatalkanQris() }, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, dangerColor), colors = ButtonDefaults.outlinedButtonColors(contentColor = dangerColor)) { Text("Batalkan") }
-                                    if (XENDIT_TEST_MODE) { Button(onClick = { simulasiBayarXendit() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = warningColor)) { Text("Simulasi") } }
+                                    Button(onClick = { cekStatusQrisXendit(onTransactionSuccess, onShowMessage) }, enabled = !isProcessing, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = primaryColor)) { Text("Cek Pembayaran") }
                                 }
                             }
                         }
@@ -651,7 +729,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
 
                 Button(
                     onClick = {
-                        saveTransaction(selectedMethod, cashPaid, totalAmount, items, onTransactionSuccess, onShowMessage)
+                        saveTransaction(selectedMethod, cashPaid, totalAmount, items, customerName.trim(), onTransactionSuccess, onShowMessage)
                     },
                     enabled = !isEmpty && !isProcessing && (selectedMethod != "Tunai" || cashPaid >= totalAmount),
                     modifier = Modifier.fillMaxWidth().height(60.dp),
@@ -663,7 +741,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                     } else {
                         val btnText = when {
                             selectedMethod == "QRIS" && pendingQris == null -> "Buat QRIS Pembayaran"
-                            selectedMethod == "QRIS" && pendingQris != null -> "Cek Status Pembayaran"
+                            selectedMethod == "QRIS" && pendingQris != null -> "Cek Pembayaran"
                             else -> "Konfirmasi Transaksi"
                         }
                         Text(btnText, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
@@ -674,6 +752,146 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         }
     }
 
+
+    @Composable
+    private fun QrisSegmentedTabs(
+        selectedTab: String,
+        onTabSelected: (String) -> Unit,
+        primaryColor: Color,
+        surfaceColor: Color,
+        borderColor: Color,
+        mutedColor: Color
+    ) {
+        val tabs = listOf("QRIS", "Bayar")
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(borderColor.copy(alpha = 0.45f))
+                .padding(4.dp)
+        ) {
+            tabs.forEach { tab ->
+                val selected = selectedTab == tab
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (selected) surfaceColor else Color.Transparent)
+                        .clickable { onTabSelected(tab) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(
+                            imageVector = if (tab == "QRIS") Icons.Rounded.QrCodeScanner else Icons.Rounded.Payments,
+                            contentDescription = tab,
+                            tint = if (selected) primaryColor else mutedColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(tab, fontWeight = if (selected) FontWeight.Black else FontWeight.Medium, color = if (selected) primaryColor else mutedColor)
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun QrisBayarTabContent(
+        total: Long,
+        orderId: String,
+        remainingText: String,
+        isProcessing: Boolean,
+        primaryColor: Color,
+        warningColor: Color,
+        successColor: Color,
+        textColor: Color,
+        mutedColor: Color,
+        borderColor: Color,
+        onPay: () -> Unit,
+        onCheck: () -> Unit
+    ) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Surface(shape = RoundedCornerShape(18.dp), color = successColor.copy(alpha = 0.10f), border = BorderStroke(1.dp, successColor.copy(alpha = 0.18f)), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Total Bayar", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
+                        Text(Formatter.currency(total), color = textColor, fontWeight = FontWeight.Black)
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Sisa Waktu", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
+                        Text(remainingText, color = warningColor, fontWeight = FontWeight.Bold)
+                    }
+                    Text("Kode Pembayaran: ${orderId.ifBlank { "-" }}", color = mutedColor, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Text(
+                "Gunakan tab ini setelah pelanggan menyelesaikan pembayaran QRIS. Tombol Bayar akan memproses konfirmasi pembayaran.",
+                textAlign = TextAlign.Center,
+                color = mutedColor,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = onPay,
+                    enabled = XENDIT_TEST_MODE && !isProcessing,
+                    modifier = Modifier.weight(1f).height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = successColor, disabledContainerColor = borderColor, disabledContentColor = mutedColor)
+                ) {
+                    if (isProcessing) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Bayar", fontWeight = FontWeight.Bold)
+                    }
+                }
+                OutlinedButton(
+                    onClick = onCheck,
+                    enabled = !isProcessing,
+                    modifier = Modifier.weight(1f).height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, primaryColor),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = primaryColor)
+                ) { Text("Cek Status", fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+
+    @Composable
+    private fun PaymentSuccessAnimationDialog(
+        successColor: Color,
+        surfaceColor: Color,
+        textColor: Color,
+        mutedColor: Color,
+        onFinished: () -> Unit
+    ) {
+        var visible by remember { mutableStateOf(false) }
+        val iconScale by animateFloatAsState(
+            targetValue = if (visible) 1f else 0.55f,
+            animationSpec = tween(durationMillis = 450),
+            label = "qris_success_scale"
+        )
+
+        LaunchedEffect(Unit) {
+            visible = true
+            delay(1400L)
+            onFinished()
+        }
+
+        Dialog(onDismissRequest = {}, properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)) {
+            Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor)) {
+                Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Box(Modifier.size(88.dp).clip(CircleShape).background(successColor.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = successColor, modifier = Modifier.size(62.dp).scale(iconScale))
+                    }
+                    Text("Pembayaran Berhasil", fontWeight = FontWeight.Black, color = textColor, style = MaterialTheme.typography.titleLarge)
+                    Text("Transaksi sudah selesai. Nota akan ditampilkan sebentar lagi.", color = mutedColor, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
 
     // ==========================================
     // KOMPONEN UI KARTU PRODUK ALA KAFE (GRID)
@@ -737,7 +955,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
     // LOGIKA PROSES, FIREBASE, & XENDIT
     // ==========================================
 
-    private fun saveTransaction(method: String, cashPaid: Long, totalAmount: Long, items: List<ItemKeranjang>, onCloseSheet: () -> Unit, showMsg: (String) -> Unit) {
+    private fun saveTransaction(method: String, cashPaid: Long, totalAmount: Long, items: List<ItemKeranjang>, customerName: String, onCloseSheet: () -> Unit, showMsg: (String) -> Unit) {
         if (items.isEmpty()) { showMsg("Keranjang kosong"); return }
         validasiKeranjang(items)?.let { showMsg(it); return }
 
@@ -747,14 +965,14 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
             simpanTransaksiFinal(
                 paymentGateway = "", paymentOrderId = "", paymentQrId = "", paymentStatus = "PAID", paymentSource = "",
                 paymentReferenceId = "", paymentPaidAt = "", paymentAmount = totalAmount, metode = "Tunai",
-                uangDiterima = cashPaid, items = items, onCloseSheet = onCloseSheet, showMsg = showMsg
+                uangDiterima = cashPaid, items = items, customerName = customerName, onCloseSheet = onCloseSheet, showMsg = showMsg
             )
         } else {
-            if (pendingQris == null) buatQrisXendit(items, totalAmount, showMsg) else cekStatusQrisXendit(onCloseSheet, showMsg)
+            if (pendingQris == null) buatQrisXendit(items, totalAmount, customerName, showMsg) else cekStatusQrisXendit(onCloseSheet, showMsg)
         }
     }
 
-    private fun buatQrisXendit(items: List<ItemKeranjang>, total: Long, showMsg: (String) -> Unit) {
+    private fun buatQrisXendit(items: List<ItemKeranjang>, total: Long, customerName: String, showMsg: (String) -> Unit) {
         if (total < 1500L) { showMsg("Minimal QRIS Rp1.500"); return }
         lifecycleScope.launch {
             isProcessing = true
@@ -767,7 +985,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                     userAuthId = currentUserId(), cartItems = items, products = productsCache, paymentGateway = "XENDIT",
                     paymentOrderId = qrisDraft.externalId, paymentQrId = qrisDraft.qrId, paymentQrString = qrisDraft.qrString,
                     paymentQrCreatedAtMillis = qrisDraft.createdAtMillis, paymentQrExpiresAtMillis = qrisDraft.expiresAtMillis,
-                    paymentStatus = qrisDraft.status.ifBlank { "ACTIVE" }, paymentAmount = qrisDraft.total
+                    paymentStatus = qrisDraft.status.ifBlank { "ACTIVE" }, paymentAmount = qrisDraft.total, customerName = customerName
                 )
                 qrisDraft.copy(saleId = saleId)
             }.onSuccess { pendingQris = it; pendingItems = items.map { i -> i.copy() }; showMsg("QRIS berhasil dibuat.") }
@@ -786,8 +1004,16 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                 val details = payment?.optJSONObject("payment_details")
                 XenditStatus(json.optBoolean("paid", false), json.optString("status", "PENDING"), payment?.optString("id").orEmpty(), details?.optString("source").orEmpty(), details?.optString("receipt_id").orEmpty(), payment?.optString("created").orEmpty(), payment?.optLong("amount", qris.total) ?: qris.total)
             }.onSuccess { status ->
-                if (status.paid && status.status.equals("COMPLETED", ignoreCase = true)) selesaikanTransaksiQrisPending(status, onCloseSheet, showMsg)
-                else showMsg("Status: ${status.status.ifBlank { "PENDING" }}${if (qris.isExpired()) " QRIS Kedaluwarsa." else ""}")
+                if (status.paid && status.status.equals("COMPLETED", ignoreCase = true)) {
+                    selesaikanTransaksiQrisPending(status, onCloseSheet, showMsg)
+                } else if (qris.isExpired()) {
+                    runCatching { RepositoriFirebaseUtama.tandaiQrisTidakTerbayarJikaKadaluarsa(qris.saleId) }
+                    pendingQris = null
+                    pendingItems = emptyList()
+                    showMsg("QRIS habis waktu. Transaksi ditandai Belum Terbayar.")
+                } else {
+                    showMsg("Status: ${status.status.ifBlank { "PENDING" }}")
+                }
             }.onFailure { showMsg(it.message ?: "Gagal cek status") }
             isProcessing = false
         }
@@ -804,25 +1030,32 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                 )
                 RepositoriFirebaseUtama.buildReceiptText(saleId)
             }.onSuccess { receipt ->
-                pendingQris = null; pendingItems = emptyList(); SessionKeranjangRumahan.clear(); onCloseSheet?.invoke(); showReceiptDialogAndReset(receipt)
+                pendingQris = null; pendingItems = emptyList(); SessionKeranjangRumahan.clear(); onCloseSheet?.invoke(); showPaymentSuccessAnimation(receipt)
             }.onFailure { showMsg(it.message ?: "Gagal menyelesaikan QRIS") }
             isProcessing = false
         }
     }
 
-    private fun simulasiBayarXendit() {
+    private fun simulasiBayarXendit(onCloseSheet: (() -> Unit)? = null, showMsg: (String) -> Unit = { showMessage(it) }) {
         val qris = pendingQris ?: return
         lifecycleScope.launch {
             isProcessing = true
             runCatching { postJson("/api/simulasi-bayar-xendit", JSONObject().put("externalId", qris.externalId).put("amount", qris.total)) }
-                .onSuccess { showMessage("Simulasi berhasil. Tekan Cek Status.") }
-                .onFailure { showMessage(it.message ?: "Gagal simulasi") }
-            isProcessing = false
+                .onSuccess {
+                    showMsg("Pembayaran diproses. Memeriksa status...")
+                    delay(900L)
+                    isProcessing = false
+                    cekStatusQrisXendit(onCloseSheet, showMsg)
+                }
+                .onFailure {
+                    showMsg(it.message ?: "Gagal melakukan konfirmasi pembayaran")
+                    isProcessing = false
+                }
         }
     }
 
     private fun simpanTransaksiFinal(
-        metode: String, uangDiterima: Long, items: List<ItemKeranjang>,
+        metode: String, uangDiterima: Long, items: List<ItemKeranjang>, customerName: String,
         paymentGateway: String, paymentOrderId: String, paymentQrId: String, paymentStatus: String,
         paymentSource: String, paymentReferenceId: String, paymentPaidAt: String, paymentAmount: Long,
         onCloseSheet: () -> Unit, showMsg: (String) -> Unit
@@ -831,7 +1064,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
             isProcessing = true
             runCatching {
                 val saleId = RepositoriFirebaseUtama.simpanPenjualanRumahan(
-                    userAuthId = currentUserId(), metodePembayaranUi = metode, uangDiterima = uangDiterima, cartItems = items, products = productsCache,
+                    userAuthId = currentUserId(), metodePembayaranUi = metode, uangDiterima = uangDiterima, cartItems = items, products = productsCache, customerName = customerName,
                     paymentGateway = paymentGateway, paymentOrderId = paymentOrderId, paymentQrId = paymentQrId, paymentStatus = paymentStatus,
                     paymentSource = paymentSource, paymentReferenceId = paymentReferenceId, paymentPaidAt = paymentPaidAt, paymentAmount = paymentAmount
                 )
@@ -841,7 +1074,7 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                     SessionKeranjangRumahan.clear()
                     onCloseSheet()
                     showReceiptDialogAndReset(receipt)
-                }.onFailure { showMsg(it.message ?: "Transaksi tersimpan, tetapi struk gagal ditampilkan") }
+                }.onFailure { showMsg(it.message ?: "Transaksi tersimpan, tetapi nota gagal ditampilkan") }
             }.onFailure { showMsg(it.message ?: "Gagal menyimpan transaksi") }
             isProcessing = false
         }
@@ -901,8 +1134,12 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         return String.format(Locale.US, "%02d:%02d", minutes, seconds)
     }
 
+    private fun showPaymentSuccessAnimation(receipt: String) {
+        successReceiptPending = receipt
+    }
+
     private fun showReceiptDialogAndReset(receipt: String) {
-        showReceiptModal("Struk Transaksi", receipt) {
+        showReceiptModal("Nota Transaksi", receipt) {
             uiRefreshTrigger.value++
         }
     }

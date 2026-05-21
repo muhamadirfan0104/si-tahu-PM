@@ -39,13 +39,13 @@ class AktivitasMidtransPaymentWebView : AktivitasDasar() {
 
         bindToolbar(
             toolbar = binding.toolbar,
-            title = "Pembayaran Midtrans",
+            title = "Pembayaran Online",
             subtitle = if (orderId.isBlank()) null else orderId,
             showBack = true
         )
 
         if (paymentUrl.isBlank()) {
-            showMessage("Payment URL Midtrans kosong")
+            showMessage("Tautan pembayaran tidak tersedia")
             finish()
             return
         }
@@ -62,7 +62,7 @@ class AktivitasMidtransPaymentWebView : AktivitasDasar() {
             append("Total: ")
             append(Formatter.currency(total))
             if (orderId.isNotBlank()) append("\nOrder ID: ").append(orderId)
-            append("\nSetelah pelanggan membayar, tekan Cek Status Pembayaran.")
+            append("\nSetelah pelanggan membayar, tekan Cek Pembayaran.")
         }
     }
 
@@ -181,7 +181,7 @@ class AktivitasMidtransPaymentWebView : AktivitasDasar() {
     private fun konfirmasiKeluar() {
         showConfirmationModal(
             title = "Kembali ke checkout?",
-            message = "Pembayaran tidak otomatis disimpan. Setelah pelanggan selesai bayar, tekan Cek Status Pembayaran dari checkout.",
+            message = "Pembayaran tidak otomatis disimpan. Setelah pelanggan selesai bayar, tekan Cek Pembayaran dari checkout.",
             confirmLabel = "Kembali",
             onConfirm = { finish() }
         )

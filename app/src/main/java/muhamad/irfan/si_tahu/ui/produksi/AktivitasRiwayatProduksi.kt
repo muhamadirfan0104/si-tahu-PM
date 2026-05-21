@@ -10,7 +10,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -39,6 +38,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
@@ -50,6 +50,7 @@ import kotlinx.coroutines.launch
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
+import muhamad.irfan.si_tahu.util.DialogPilihBulanRiwayat
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.ItemBaris
 import muhamad.irfan.si_tahu.util.WarnaBaris
@@ -72,22 +73,16 @@ class AktivitasRiwayatProduksi : AktivitasDasar() {
                     onLoadDetail = { item ->
                         RepositoriFirebaseUtama.buildProductionDetailText(item.id)
                     },
-                    onDelete = { item, onSuccess ->
-                        showInputModal(
-                            "Batalkan ${item.badge.replace(" • Batal", "")}",
-                            "Alasan pembatalan",
-                            "Batalkan"
-                        ) { alasan ->
-                            lifecycleScope.launch {
-                                runCatching { RepositoriFirebaseUtama.batalkanCatatanProduksi(item.id, alasan, currentUserId()) }
-                                    .onSuccess {
-                                        showMessage("Data produksi berhasil dibatalkan")
-                                        onSuccess()
-                                    }
-                                    .onFailure {
-                                        showMessage(it.message ?: "Gagal membatalkan data")
-                                    }
-                            }
+                    onConfirmCancel = { item, alasan, onSuccess ->
+                        lifecycleScope.launch {
+                            runCatching { RepositoriFirebaseUtama.batalkanCatatanProduksi(item.id, alasan, currentUserId()) }
+                                .onSuccess {
+                                    showMessage("Data produksi berhasil dibatalkan")
+                                    onSuccess()
+                                }
+                                .onFailure {
+                                    showMessage(it.message ?: "Gagal membatalkan data")
+                                }
                         }
                     }
                 )
@@ -126,7 +121,7 @@ private fun Modifier.adminShimmerEffect(): Modifier = composed {
 private fun ProductionHistoryScreen(
     onNavigateBack: () -> Unit,
     onLoadDetail: suspend (ItemBaris) -> String,
-    onDelete: (ItemBaris, () -> Unit) -> Unit
+    onConfirmCancel: (ItemBaris, String, () -> Unit) -> Unit
 ) {
     // State Data
     var rows by remember { mutableStateOf<List<RiwayatProduksiUiRow>>(emptyList()) }
@@ -149,6 +144,9 @@ private fun ProductionHistoryScreen(
     var detailText by remember { mutableStateOf("") }
     var detailLoading by remember { mutableStateOf(false) }
 
+    // State Dialog Batalkan Riwayat
+    var itemToCancel by remember { mutableStateOf<ItemBaris?>(null) }
+
     fun bukaDetail(item: ItemBaris) {
         detailTitle = item.title
         detailBadge = item.badge
@@ -165,7 +163,7 @@ private fun ProductionHistoryScreen(
 
     // State Paginasi
     var halamanSaatIni by remember { mutableStateOf(1) }
-    val itemPerHalaman = 15
+    val itemPerHalaman = 10
 
     // Tema Warna
     val isDark = isSystemInDarkTheme()
@@ -178,6 +176,7 @@ private fun ProductionHistoryScreen(
 
     val dasarColor = if (isDark) Color(0xFF10B981) else Color(0xFF059669) // Hijau
     val olahanColor = if (isDark) Color(0xFF8B5CF6) else Color(0xFF6D28D9) // Ungu
+    val dangerColor = if (isDark) Color(0xFFEF4444) else Color(0xFFDC2626) // Merah
 
     // Fungsi Fetch Data
     LaunchedEffect(triggerRefresh) {
@@ -321,7 +320,7 @@ private fun ProductionHistoryScreen(
                                     .padding(12.dp)
                                     .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(Color.Red)
+                                    .background(dangerColor)
                             )
                         }
                     }
@@ -370,7 +369,7 @@ private fun ProductionHistoryScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Tidak ada riwayat ditemukan", "Coba ubah kata kunci atau hapus filter.")
+                    EmptyDataView("Belum ada riwayat yang sesuai", "Coba ubah kata kunci, filter, atau rentang tanggal.")
                 }
             } else {
                 LazyColumn(
@@ -393,8 +392,9 @@ private fun ProductionHistoryScreen(
                             borderColor = borderColor,
                             textColor = textColor,
                             mutedColor = mutedColor,
+                            dangerColor = dangerColor,
                             onClick = { bukaDetail(item) },
-                            onDelete = { onDelete(item) { triggerRefresh++ } }
+                            onCancelClick = { itemToCancel = item }
                         )
                     }
                 }
@@ -465,6 +465,26 @@ private fun ProductionHistoryScreen(
         )
     }
 
+    // === DIALOG KONFIRMASI PEMBATALAN (MODERN INPUT MODAL) ===
+    if (itemToCancel != null) {
+        ModernCancelInputDialog(
+            item = itemToCancel!!,
+            surfaceColor = surfaceColor,
+            textColor = textColor,
+            mutedColor = mutedColor,
+            borderColor = borderColor,
+            dangerColor = dangerColor,
+            bgColor = bgColor,
+            onDismiss = { itemToCancel = null },
+            onConfirm = { alasan ->
+                onConfirmCancel(itemToCancel!!, alasan) {
+                    triggerRefresh++
+                }
+                itemToCancel = null
+            }
+        )
+    }
+
     // === DIALOG FILTER MODERN (MOBILE OPTIMIZED SIMPLIFIED) ===
     if (showFilterDialog) {
         ModernMobileFilterDialog(
@@ -513,6 +533,81 @@ private fun ProductionHistoryScreen(
 }
 
 // === KOMPONEN UI TAMBAHAN & REUSABLE ===
+
+@Composable
+private fun ModernCancelInputDialog(
+    item: ItemBaris,
+    surfaceColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    borderColor: Color,
+    dangerColor: Color,
+    bgColor: Color,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var reasonText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = surfaceColor,
+        title = {
+            Text(
+                "Batalkan Produksi?",
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Riwayat ${item.title} akan dibatalkan dan memengaruhi stok. Silakan masukkan alasan pembatalan untuk pencatatan:",
+                    color = mutedColor,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                OutlinedTextField(
+                    value = reasonText,
+                    onValueChange = { reasonText = it },
+                    placeholder = { Text("Misal: Salah input jumlah", color = mutedColor) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = dangerColor,
+                        unfocusedBorderColor = borderColor,
+                        focusedContainerColor = bgColor,
+                        unfocusedContainerColor = bgColor,
+                        cursorColor = dangerColor
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(reasonText.trim()) },
+                enabled = reasonText.trim().isNotBlank(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = dangerColor,
+                    disabledContainerColor = dangerColor.copy(alpha = 0.5f)
+                )
+            ) {
+                Text("Batalkan Riwayat", fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal", color = mutedColor, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
 
 @Composable
 private fun HistoryRowSkeleton(surfaceColor: Color, borderColor: Color) {
@@ -602,6 +697,7 @@ private fun ModernMobileFilterDialog(
     var draftMulai by remember { mutableStateOf(initialRentangMulai.orEmpty()) }
     var draftSelesai by remember { mutableStateOf(initialRentangSelesai.orEmpty()) }
     var showDateRangePicker by remember { mutableStateOf(false) }
+    var showMonthPicker by remember { mutableStateOf(false) }
 
     fun formatDateToLocalId(dateStr: String): String {
         if (dateStr.isBlank()) return ""
@@ -671,6 +767,22 @@ private fun ModernMobileFilterDialog(
                     ) {
                         Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
                         Text(text = dateLabel, color = if (draftMulai.isNotBlank()) textColor else mutedColor, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clickable { showMonthPicker = true },
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
+                        Text("Pilih satu bulan penuh", color = textColor, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -851,6 +963,24 @@ private fun ModernMobileFilterDialog(
             }
         }
     }
+
+    if (showMonthPicker) {
+        DialogPilihBulanRiwayat(
+            initialDate = draftMulai.ifBlank { null },
+            primaryColor = primaryColor,
+            surfaceColor = surfaceColor,
+            bgColor = bgColor,
+            textColor = textColor,
+            mutedColor = mutedColor,
+            borderColor = borderColor,
+            onDismiss = { showMonthPicker = false },
+            onApply = { mulai, selesai, _ ->
+                draftMulai = mulai
+                draftSelesai = selesai
+                showMonthPicker = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -909,7 +1039,7 @@ private fun ProDetailDialog(
                     ) {
                         SelectionContainer {
                             Text(
-                                text = detailText.ifBlank { "Detail belum tersedia." },
+                                text = detailText.ifBlank { "Detail data belum tersedia." },
                                 color = textColor,
                                 fontFamily = FontFamily.Monospace,
                                 style = MaterialTheme.typography.bodySmall,
@@ -974,8 +1104,9 @@ private fun ProductionHistoryCard(
     borderColor: Color,
     textColor: Color,
     mutedColor: Color,
+    dangerColor: Color,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onCancelClick: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val isBatal = item.badge.contains("Batal", true) || item.amount.equals("BATAL", true)
@@ -1042,8 +1173,8 @@ private fun ProductionHistoryCard(
                     )
                     if (!isBatal) {
                         DropdownMenuItem(
-                            text = { Text("Batalkan Riwayat", color = Color.Red, fontWeight = FontWeight.SemiBold) },
-                            onClick = { showMenu = false; onDelete() }
+                            text = { Text("Batalkan Riwayat", color = dangerColor, fontWeight = FontWeight.SemiBold) },
+                            onClick = { showMenu = false; onCancelClick() }
                         )
                     }
                 }

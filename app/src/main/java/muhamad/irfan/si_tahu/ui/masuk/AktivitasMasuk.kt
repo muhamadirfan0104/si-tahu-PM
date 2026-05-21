@@ -137,9 +137,9 @@ class AktivitasMasuk : AktivitasDasar() {
                 updateLoadingState(false) // PERBAIKAN: Menggunakan nama fungsi baru
 
                 val message = when (e) {
-                    is FirebaseAuthInvalidUserException -> "Email belum terdaftar di Firebase Auth."
+                    is FirebaseAuthInvalidUserException -> "Email belum terdaftar sebagai pengguna aplikasi."
                     is FirebaseAuthInvalidCredentialsException -> "Password salah atau format email tidak valid."
-                    is FirebaseNetworkException -> "Koneksi internet ke Firebase bermasalah."
+                    is FirebaseNetworkException -> "Koneksi ke server sedang bermasalah. Periksa internet lalu coba lagi."
                     else -> "Login gagal: ${e.message}"
                 }
 
@@ -278,13 +278,13 @@ class AktivitasMasuk : AktivitasDasar() {
     }
 
     private fun openHome(profile: ProfilPenggunaFirebase) {
-        val mode = profile.modeAplikasi.trim().uppercase()
+        val mode = profile.peranAsli.trim().ifBlank { profile.modeAplikasi.trim() }.uppercase()
 
         val targetIntent = when (mode) {
             "ADMIN" -> Intent(this, AktivitasUtamaAdmin::class.java)
             "KASIR" -> Intent(this, AktivitasUtamaKasir::class.java)
             else -> {
-                showMessage("modeAplikasi tidak dikenali: '$mode'")
+                showMessage("Hak akses akun tidak dikenali: '$mode'")
                 return
             }
         }

@@ -395,7 +395,7 @@ private fun ProductFormScreen(
                             }
                             Column {
                                 Text("Aturan Stok & ED", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                                Text("Batas minimum dan kadaluarsa", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                                Text("Batas minimum dan kedaluwarsa", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                             }
                         }
 
@@ -439,7 +439,7 @@ private fun ProductFormScreen(
                         Surface(shape = RoundedCornerShape(16.dp), color = primaryColor.copy(alpha = 0.08f), modifier = Modifier.fillMaxWidth()) {
                             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Icon(Icons.Rounded.Info, null, tint = primaryColor, modifier = Modifier.size(20.dp).padding(top = 2.dp))
-                                Text("Barang otomatis berstatus 'Hampir Kadaluarsa' ketika sisa hari mencapai angka warning di atas.", color = primaryColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2)
+                                Text("Barang otomatis berstatus 'Hampir Kedaluwarsa' ketika sisa hari mencapai angka warning di atas.", color = primaryColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2)
                             }
                         }
                     }

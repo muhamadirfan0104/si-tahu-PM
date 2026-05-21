@@ -209,7 +209,7 @@ private fun StockMonitoringScreen(
                     title = {
                         Column {
                             Text("Monitoring Stok", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Fisik, jual, dan kadaluarsa", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Fisik, jual, dan kedaluwarsa", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -552,10 +552,10 @@ private fun StockCard(
                         Text("ED Hari Ini: ${Formatter.ribuan(produk.edTodayStock.toLong())} ${produk.unit}", color = warningColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     }
                     if (produk.nearExpiredStock > 0) {
-                        Text("Hampir ED: ${Formatter.ribuan(produk.nearExpiredStock.toLong())} ${produk.unit}", color = warningColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text("Hampir Kedaluwarsa: ${Formatter.ribuan(produk.nearExpiredStock.toLong())} ${produk.unit}", color = warningColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     }
                     if (produk.expiredStock > 0) {
-                        Text("Kadaluarsa: ${Formatter.ribuan(produk.expiredStock.toLong())} ${produk.unit}", color = dangerColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text("Kedaluwarsa: ${Formatter.ribuan(produk.expiredStock.toLong())} ${produk.unit}", color = dangerColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     }
                 }
 

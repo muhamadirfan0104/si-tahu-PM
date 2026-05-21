@@ -3,6 +3,12 @@ package muhamad.irfan.si_tahu.ui.pengaturan
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -15,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Business
+import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.ReceiptLong
@@ -24,12 +31,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
@@ -52,6 +64,20 @@ class AktivitasPengaturanUsaha : AktivitasDasar() {
             }
         }
     }
+}
+
+// Extension untuk animasi Shimmer / Skeleton
+private fun Modifier.adminShimmerEffect(): Modifier = composed {
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val startOffsetX by transition.animateFloat(
+        initialValue = -2 * size.width.toFloat(), targetValue = 2 * size.width.toFloat(),
+        animationSpec = infiniteRepeatable(animation = tween(1200, easing = LinearEasing), repeatMode = RepeatMode.Restart), label = "shimmer_offsetX"
+    )
+    val isDark = isSystemInDarkTheme()
+    val baseColor = if (isDark) Color(0xFF374151) else Color(0xFFE5E7EB)
+    val highlightColor = if (isDark) Color(0xFF4B5563) else Color(0xFFF3F4F6)
+    background(brush = Brush.linearGradient(colors = listOf(baseColor, highlightColor, baseColor), start = Offset(startOffsetX, 0f), end = Offset(startOffsetX + size.width.toFloat(), size.height.toFloat()))).onGloballyPositioned { size = it.size }
 }
 
 // === KOMPONEN UTAMA UI ===
@@ -152,39 +178,48 @@ private fun BusinessSettingsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Pengaturan Usaha", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                        Text("Kelola identitas usaha", style = MaterialTheme.typography.labelMedium, color = mutedColor)
-                    }
-                },
-                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = bgColor)
-            )
-        },
-        bottomBar = {
             Surface(
                 color = surfaceColor,
-                shadowElevation = 24.dp,
-                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                shadowElevation = if (isDark) 0.dp else 4.dp,
+                border = if (isDark) BorderStroke(1.dp, borderColor) else null
             ) {
-                Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
-                    Button(
-                        onClick = { saveBusinessSettings() },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        enabled = !isSaving && !isLoading,
-                        colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
-                    ) {
-                        if (isSaving) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(12.dp))
-                            Text("Menyimpan...", fontWeight = FontWeight.Bold, color = Color.White)
-                        } else {
-                            Icon(Icons.Rounded.Save, null, tint = Color.White)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Simpan Pengaturan", fontWeight = FontWeight.Bold, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text("Pengaturan Usaha", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
+                            Text("Kelola identitas usaha", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                        }
+                    },
+                    navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                )
+            }
+        },
+        bottomBar = {
+            if (!isLoading) {
+                Surface(
+                    color = surfaceColor,
+                    shadowElevation = 16.dp,
+                    border = BorderStroke(1.dp, borderColor),
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                ) {
+                    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(20.dp)) {
+                        Button(
+                            onClick = { saveBusinessSettings() },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            enabled = !isSaving,
+                            colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                        ) {
+                            if (isSaving) {
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Text("Menyimpan...", fontWeight = FontWeight.Bold, color = Color.White)
+                            } else {
+                                Icon(Icons.Rounded.Save, null, tint = Color.White)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Simpan Pengaturan", fontWeight = FontWeight.Bold, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                            }
                         }
                     }
                 }
@@ -193,26 +228,48 @@ private fun BusinessSettingsScreen(
         containerColor = bgColor
     ) { paddingValues ->
         if (isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = primaryColor) }
+            // Tampilan Loading Skeleton
+            Column(
+                modifier = Modifier.fillMaxSize().padding(paddingValues).padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(Modifier.fillMaxWidth().height(100.dp).clip(RoundedCornerShape(20.dp)).adminShimmerEffect())
+                repeat(2) {
+                    Card(
+                        shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                        border = BorderStroke(1.dp, borderColor), modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Box(Modifier.size(40.dp).clip(CircleShape).adminShimmerEffect())
+                                Box(Modifier.height(20.dp).fillMaxWidth(0.5f).clip(RoundedCornerShape(4.dp)).adminShimmerEffect())
+                            }
+                            HorizontalDivider(color = borderColor)
+                            Box(Modifier.height(56.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).adminShimmerEffect())
+                            Box(Modifier.height(56.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).adminShimmerEffect())
+                        }
+                    }
+                }
+            }
         } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
 
                 // === KARTU LIVE PREVIEW ===
                 Card(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(containerColor = primaryColor),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(20.dp),
+                        modifier = Modifier.padding(24.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
@@ -241,7 +298,7 @@ private fun BusinessSettingsScreen(
                                 style = MaterialTheme.typography.titleLarge
                             )
                             Text(
-                                text = if (alamat.isNotBlank()) alamat else "Alamat usaha",
+                                text = if (alamat.isNotBlank()) alamat else "Alamat usaha belum diatur",
                                 color = Color.White.copy(alpha = 0.8f),
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(top = 4.dp)
@@ -258,43 +315,59 @@ private fun BusinessSettingsScreen(
                     border = BorderStroke(1.dp, borderColor)
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Rounded.Storefront, null, tint = primaryColor, modifier = Modifier.size(20.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.size(40.dp).clip(CircleShape).background(primaryColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Rounded.Storefront, null, tint = primaryColor, modifier = Modifier.size(20.dp))
+                            }
                             Text("Identitas Utama", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
                         }
+
+                        HorizontalDivider(color = borderColor)
 
                         OutlinedTextField(
                             value = namaUsaha,
                             onValueChange = { namaUsaha = it },
-                            label = { Text("Nama Usaha") },
+                            label = { Text("Nama Usaha", color = mutedColor) },
                             placeholder = { Text("Misal: Tahu Maju Jaya") },
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor,
+                                focusedContainerColor = bgColor, unfocusedContainerColor = bgColor
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        OutlinedTextField(
-                            value = logoText,
-                            onValueChange = { if (it.length <= 8) logoText = it },
-                            label = { Text("Teks Logo (Singkatan)") },
-                            placeholder = { Text("Maks. 8 huruf") },
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = logoText,
+                                onValueChange = { if (it.length <= 8) logoText = it },
+                                label = { Text("Teks Logo", color = mutedColor) },
+                                placeholder = { Text("Maks 8") },
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Next),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor,
+                                    focusedContainerColor = bgColor, unfocusedContainerColor = bgColor
+                                ),
+                                modifier = Modifier.weight(0.4f)
+                            )
 
-                        OutlinedTextField(
-                            value = nomorTelepon,
-                            onValueChange = { nomorTelepon = it.filter { char -> char.isDigit() || char == '+' } },
-                            label = { Text("Nomor Telepon") },
-                            placeholder = { Text("0812xxxxxx") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                            OutlinedTextField(
+                                value = nomorTelepon,
+                                onValueChange = { nomorTelepon = it.filter { char -> char.isDigit() || char == '+' } },
+                                label = { Text("Nomor Telepon", color = mutedColor) },
+                                placeholder = { Text("0812xxxxxx") },
+                                leadingIcon = { Icon(Icons.Rounded.Call, null, tint = mutedColor) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor,
+                                    focusedContainerColor = bgColor, unfocusedContainerColor = bgColor
+                                ),
+                                modifier = Modifier.weight(0.6f)
+                            )
+                        }
                     }
                 }
 
@@ -306,31 +379,42 @@ private fun BusinessSettingsScreen(
                     border = BorderStroke(1.dp, borderColor)
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Rounded.LocationOn, null, tint = primaryColor, modifier = Modifier.size(20.dp))
-                            Text("Lokasi & Struk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.size(40.dp).clip(CircleShape).background(primaryColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Rounded.LocationOn, null, tint = primaryColor, modifier = Modifier.size(20.dp))
+                            }
+                            Text("Lokasi & Nota", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
                         }
+
+                        HorizontalDivider(color = borderColor)
 
                         OutlinedTextField(
                             value = alamat,
                             onValueChange = { alamat = it },
-                            label = { Text("Alamat Lengkap") },
+                            label = { Text("Alamat Lengkap", color = mutedColor) },
                             placeholder = { Text("Jalan, RT/RW, Kota...") },
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
-                            modifier = Modifier.fillMaxWidth().height(100.dp)
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
+                            shape = RoundedCornerShape(14.dp),
+                            minLines = 3,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor,
+                                focusedContainerColor = bgColor, unfocusedContainerColor = bgColor
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         )
 
                         OutlinedTextField(
                             value = footerStruk,
                             onValueChange = { footerStruk = it },
-                            label = { Text("Pesan Penutup Struk (Footer)") },
+                            label = { Text("Pesan Penutup Nota (Footer)", color = mutedColor) },
                             placeholder = { Text("Misal: Terima kasih telah berbelanja.") },
                             leadingIcon = { Icon(Icons.Rounded.ReceiptLong, null, tint = mutedColor) },
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor,
+                                focusedContainerColor = bgColor, unfocusedContainerColor = bgColor
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -344,20 +428,27 @@ private fun BusinessSettingsScreen(
                     border = BorderStroke(1.dp, borderColor)
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Rounded.Business, null, tint = primaryColor, modifier = Modifier.size(20.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(Modifier.size(40.dp).clip(CircleShape).background(primaryColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Rounded.Business, null, tint = primaryColor, modifier = Modifier.size(20.dp))
+                            }
                             Text("Informasi Tambahan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
                         }
+
+                        HorizontalDivider(color = borderColor)
 
                         OutlinedTextField(
                             value = catatanUsaha,
                             onValueChange = { catatanUsaha = it },
-                            label = { Text("Nama Pemilik / Catatan Internal") },
+                            label = { Text("Nama Pemilik / Catatan Internal", color = mutedColor) },
                             placeholder = { Text("Info tambahan tentang usaha") },
                             leadingIcon = { Icon(Icons.Rounded.Info, null, tint = mutedColor) },
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor,
+                                focusedContainerColor = bgColor, unfocusedContainerColor = bgColor
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

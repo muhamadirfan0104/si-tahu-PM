@@ -32,7 +32,7 @@
                 android:id="@+id/tvPaymentTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Pembayaran Midtrans"
+                android:text="Pembayaran Online"
                 android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
                 android:textColor="@color/text_primary" />
 
@@ -42,7 +42,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:lineSpacingExtra="2dp"
-                android:text="Selesaikan pembayaran di halaman ini. Setelah berhasil, tekan Cek Status agar transaksi tersimpan."
+                android:text="Selesaikan pembayaran di halaman ini. Setelah berhasil, tekan Cek Pembayaran agar transaksi tersimpan."
                 android:textAppearance="@style/TextAppearance.Material3.BodySmall"
                 android:textColor="@color/text_secondary" />
         </LinearLayout>
@@ -78,7 +78,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:minHeight="50dp"
-            android:text="Cek Status Pembayaran" />
+            android:text="Cek Pembayaran" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnBackCheckout"
@@ -87,7 +87,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:minHeight="48dp"
-            android:text="Kembali ke Checkout" />
+            android:text="Kembali ke Pembayaran" />
     </LinearLayout>
 
 </LinearLayout>
