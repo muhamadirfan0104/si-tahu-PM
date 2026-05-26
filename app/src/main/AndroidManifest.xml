@@ -4,7 +4,9 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -24,8 +26,6 @@
         <activity android:name=".ui.pengeluaran.AktivitasFormPengeluaran" />
         <activity android:name=".ui.pengeluaran.AktivitasDaftarPengeluaran" />
         <activity android:name=".ui.laporan.AktivitasLaporan" />
-        <activity android:name=".ui.laporan.AktivitasExportLaporan" />
-        <activity android:name=".ui.laporan.AktivitasStatistikLaporan" />
         <activity android:name=".ui.laporan.AktivitasRiwayatTransaksi" />
         <activity android:name=".ui.penjualan.AktivitasRiwayatPenjualan" />
         <activity android:name=".ui.penjualan.AktivitasRekapPasar" />
@@ -48,7 +48,6 @@
         <activity android:name=".ui.produksi.AktivitasProduksiTahuDasar" />
         <activity android:name=".ui.produksi.AktivitasKonversiProduk" />
         <activity android:name=".ui.penjualan.AktivitasPenjualanRumahan" />
-        <activity android:name=".ui.penjualan.AktivitasCheckoutRumahan" />
 
         <activity
             android:name=".ui.masuk.AktivitasMasuk"

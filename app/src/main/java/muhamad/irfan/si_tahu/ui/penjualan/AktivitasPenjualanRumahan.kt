@@ -55,6 +55,7 @@ import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.data.SessionKeranjangRumahan
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
+import muhamad.irfan.si_tahu.ui.utama.shimmerEffect
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.InputAngka
 import muhamad.irfan.si_tahu.util.PembuatQrBitmap
@@ -81,6 +82,9 @@ data class XenditStatus(
 
 class AktivitasPenjualanRumahan : AktivitasDasar() {
 
+    private val xenditTestMode: Boolean
+        get() = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
     companion object {
         const val MODE_ALL = "Semua Stok"
         const val MODE_READY = "Siap Dijual"
@@ -94,7 +98,6 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
         const val STATUS_EMPTY = "Habis"
 
         private const val XENDIT_API_BASE = "https://xendit-sitahu-api.vercel.app"
-        private const val XENDIT_TEST_MODE = true
         private const val QRIS_EXPIRE_MS = 15 * 60 * 1000L
     }
 
@@ -373,7 +376,13 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
 
                     // KONTEN GRID PRODUK
                     if (isLoading) {
-                        Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = primaryColor) }
+                        CatalogLoadingState(
+                            surfaceColor = surfaceColor,
+                            borderColor = borderColor,
+                            textColor = textColor,
+                            mutedColor = mutedColor,
+                            primaryColor = primaryColor
+                        )
                     } else if (pagedProducts.isEmpty()) {
                         Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -426,6 +435,76 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ColumnScope.CatalogLoadingState(
+        surfaceColor: Color,
+        borderColor: Color,
+        textColor: Color,
+        mutedColor: Color,
+        primaryColor: Color
+    ) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 130.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item(span = { GridItemSpan(2) }) {
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = surfaceColor),
+                    border = BorderStroke(1.dp, borderColor),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            Modifier.size(46.dp).clip(CircleShape).background(primaryColor.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = primaryColor, modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("Memuat katalog produk", fontWeight = FontWeight.Black, color = textColor, style = MaterialTheme.typography.titleMedium)
+                            Text("Menyiapkan stok dan harga kasir terbaru...", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+
+            repeat(6) {
+                item {
+                    ProductCatalogSkeletonCard(surfaceColor = surfaceColor, borderColor = borderColor)
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ProductCatalogSkeletonCard(surfaceColor: Color, borderColor: Color) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = surfaceColor),
+            border = BorderStroke(1.dp, borderColor),
+            modifier = Modifier.fillMaxWidth().height(190.dp)
+        ) {
+            Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.fillMaxWidth().height(74.dp).clip(RoundedCornerShape(16.dp)).shimmerEffect())
+                Box(Modifier.height(18.dp).fillMaxWidth(0.72f).clip(RoundedCornerShape(5.dp)).shimmerEffect())
+                Box(Modifier.height(14.dp).fillMaxWidth(0.52f).clip(RoundedCornerShape(5.dp)).shimmerEffect())
+                Spacer(Modifier.weight(1f))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.height(22.dp).width(78.dp).clip(RoundedCornerShape(8.dp)).shimmerEffect())
+                    Box(Modifier.size(38.dp).clip(CircleShape).shimmerEffect())
                 }
             }
         }
@@ -826,35 +905,48 @@ class AktivitasPenjualanRumahan : AktivitasDasar() {
                 }
             }
             Text(
-                "Gunakan tab ini setelah pelanggan menyelesaikan pembayaran QRIS. Tombol Bayar akan memproses konfirmasi pembayaran.",
+                "Gunakan tab ini setelah pelanggan menyelesaikan pembayaran QRIS. Pada mode rilis, gunakan tombol Cek Status setelah pelanggan membayar QRIS melalui aplikasi pembayaran.",
                 textAlign = TextAlign.Center,
                 color = mutedColor,
                 style = MaterialTheme.typography.bodySmall
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(
-                    onClick = onPay,
-                    enabled = XENDIT_TEST_MODE && !isProcessing,
-                    modifier = Modifier.weight(1f).height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = successColor, disabledContainerColor = borderColor, disabledContentColor = mutedColor)
-                ) {
-                    if (isProcessing) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Rounded.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Bayar", fontWeight = FontWeight.Bold)
+            if (xenditTestMode) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = onPay,
+                        enabled = !isProcessing,
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = successColor, disabledContainerColor = borderColor, disabledContentColor = mutedColor)
+                    ) {
+                        if (isProcessing) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Rounded.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Simulasi Bayar", fontWeight = FontWeight.Bold)
+                        }
                     }
+                    OutlinedButton(
+                        onClick = onCheck,
+                        enabled = !isProcessing,
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, primaryColor),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = primaryColor)
+                    ) { Text("Cek Status", fontWeight = FontWeight.Bold) }
                 }
-                OutlinedButton(
+            } else {
+                Button(
                     onClick = onCheck,
                     enabled = !isProcessing,
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, primaryColor),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = primaryColor)
-                ) { Text("Cek Status", fontWeight = FontWeight.Bold) }
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor, contentColor = Color.White)
+                ) {
+                    if (isProcessing) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text("Cek Status Pembayaran", fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

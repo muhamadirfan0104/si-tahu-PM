@@ -1,5 +1,9 @@
-function setCors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+function setCors(req, res) {
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
+  const requestOrigin = req.headers.origin || "";
+  const origin = allowedOrigin === "*" ? "*" : allowedOrigin.split(",").map((v) => v.trim()).includes(requestOrigin) ? requestOrigin : allowedOrigin.split(",")[0].trim();
+  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
@@ -21,7 +25,7 @@ function midtransAuthHeader() {
 }
 
 export default async function handler(req, res) {
-  setCors(res);
+  setCors(req, res);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
