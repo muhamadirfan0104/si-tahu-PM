@@ -47,6 +47,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
+import muhamad.irfan.si_tahu.utilitas.PengaturanUsahaCache
 
 class AktivitasPengaturanUsaha : AktivitasDasar() {
 
@@ -123,6 +124,20 @@ private fun BusinessSettingsScreen(
                     logoText = doc.getString("teksLogo").orEmpty().ifBlank { doc.getString("logoText").orEmpty() }
                     footerStruk = doc.getString("footerStruk").orEmpty()
                     catatanUsaha = doc.getString("namaPemilik").orEmpty().ifBlank { doc.getString("catatanUsaha").orEmpty() }
+                    if (logoText.isBlank() && namaUsaha.isNotBlank()) {
+                        logoText = PengaturanUsahaCache.buatTeksLogoDariNama(namaUsaha)
+                    }
+                    if (namaUsaha.isNotBlank()) {
+                        PengaturanUsahaCache.simpan(
+                            context = activityContext,
+                            namaUsaha = namaUsaha,
+                            teksLogo = logoText,
+                            alamat = alamat,
+                            nomorTelepon = nomorTelepon,
+                            footerStruk = footerStruk,
+                            namaPemilik = catatanUsaha
+                        )
+                    }
                 }
                 isLoading = false
             }
@@ -154,12 +169,17 @@ private fun BusinessSettingsScreen(
         isSaving = true
 
         val now = Timestamp.now()
+        val logoFinal = logoBersih.ifBlank { PengaturanUsahaCache.buatTeksLogoDariNama(namaBersih) }
         val data = hashMapOf<String, Any>(
             "namaTampilanToko" to namaBersih,
+            "namaUsaha" to namaBersih,
             "namaPemilik" to catatanUsaha.trim(),
+            "catatanUsaha" to catatanUsaha.trim(),
             "alamatToko" to alamatBersih,
+            "alamat" to alamatBersih,
             "nomorTelepon" to nomorTelepon.trim(),
-            "teksLogo" to logoBersih,
+            "teksLogo" to logoFinal,
+            "logoText" to logoFinal,
             "footerStruk" to footerStruk.trim(),
             "aktif" to true,
             "diperbaruiPada" to now
@@ -167,8 +187,18 @@ private fun BusinessSettingsScreen(
 
         docRef.set(data)
             .addOnSuccessListener {
+                PengaturanUsahaCache.simpan(
+                    context = activityContext,
+                    namaUsaha = namaBersih,
+                    teksLogo = logoFinal,
+                    alamat = alamatBersih,
+                    nomorTelepon = nomorTelepon,
+                    footerStruk = footerStruk,
+                    namaPemilik = catatanUsaha
+                )
+                logoText = logoFinal
                 isSaving = false
-                onShowMessage("Pengaturan usaha berhasil disimpan.")
+                onShowMessage("Pengaturan usaha berhasil disimpan dan akan tampil di halaman login.")
             }
             .addOnFailureListener { e ->
                 isSaving = false

@@ -10,6 +10,7 @@ import androidx.core.view.WindowCompat
 import com.google.firebase.auth.FirebaseAuth
 import muhamad.irfan.si_tahu.databinding.ComposeToolbarState
 import muhamad.irfan.si_tahu.ui.masuk.AktivitasMasuk
+import muhamad.irfan.si_tahu.utilitas.TemaAplikasi
 import muhamad.irfan.si_tahu.util.PembantuCetak
 import muhamad.irfan.si_tahu.util.PembantuModal
 import java.io.File
@@ -17,7 +18,7 @@ import java.io.File
 open class AktivitasDasar : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // KITA HAPUS setDefaultNightMode AGAR APLIKASI BISA MENGIKUTI HP
+        TemaAplikasi.terapkanModeTersimpan(this)
         super.onCreate(savedInstanceState)
 
         // Membiarkan konten aplikasi digambar hingga ke ujung layar (edge-to-edge)

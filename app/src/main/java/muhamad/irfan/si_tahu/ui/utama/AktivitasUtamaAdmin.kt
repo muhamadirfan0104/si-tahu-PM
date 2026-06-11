@@ -79,6 +79,7 @@ import muhamad.irfan.si_tahu.ui.stok.AktivitasRiwayatSemuaStok
 import muhamad.irfan.si_tahu.ui.stok.AktivitasStockAdjustment
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.PembantuCetak
+import muhamad.irfan.si_tahu.utilitas.TemaAplikasi
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -763,6 +764,9 @@ private fun StockDashboardItemRow(item: RepositoriFirebaseUtama.BarisStokDashboa
 @Composable
 private fun AdminMenuPage(onLogout: () -> Unit, onSwitchCashier: () -> Unit) {
     val context = LocalContext.current
+    var modeTema by remember { mutableStateOf(TemaAplikasi.bacaMode(context)) }
+    var tampilkanDialogTema by remember { mutableStateOf(false) }
+
     MenuSection("Data Master") {
         MenuItemRow(Icons.Rounded.Category, "Daftar Produk") { context.startActivity(Intent(context, AktivitasDaftarProduk::class.java)) }
         MenuItemRow(Icons.Rounded.MonetizationOn, "Harga Jual") { context.startActivity(Intent(context, AktivitasDaftarHarga::class.java)) }
@@ -775,6 +779,13 @@ private fun AdminMenuPage(onLogout: () -> Unit, onSwitchCashier: () -> Unit) {
         MenuItemRow(Icons.Rounded.PieChart, "Pusat Laporan", isLast = true) { context.startActivity(Intent(context, AktivitasLaporan::class.java)) }
     }
     Spacer(Modifier.height(24.dp))
+    MenuSection("Tampilan Aplikasi") {
+        MenuItemRow(Icons.Rounded.Settings, "Tema Tampilan: ${TemaAplikasi.label(modeTema)}", isLast = true) {
+            modeTema = TemaAplikasi.bacaMode(context)
+            tampilkanDialogTema = true
+        }
+    }
+    Spacer(Modifier.height(24.dp))
     MenuSection("Akun & Keamanan") {
         MenuItemRow(Icons.Rounded.Group, "Daftar Pengguna") { context.startActivity(Intent(context, AktivitasDaftarPengguna::class.java)) }
         MenuItemRow(Icons.Rounded.Settings, "Pengaturan Usaha", isLast = true) { context.startActivity(Intent(context, AktivitasPengaturanUsaha::class.java)) }
@@ -784,6 +795,79 @@ private fun AdminMenuPage(onLogout: () -> Unit, onSwitchCashier: () -> Unit) {
     Spacer(Modifier.height(12.dp))
     ActionButton("Keluar Akun", ProTheme.danger, isDestructive = true, onClick = onLogout)
     Spacer(Modifier.height(32.dp))
+
+    if (tampilkanDialogTema) {
+        DialogTemaTampilan(
+            modeAktif = modeTema,
+            onDismiss = { tampilkanDialogTema = false },
+            onPilih = { mode ->
+                modeTema = mode
+                TemaAplikasi.simpanDanTerapkan(context, mode)
+                tampilkanDialogTema = false
+                Toast.makeText(context, "Tema ${TemaAplikasi.label(mode)} diterapkan", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+}
+
+
+@Composable
+private fun DialogTemaTampilan(
+    modeAktif: String,
+    onDismiss: () -> Unit,
+    onPilih: (String) -> Unit
+) {
+    val pilihanTema = listOf(
+        TemaAplikasi.MODE_LIGHT to "Terang",
+        TemaAplikasi.MODE_DARK to "Gelap",
+        TemaAplikasi.MODE_SYSTEM to "Ikuti Sistem"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = ProTheme.surface,
+        titleContentColor = ProTheme.text,
+        textContentColor = ProTheme.text,
+        shape = RoundedCornerShape(24.dp),
+        title = { Text("Tema Tampilan", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Text("Pilih tampilan aplikasi dari menu utama.", color = ProTheme.muted, style = MaterialTheme.typography.bodySmall)
+                pilihanTema.forEach { (mode, label) ->
+                    val selected = mode == modeAktif
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (selected) ProTheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+                        border = BorderStroke(1.dp, if (selected) ProTheme.primary else ProTheme.border),
+                        modifier = Modifier.fillMaxWidth().clickable { onPilih(mode) }
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                when (mode) {
+                                    TemaAplikasi.MODE_LIGHT -> Icons.Rounded.LightMode
+                                    TemaAplikasi.MODE_DARK -> Icons.Rounded.DarkMode
+                                    else -> Icons.Rounded.Settings
+                                },
+                                contentDescription = null,
+                                tint = if (selected) ProTheme.primary else ProTheme.muted,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(label, color = if (selected) ProTheme.primary else ProTheme.text, fontWeight = FontWeight.Bold)
+                                Text(TemaAplikasi.deskripsi(mode), color = ProTheme.muted, style = MaterialTheme.typography.labelSmall)
+                            }
+                            if (selected) Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = ProTheme.primary, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup", color = ProTheme.muted) } }
+    )
 }
 
 @Composable

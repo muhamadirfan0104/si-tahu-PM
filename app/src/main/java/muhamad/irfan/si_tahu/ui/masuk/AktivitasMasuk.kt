@@ -42,6 +42,7 @@ import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.utama.AktivitasUtamaAdmin
 import muhamad.irfan.si_tahu.ui.utama.AktivitasUtamaKasir
 import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
+import muhamad.irfan.si_tahu.utilitas.PengaturanUsahaCache
 
 class AktivitasMasuk : AktivitasDasar() {
 
@@ -83,20 +84,47 @@ class AktivitasMasuk : AktivitasDasar() {
     }
 
     private fun applyDefaultBusinessIdentity() {
-        logoTextState = "TAHU"
-        businessNameState = "Nama Usaha"
+        val cached = PengaturanUsahaCache.baca(this)
+        val namaUsaha = cached.namaUsaha.ifBlank { "SI Tahu" }
+        logoTextState = cached.teksLogo.ifBlank { PengaturanUsahaCache.buatTeksLogoDariNama(namaUsaha) }.uppercase()
+        businessNameState = namaUsaha
     }
 
     private fun loadBusinessIdentity() {
+        applyDefaultBusinessIdentity()
+
         firestore.collection("Pengaturan")
             .document("umum")
             .get()
             .addOnSuccessListener { doc ->
-                val logoText = doc.getString("teksLogo").orEmpty().ifBlank { doc.getString("logoText").orEmpty() }.trim()
-                val namaUsaha = doc.getString("namaTampilanToko").orEmpty().ifBlank { doc.getString("namaUsaha").orEmpty() }.trim()
+                val logoText = doc.getString("teksLogo").orEmpty()
+                    .ifBlank { doc.getString("logoText").orEmpty() }
+                    .trim()
+                val namaUsaha = doc.getString("namaTampilanToko").orEmpty()
+                    .ifBlank { doc.getString("namaUsaha").orEmpty() }
+                    .trim()
+                val alamat = doc.getString("alamatToko").orEmpty()
+                    .ifBlank { doc.getString("alamat").orEmpty() }
+                    .trim()
+                val nomorTelepon = doc.getString("nomorTelepon").orEmpty().trim()
+                val footerStruk = doc.getString("footerStruk").orEmpty().trim()
+                val namaPemilik = doc.getString("namaPemilik").orEmpty()
+                    .ifBlank { doc.getString("catatanUsaha").orEmpty() }
+                    .trim()
 
-                logoTextState = if (logoText.isBlank()) "TAHU" else logoText.uppercase()
-                businessNameState = if (namaUsaha.isBlank()) "Nama Usaha" else namaUsaha
+                if (namaUsaha.isNotBlank()) {
+                    PengaturanUsahaCache.simpan(
+                        context = this,
+                        namaUsaha = namaUsaha,
+                        teksLogo = logoText,
+                        alamat = alamat,
+                        nomorTelepon = nomorTelepon,
+                        footerStruk = footerStruk,
+                        namaPemilik = namaPemilik
+                    )
+                    logoTextState = logoText.ifBlank { PengaturanUsahaCache.buatTeksLogoDariNama(namaUsaha) }.uppercase()
+                    businessNameState = namaUsaha
+                }
             }
             .addOnFailureListener {
                 applyDefaultBusinessIdentity()
@@ -352,14 +380,14 @@ private fun LoginScreen(
             Spacer(Modifier.height(24.dp))
 
             Text(
-                text = "Masuk ke Si Tahu.",
+                text = businessName.ifBlank { "SI Tahu" },
                 fontWeight = FontWeight.Black,
                 color = textColor,
                 style = MaterialTheme.typography.headlineMedium,
                 textAlign = TextAlign.Center
             )
             Text(
-                text = businessName,
+                text = "Masuk ke aplikasi Si Tahu",
                 color = mutedColor,
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 8.dp)

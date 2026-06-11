@@ -54,6 +54,7 @@ import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
 import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
 import muhamad.irfan.si_tahu.util.Formatter
+import muhamad.irfan.si_tahu.utilitas.PengaturanUsahaCache
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -79,6 +80,8 @@ class AktivitasLaporan : AktivitasDasar() {
                     onExportBukuHarianPdf = { range, cb -> exportBukuHarianPdf(range, cb) },
                     onExportStokExcel = { range, cb -> exportStokExcel(range, cb) },
                     onExportStokPdf = { range, cb -> exportStokPdf(range, cb) },
+                    onExportMutasiExcel = { rangeLabel, rangeKey, jenisFilter, rows, saldoAwal, cb -> exportMutasiExcel(rangeLabel, rangeKey, jenisFilter, rows, saldoAwal, cb) },
+                    onExportMutasiPdf = { rangeLabel, rangeKey, jenisFilter, rows, saldoAwal, cb -> exportMutasiPdf(rangeLabel, rangeKey, jenisFilter, rows, saldoAwal, cb) },
                     activityContext = this@AktivitasLaporan
                 )
             }
@@ -92,9 +95,68 @@ class AktivitasLaporan : AktivitasDasar() {
         return text.lineSequence().firstOrNull { it.startsWith(prefix) }?.substringAfter("=")?.trim().orEmpty()
     }
 
+    private fun tanggalSekarangFile(): String = Formatter.currentDateOnly()
+
+    private fun tambahHariTanggalFile(tanggal: String, jumlahHari: Int): String {
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        return runCatching {
+            val cal = Calendar.getInstance().apply {
+                time = formatter.parse(tanggal) ?: Date()
+                add(Calendar.DAY_OF_MONTH, jumlahHari)
+            }
+            formatter.format(cal.time)
+        }.getOrElse { tanggal }
+    }
+
+    private fun akhirBulanFile(yyyyMm: String): String {
+        return runCatching {
+            val parts = yyyyMm.split("-")
+            val tahun = parts.getOrNull(0)?.toIntOrNull() ?: Calendar.getInstance().get(Calendar.YEAR)
+            val bulan = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(1, 12) ?: (Calendar.getInstance().get(Calendar.MONTH) + 1)
+            val cal = Calendar.getInstance().apply {
+                clear()
+                set(tahun, bulan - 1, 1)
+                add(Calendar.MONTH, 1)
+                add(Calendar.DAY_OF_MONTH, -1)
+            }
+            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+        }.getOrElse { "$yyyyMm-01" }
+    }
+
+    private fun suffixFileRentangTanggal(rangeKey: String, fallbackLabel: String = ""): String {
+        val raw = rangeKey.trim().lowercase(Locale.US)
+        val today = tanggalSekarangFile()
+
+        fun gabung(start: String, end: String): String {
+            val awal = if (Regex("\\d{4}-\\d{2}-\\d{2}").matches(start)) start else today
+            val akhir = if (Regex("\\d{4}-\\d{2}-\\d{2}").matches(end)) end else awal
+            val ordered = if (awal <= akhir) awal to akhir else akhir to awal
+            return if (ordered.first == ordered.second) ordered.first else "${ordered.first}_sampai_${ordered.second}"
+        }
+
+        return when {
+            raw == "hari_ini" || raw == "today" || raw.contains("hari ini") -> today
+            raw.startsWith("custom:") -> {
+                val parts = raw.split(":")
+                gabung(parts.getOrNull(1).orEmpty(), parts.getOrNull(2).orEmpty())
+            }
+            raw.startsWith("bulan:") -> {
+                val ym = raw.removePrefix("bulan:").take(7)
+                if (Regex("\\d{4}-\\d{2}").matches(ym)) gabung("$ym-01", akhirBulanFile(ym)) else today
+            }
+            raw == "semua" || raw == "all" || raw.contains("semua") -> "semua_data"
+            raw.toIntOrNull() != null -> {
+                val jumlahHari = raw.toInt().coerceAtLeast(1)
+                val start = tambahHariTanggalFile(today, -(jumlahHari - 1))
+                gabung(start, today)
+            }
+            else -> safeRangeName(fallbackLabel.ifBlank { rangeKey })
+        }
+    }
+
     private fun namaFilePeriode(text: String, fallbackRangeKey: String): String {
-        val periode = metaDariText(text, "PERIODE").ifBlank { fallbackRangeKey }
-        return safeRangeName(periode.replace(" - ", "_sampai_"))
+        val periode = metaDariText(text, "PERIODE")
+        return suffixFileRentangTanggal(fallbackRangeKey, periode)
     }
 
     private fun exportBukuHarianExcel(rangeKey: String, setLoading: (Boolean) -> Unit) {
@@ -136,7 +198,7 @@ class AktivitasLaporan : AktivitasDasar() {
             runCatching {
                 val text = RepositoriFirebaseUtama.buildStokProdukPdfText(rangeKey)
                 val bytes = buildStokProdukXlsxFromText(text)
-                saveBytesToDownloads("stok_produk_sitahu_${safeRangeName(rangeKey)}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes)
+                saveBytesToDownloads("stok_produk_sitahu_${suffixFileRentangTanggal(rangeKey)}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes)
             }.onSuccess {
                 setLoading(false)
             }.onFailure {
@@ -151,12 +213,85 @@ class AktivitasLaporan : AktivitasDasar() {
             setLoading(true)
             runCatching {
                 val text = RepositoriFirebaseUtama.buildStokProdukPdfText(rangeKey)
-                savePdfTextToDownloads("Unduh Stok Produk PDF", "stok_produk_sitahu_${safeRangeName(rangeKey)}.pdf", text)
+                savePdfTextToDownloads("Unduh Stok Produk PDF", "stok_produk_sitahu_${suffixFileRentangTanggal(rangeKey)}.pdf", text)
             }.onSuccess {
                 setLoading(false)
             }.onFailure {
                 setLoading(false)
                 showMessage(it.message ?: "Gagal membuat stok produk PDF")
+            }
+        }
+    }
+
+    private fun exportMutasiExcel(
+        rangeLabel: String,
+        rangeKey: String,
+        jenisFilter: String,
+        rows: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>,
+        saldoAwal: Long,
+        setLoading: (Boolean) -> Unit
+    ) {
+        lifecycleScope.launch {
+            setLoading(true)
+            runCatching {
+                val identitas = PengaturanUsahaCache.baca(this@AktivitasLaporan)
+                val tipe = tipeLaporanNormal(jenisFilter)
+                val bytes = if (tipe == REPORT_PRODUKSI) {
+                    val text = RepositoriFirebaseUtama.buildStokProdukPdfText(rangeKey)
+                    val (_, products) = parseStokProduk(text)
+                    buildLaporanProduksiXlsx(identitas, rangeLabel, products)
+                } else {
+                    buildXlsxWorkbook(listOf(tipe to dataSheetUntukLaporan(identitas, rangeLabel, jenisFilter, rows, saldoAwal)))
+                }
+                val prefix = namaFileLaporanPrefix(jenisFilter)
+                val suffix = suffixFileRentangTanggal(rangeKey, rangeLabel)
+                saveBytesToDownloads(
+                    "${prefix}_sitahu_${suffix}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    bytes
+                )
+            }.onSuccess {
+                setLoading(false)
+            }.onFailure {
+                setLoading(false)
+                showMessage(it.message ?: "Gagal membuat file Excel laporan")
+            }
+        }
+    }
+
+    private fun exportMutasiPdf(
+        rangeLabel: String,
+        rangeKey: String,
+        jenisFilter: String,
+        rows: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>,
+        saldoAwal: Long,
+        setLoading: (Boolean) -> Unit
+    ) {
+        lifecycleScope.launch {
+            setLoading(true)
+            runCatching {
+                val identitas = PengaturanUsahaCache.baca(this@AktivitasLaporan)
+                val tipe = tipeLaporanNormal(jenisFilter)
+                val pdf = if (tipe == REPORT_PRODUKSI) {
+                    val text = RepositoriFirebaseUtama.buildStokProdukPdfText(rangeKey)
+                    val (_, products) = parseStokProduk(text)
+                    buildLaporanProduksiPdf(identitas, rangeLabel, products)
+                } else {
+                    buildPdfUntukLaporan(identitas, rangeLabel, jenisFilter, rows, saldoAwal)
+                }
+                val bytes = ByteArrayOutputStream().use { output ->
+                    pdf.writeTo(output)
+                    pdf.close()
+                    output.toByteArray()
+                }
+                val prefix = namaFileLaporanPrefix(jenisFilter)
+                val suffix = suffixFileRentangTanggal(rangeKey, rangeLabel)
+                saveBytesToDownloads("${prefix}_sitahu_${suffix}.pdf", "application/pdf", bytes)
+            }.onSuccess {
+                setLoading(false)
+            }.onFailure {
+                setLoading(false)
+                showMessage(it.message ?: "Gagal membuat file PDF laporan")
             }
         }
     }
@@ -221,6 +356,406 @@ private data class PdfStokRow(val tanggal: String, val uraian: String, val user:
 private data class PdfStokProduk(val nama: String, val kodeKategori: String, val stokSaatIni: String, val stokLayak: String, val rincianEd: String, val mutasi: List<PdfStokRow>)
 private data class PreviewLaporanRequest(val jenis: String, val format: String, val judul: String, val rangeLabel: String, val rangeKey: String)
 private data class PreviewRowsLaporan(val metaLabel: String, val headers: List<String>, val rows: List<List<String>>, val totalRows: Int)
+private data class DataMuatLaporan(val report: RepositoriFirebaseUtama.RingkasanLaporanFirebase, val rows: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>, val allRows: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>, val products: List<PdfStokProduk>)
+
+private const val REPORT_KEUANGAN = "Laporan Keuangan"
+private const val REPORT_PRODUKSI = "Laporan Produksi"
+
+private data class HeaderKolomLaporan(val label: String, val sublabel: String = "")
+private data class BarisPreviewKeuangan(
+    val tanggal: String,
+    val uraian: String,
+    val teller: String,
+    val debit: String,
+    val kredit: String,
+    val saldo: String
+)
+private data class BarisPreviewProduksiMutasi(
+    val tanggal: String,
+    val produk: String,
+    val uraian: String,
+    val user: String,
+    val masuk: String,
+    val keluar: String,
+    val stok: String
+)
+
+private fun tipeLaporanNormal(value: String): String = when {
+    value.equals(REPORT_PRODUKSI, true) -> REPORT_PRODUKSI
+    else -> REPORT_KEUANGAN
+}
+
+private fun awalPeriode(rangeKey: String): Date? {
+    val normalized = rangeKey.trim().lowercase(Locale.US)
+    val dateOnly = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    return runCatching {
+        when {
+            normalized == "semua" -> null
+            normalized == "hari_ini" -> dateOnly.parse(dateOnly.format(Date()))
+            normalized.startsWith("custom:") -> dateOnly.parse(normalized.split(":").getOrNull(1).orEmpty())
+            normalized.startsWith("bulan:") -> dateOnly.parse("${normalized.removePrefix("bulan:")}-01")
+            normalized.toIntOrNull() != null -> {
+                val days = normalized.toIntOrNull()?.coerceAtLeast(1) ?: 1
+                Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                    add(Calendar.DAY_OF_YEAR, -(days - 1))
+                }.time
+            }
+            else -> null
+        }
+    }.getOrNull()
+}
+
+private fun nominalArusKas(row: RepositoriFirebaseUtama.BarisRiwayatTransaksi): Long {
+    val nominal = kotlin.math.abs(Formatter.parseRupiah(row.amount))
+    return when {
+        row.jenis.equals("Penjualan", true) && !row.status.equals("Batal", true) -> nominal
+        row.jenis.equals("Pengeluaran", true) -> -nominal
+        else -> 0L
+    }
+}
+
+private fun hitungSaldoSebelumPeriode(rowsSemua: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>, rangeKey: String): Long {
+    val start = awalPeriode(rangeKey) ?: return 0L
+    return rowsSemua
+        .filter { row ->
+            val tanggal = Formatter.parseDate(row.tanggalIso)
+            tanggal.before(start) && (row.jenis.equals("Penjualan", true) || row.jenis.equals("Pengeluaran", true))
+        }
+        .sumOf { nominalArusKas(it) }
+}
+
+private fun buildPreviewKeuanganRows(
+    rows: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>,
+    saldoAwal: Long = 0L,
+    tampilkanSaldoAwal: Boolean = true
+): List<BarisPreviewKeuangan> {
+    val transaksiKeuangan = rows
+        .filter { it.jenis.equals("Penjualan", true) || it.jenis.equals("Pengeluaran", true) }
+        .sortedBy { Formatter.parseDate(it.tanggalIso) }
+
+    val hasil = mutableListOf<BarisPreviewKeuangan>()
+    var saldo = saldoAwal
+    if (tampilkanSaldoAwal) {
+        hasil += BarisPreviewKeuangan(
+            tanggal = "Sebelum periode",
+            uraian = "Saldo awal sebelum periode laporan",
+            teller = "-",
+            debit = Formatter.currency(0L),
+            kredit = Formatter.currency(0L),
+            saldo = Formatter.currency(saldoAwal)
+        )
+    }
+
+    transaksiKeuangan.forEach { row ->
+        val nominal = kotlin.math.abs(Formatter.parseRupiah(row.amount))
+        val debit = if (row.jenis.equals("Pengeluaran", true)) nominal else 0L
+        val kredit = if (row.jenis.equals("Penjualan", true) && !row.status.equals("Batal", true)) nominal else 0L
+        saldo += kredit - debit
+        val uraian = when {
+            row.jenis.equals("Penjualan", true) -> buildString {
+                append("Penjualan ")
+                append(row.title.ifBlank { "Transaksi" })
+                if (row.badge.isNotBlank()) append(" • ").append(row.badge)
+                if (row.status.isNotBlank()) append(" • ").append(row.status)
+            }
+            else -> buildString {
+                append("Pengeluaran ")
+                append(row.title.ifBlank { "Operasional" })
+                if (row.status.isNotBlank()) append(" • ").append(row.status)
+            }
+        }
+        hasil += BarisPreviewKeuangan(
+            tanggal = Formatter.readableDateTime(row.tanggalIso),
+            uraian = uraian,
+            teller = row.userId.ifBlank { row.userName }.ifBlank { "-" },
+            debit = Formatter.currency(debit),
+            kredit = Formatter.currency(kredit),
+            saldo = Formatter.currency(saldo)
+        )
+    }
+    return hasil
+}
+
+private fun stokAwalProduk(p: PdfStokProduk): Long {
+    val first = p.mutasi.firstOrNull()
+    if (first != null) {
+        return angkaPertama(first.saldo) - angkaPertama(first.masuk) + angkaPertama(first.keluar)
+    }
+    return angkaPertama(p.stokSaatIni)
+}
+
+private fun buildPreviewProduksiMutasiRows(products: List<PdfStokProduk>): List<BarisPreviewProduksiMutasi> {
+    val pembuka = products.map { p ->
+        BarisPreviewProduksiMutasi(
+            tanggal = "Sebelum periode",
+            produk = p.nama.ifBlank { "Produk" },
+            uraian = "Stok awal sebelum periode laporan",
+            user = "-",
+            masuk = "0",
+            keluar = "0",
+            stok = Formatter.ribuan(stokAwalProduk(p))
+        )
+    }
+    val mutasi = products.flatMap { p ->
+        p.mutasi.map { row ->
+            BarisPreviewProduksiMutasi(
+                tanggal = row.tanggal,
+                produk = p.nama.ifBlank { "Produk" },
+                uraian = row.uraian.ifBlank { "Mutasi stok" },
+                user = row.user.ifBlank { "Pengguna" },
+                masuk = row.masuk.ifBlank { "0" },
+                keluar = row.keluar.ifBlank { "0" },
+                stok = row.saldo.ifBlank { "0" }
+            )
+        }
+    }.sortedBy { Formatter.parseDate(it.tanggal) }
+    return pembuka + mutasi
+}
+
+private fun buildPreviewProduksiMutasiRowsPerProduk(p: PdfStokProduk): List<BarisPreviewProduksiMutasi> {
+    val rows = mutableListOf<BarisPreviewProduksiMutasi>()
+    rows += BarisPreviewProduksiMutasi(
+        tanggal = "Sebelum periode",
+        produk = p.nama.ifBlank { "Produk" },
+        uraian = "Stok awal sebelum periode laporan",
+        user = "-",
+        masuk = "0",
+        keluar = "0",
+        stok = Formatter.ribuan(stokAwalProduk(p))
+    )
+    p.mutasi.forEach { row ->
+        rows += BarisPreviewProduksiMutasi(
+            tanggal = row.tanggal,
+            produk = p.nama.ifBlank { "Produk" },
+            uraian = row.uraian.ifBlank { "Mutasi stok" },
+            user = row.user.ifBlank { "Pengguna" },
+            masuk = row.masuk.ifBlank { "0" },
+            keluar = row.keluar.ifBlank { "0" },
+            stok = row.saldo.ifBlank { "0" }
+        )
+    }
+    return rows
+}
+
+private fun headerKolomUntukLaporan(tipe: String): List<HeaderKolomLaporan> = when (tipeLaporanNormal(tipe)) {
+    REPORT_PRODUKSI -> listOf(
+        HeaderKolomLaporan("Tanggal Mutasi", "Mutation Date"),
+        HeaderKolomLaporan("Produk", "Product"),
+        HeaderKolomLaporan("Uraian Mutasi", "Mutation Description"),
+        HeaderKolomLaporan("User", "User"),
+        HeaderKolomLaporan("Masuk", "In"),
+        HeaderKolomLaporan("Keluar", "Out"),
+        HeaderKolomLaporan("Stok", "Stock")
+    )
+    else -> listOf(
+        HeaderKolomLaporan("Tanggal Transaksi", "Transaction Date"),
+        HeaderKolomLaporan("Uraian Transaksi", "Transaction Description"),
+        HeaderKolomLaporan("Teller", "User ID"),
+        HeaderKolomLaporan("Debet", "Debit"),
+        HeaderKolomLaporan("Kredit", "Credit"),
+        HeaderKolomLaporan("Saldo", "Balance")
+    )
+}
+
+private fun deskripsiRingkasLaporan(tipe: String): String = when (tipeLaporanNormal(tipe)) {
+    REPORT_PRODUKSI -> "Mutasi stok produksi sesuai periode."
+    else -> "Ringkasan transaksi dan saldo sesuai periode."
+}
+
+private fun namaFileLaporanPrefix(tipe: String): String = when (tipeLaporanNormal(tipe)) {
+    REPORT_PRODUKSI -> "laporan_produksi"
+    else -> "laporan_keuangan"
+}
+
+private fun headerMetadataSheet(
+    identitas: PengaturanUsahaCache.IdentitasUsaha,
+    judul: String,
+    rangeLabel: String,
+    dataDitampilkan: String
+): MutableList<List<String>> {
+    val namaUsaha = identitas.namaUsaha.ifBlank { "SI Tahu" }
+    val rows = mutableListOf<List<String>>()
+    rows += listOf(judul.uppercase(Locale.US))
+    rows += listOf("Nama Usaha", namaUsaha)
+    if (identitas.alamat.isNotBlank()) rows += listOf("Alamat", identitas.alamat)
+    if (identitas.nomorTelepon.isNotBlank()) rows += listOf("Telepon", identitas.nomorTelepon)
+    rows += listOf("Periode", rangeLabel)
+    rows += listOf("Data Ditampilkan", dataDitampilkan)
+    rows += listOf("Tanggal Cetak", SimpleDateFormat("dd MMM yyyy HH:mm", Locale("id", "ID")).format(Date()))
+    rows += emptyList<String>()
+    return rows
+}
+
+private fun buildLaporanProduksiXlsx(
+    identitas: PengaturanUsahaCache.IdentitasUsaha,
+    rangeLabel: String,
+    products: List<PdfStokProduk>
+): ByteArray {
+    val sheets = mutableListOf<Pair<String, List<List<String>>>>()
+    val used = mutableSetOf<String>()
+
+    val semuaRows = headerMetadataSheet(
+        identitas,
+        "Laporan Produksi - Mutasi Stok Semua Produk",
+        rangeLabel,
+        "Mutasi stok semua produk"
+    )
+    semuaRows += listOf("Tanggal Mutasi", "Produk", "Uraian Mutasi", "User", "Masuk", "Keluar", "Stok")
+    val semuaMutasi = buildPreviewProduksiMutasiRows(products)
+    if (semuaMutasi.isEmpty()) {
+        semuaRows += listOf("-", "-", "Belum ada produk atau mutasi stok pada periode ini", "-", "-", "-", "-")
+    } else {
+        semuaMutasi.forEach { r -> semuaRows += listOf(r.tanggal, r.produk, r.uraian, r.user, r.masuk, r.keluar, r.stok) }
+    }
+    sheets += uniqueXlsxSheetName("Semua Produk", "Semua Produk", used) to semuaRows
+
+    products.forEachIndexed { index, product ->
+        val detailRows = headerMetadataSheet(
+            identitas,
+            "Laporan Produksi - Detail Mutasi Produk",
+            rangeLabel,
+            "Detail mutasi stok per produk"
+        )
+        detailRows += listOf("Produk", product.nama)
+        if (product.kodeKategori.isNotBlank()) detailRows += listOf("Kode/Kategori", product.kodeKategori)
+        if (product.stokSaatIni.isNotBlank()) detailRows += listOf("Stok Saat Ini", product.stokSaatIni)
+        if (product.stokLayak.isNotBlank()) detailRows += listOf("Stok Layak", product.stokLayak)
+        if (product.rincianEd.isNotBlank()) detailRows += listOf("Rincian ED", product.rincianEd)
+        detailRows += listOf("Stok Awal Periode", Formatter.ribuan(stokAwalProduk(product)))
+        detailRows += emptyList<String>()
+        detailRows += listOf("Tanggal Mutasi", "Produk", "Uraian Mutasi", "User", "Masuk", "Keluar", "Stok")
+        val detailMutasi = buildPreviewProduksiMutasiRowsPerProduk(product)
+        detailMutasi.forEach { r -> detailRows += listOf(r.tanggal, r.produk, r.uraian, r.user, r.masuk, r.keluar, r.stok) }
+        sheets += uniqueXlsxSheetName(product.nama, "Produk ${index + 1}", used) to detailRows
+    }
+
+    return buildXlsxWorkbook(sheets)
+}
+
+private fun buildLaporanProduksiPdf(
+    identitas: PengaturanUsahaCache.IdentitasUsaha,
+    rangeLabel: String,
+    products: List<PdfStokProduk>
+): PdfDocument {
+    val namaUsaha = identitas.namaUsaha.ifBlank { "SI Tahu" }
+    val columns = floatArrayOf(94f, 112f, 220f, 78f, 68f, 68f, 80f)
+    val headers = listOf("Tanggal Mutasi", "Produk", "Uraian Mutasi", "User", "Masuk", "Keluar", "Stok")
+    val align = listOf(0, 0, 0, 0, 1, 1, 1)
+
+    fun drawHeader(state: PdfPageState, title: String, extra: List<Pair<String, String>> = emptyList()) {
+        state.drawTitle(namaUsaha.uppercase(Locale.US))
+        if (identitas.alamat.isNotBlank()) state.drawMeta("Alamat", identitas.alamat)
+        if (identitas.nomorTelepon.isNotBlank()) state.drawMeta("Telepon", identitas.nomorTelepon)
+        state.drawTitle(title.uppercase(Locale.US))
+        state.drawMeta("Periode", rangeLabel)
+        extra.forEach { (label, value) -> if (value.isNotBlank()) state.drawMeta(label, value) }
+        state.drawMeta("Tanggal Cetak", SimpleDateFormat("dd MMM yyyy HH:mm", Locale("id", "ID")).format(Date()))
+        state.space(8f)
+        state.drawTableHeader(headers, columns, align)
+    }
+
+    return createLandscapePdf("Laporan Produksi") { state ->
+        drawHeader(state, "Laporan Produksi - Mutasi Stok Semua Produk")
+        val semuaRows = buildPreviewProduksiMutasiRows(products)
+        if (semuaRows.isEmpty()) {
+            state.drawTableRow(listOf("-", "-", "Belum ada produk atau mutasi stok pada periode ini", "-", "-", "-", "-"), columns, align) { state.drawTableHeader(headers, columns, align) }
+        } else {
+            semuaRows.forEach { r ->
+                state.drawTableRow(listOf(r.tanggal, r.produk, r.uraian, r.user, r.masuk, r.keluar, r.stok), columns, align) { state.drawTableHeader(headers, columns, align) }
+            }
+        }
+
+        products.forEach { product ->
+            state.newPage()
+            drawHeader(
+                state,
+                "Detail Mutasi Produk",
+                listOf(
+                    "Produk" to product.nama,
+                    "Kode/Kategori" to product.kodeKategori,
+                    "Stok Awal Periode" to Formatter.ribuan(stokAwalProduk(product)),
+                    "Stok Saat Ini" to product.stokSaatIni,
+                    "Stok Layak" to product.stokLayak
+                )
+            )
+            buildPreviewProduksiMutasiRowsPerProduk(product).forEach { r ->
+                state.drawTableRow(listOf(r.tanggal, r.produk, r.uraian, r.user, r.masuk, r.keluar, r.stok), columns, align) { state.drawTableHeader(headers, columns, align) }
+            }
+        }
+    }
+}
+
+private fun dataSheetUntukLaporan(
+    identitas: PengaturanUsahaCache.IdentitasUsaha,
+    rangeLabel: String,
+    tipeLaporan: String,
+    rows: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>,
+    saldoAwal: Long = 0L
+): List<List<String>> {
+    val namaUsaha = identitas.namaUsaha.ifBlank { "SI Tahu" }
+    val tipe = tipeLaporanNormal(tipeLaporan)
+    val sheetRows = mutableListOf<List<String>>()
+    sheetRows += listOf(tipe.uppercase(Locale.US))
+    sheetRows += listOf("Nama Usaha", namaUsaha)
+    if (identitas.alamat.isNotBlank()) sheetRows += listOf("Alamat", identitas.alamat)
+    if (identitas.nomorTelepon.isNotBlank()) sheetRows += listOf("Telepon", identitas.nomorTelepon)
+    sheetRows += listOf("Periode", rangeLabel)
+    if (tipe == REPORT_KEUANGAN) sheetRows += listOf("Saldo Awal", Formatter.currency(saldoAwal))
+    sheetRows += listOf("Data Ditampilkan", if (tipe == REPORT_PRODUKSI) "Riwayat Produksi" else "Arus Kas Masuk/Keluar")
+    sheetRows += listOf("Tanggal Cetak", SimpleDateFormat("dd MMM yyyy HH:mm", Locale("id", "ID")).format(Date()))
+    sheetRows += emptyList<String>()
+    if (tipe == REPORT_PRODUKSI) {
+        sheetRows += listOf("Tanggal Mutasi", "Produk", "Uraian Mutasi", "User", "Masuk", "Keluar", "Stok")
+        sheetRows += listOf("-", "-", "Gunakan export Laporan Produksi untuk sheet Semua Produk dan detail per produk.", "-", "-", "-", "-")
+    } else {
+        sheetRows += listOf("Tanggal Transaksi", "Uraian Transaksi", "Teller", "Debet", "Kredit", "Saldo")
+        val previewRows = buildPreviewKeuanganRows(rows, saldoAwal)
+        previewRows.forEach { r -> sheetRows += listOf(r.tanggal, r.uraian, r.teller, r.debit, r.kredit, r.saldo) }
+    }
+    return sheetRows
+}
+
+private fun buildPdfUntukLaporan(
+    identitas: PengaturanUsahaCache.IdentitasUsaha,
+    rangeLabel: String,
+    tipeLaporan: String,
+    rows: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>,
+    saldoAwal: Long = 0L
+): PdfDocument {
+    val namaUsaha = identitas.namaUsaha.ifBlank { "SI Tahu" }
+    val tipe = tipeLaporanNormal(tipeLaporan)
+    return createLandscapePdf(tipe) { state ->
+        state.drawTitle(namaUsaha.uppercase(Locale.US))
+        if (identitas.alamat.isNotBlank()) state.drawMeta("Alamat", identitas.alamat)
+        if (identitas.nomorTelepon.isNotBlank()) state.drawMeta("Telepon", identitas.nomorTelepon)
+        state.drawTitle(tipe.uppercase(Locale.US))
+        state.drawMeta("Periode", rangeLabel)
+        if (tipe == REPORT_KEUANGAN) state.drawMeta("Saldo Awal", Formatter.currency(saldoAwal))
+        state.drawMeta("Data Ditampilkan", if (tipe == REPORT_PRODUKSI) "Riwayat Produksi" else "Arus Kas Masuk/Keluar")
+        state.drawMeta("Tanggal Cetak", SimpleDateFormat("dd MMM yyyy HH:mm", Locale("id", "ID")).format(Date()))
+        state.space(8f)
+        if (tipe == REPORT_PRODUKSI) {
+            val c = floatArrayOf(96f, 112f, 210f, 78f, 70f, 70f, 82f)
+            val h = listOf("Tanggal Mutasi", "Produk", "Uraian Mutasi", "User", "Masuk", "Keluar", "Stok")
+            val align = listOf(0, 0, 0, 0, 1, 1, 1)
+            state.drawTableHeader(h, c, align)
+            state.drawTableRow(listOf("-", "-", "Gunakan export Laporan Produksi untuk mutasi stok produk.", "-", "-", "-", "-"), c, align) { state.drawTableHeader(h, c, align) }
+        } else {
+            val c = floatArrayOf(108f, 270f, 88f, 94f, 94f, 94f)
+            val h = listOf("Tanggal Transaksi", "Uraian Transaksi", "Teller", "Debet", "Kredit", "Saldo")
+            val align = listOf(0, 0, 0, 1, 1, 1)
+            state.drawTableHeader(h, c, align)
+            val previewRows = buildPreviewKeuanganRows(rows, saldoAwal)
+            previewRows.forEach { r ->
+                state.drawTableRow(listOf(r.tanggal, r.uraian, r.teller, r.debit, r.kredit, r.saldo), c, align) { state.drawTableHeader(h, c, align) }
+            }
+        }
+    }
+}
 
 // === ANIMASI SKELETON ===
 private fun Modifier.adminShimmerEffect(): Modifier = composed {
@@ -243,6 +778,8 @@ private fun ReportDashboardScreen(
     onExportBukuHarianPdf: (String, (Boolean) -> Unit) -> Unit,
     onExportStokExcel: (String, (Boolean) -> Unit) -> Unit,
     onExportStokPdf: (String, (Boolean) -> Unit) -> Unit,
+    onExportMutasiExcel: (String, String, String, List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>, Long, (Boolean) -> Unit) -> Unit,
+    onExportMutasiPdf: (String, String, String, List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>, Long, (Boolean) -> Unit) -> Unit,
     activityContext: AppCompatActivity
 ) {
     val rangeOptions = listOf("Hari ini" to "hari_ini", "7 hari" to "7", "14 hari" to "14", "30 hari" to "30", "90 hari" to "90", "6 bulan" to "180", "1 tahun" to "365", "Semua" to "semua")
@@ -250,16 +787,16 @@ private fun ReportDashboardScreen(
     var showFilterDialog by remember { mutableStateOf(false) }
     var showDateRangePicker by remember { mutableStateOf(false) }
     var showMonthPicker by remember { mutableStateOf(false) }
-    var previewRequest by remember { mutableStateOf<PreviewLaporanRequest?>(null) }
-
-    // Bottom Sheet States
-    var showExportSheet by remember { mutableStateOf(false) }
-    var showStatsSheet by remember { mutableStateOf(false) }
+    var selectedJenisLaporan by remember { mutableStateOf(REPORT_KEUANGAN) }
+    var exportLoading by remember { mutableStateOf(false) }
 
     var draftTanggalMulai by remember { mutableStateOf("") }
     var draftTanggalSelesai by remember { mutableStateOf("") }
 
     var reportData by remember { mutableStateOf<RepositoriFirebaseUtama.RingkasanLaporanFirebase?>(null) }
+    var riwayatData by remember { mutableStateOf<List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>>(emptyList()) }
+    var riwayatSemuaData by remember { mutableStateOf<List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>>(emptyList()) }
+    var stokProdukData by remember { mutableStateOf<List<PdfStokProduk>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     val isDark = isSystemInDarkTheme()
@@ -271,30 +808,44 @@ private fun ReportDashboardScreen(
     val borderColor = if (isDark) Color(0xFF374151) else Color(0xFFE5E7EB)
     val successColor = if (isDark) Color(0xFF10B981) else Color(0xFF059669)
     val dangerColor = if (isDark) Color(0xFFEF4444) else Color(0xFFDC2626)
-    val warningColor = if (isDark) Color(0xFFF59E0B) else Color(0xFFD97706)
-    val purpleColor = if (isDark) Color(0xFFC084FC) else Color(0xFF7C3AED)
 
+    val identitasUsaha = remember(activityContext) { PengaturanUsahaCache.baca(activityContext) }
+    val pilihanJenisLaporan = remember { listOf(REPORT_KEUANGAN, REPORT_PRODUKSI) }
     val labelBulanFormatter = remember { SimpleDateFormat("MMMM yyyy", Locale("id", "ID")) }
 
-    fun pilihBulanCustom() {
-        val calendar = Calendar.getInstance()
-        DatePickerDialog(
-            activityContext,
-            { _, year, month, _ ->
-                val picked = Calendar.getInstance().apply { set(year, month, 1, 0, 0, 0); set(Calendar.MILLISECOND, 0) }
-                val bulanKey = SimpleDateFormat("yyyy-MM", Locale.US).format(picked.time)
-                selectedRange = "Bulan ${labelBulanFormatter.format(picked.time)}" to "bulan:$bulanKey"
-                showFilterDialog = false
-            },
-            calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), 1
-        ).show()
+    val saldoAwalKeuangan = remember(riwayatSemuaData, selectedRange) { hitungSaldoSebelumPeriode(riwayatSemuaData, selectedRange.second) }
+    val financePreviewRows = remember(riwayatData, saldoAwalKeuangan) { buildPreviewKeuanganRows(riwayatData, saldoAwalKeuangan) }
+    val productionPreviewRows = remember(stokProdukData) { buildPreviewProduksiMutasiRows(stokProdukData) }
+    val rowsUntukEkspor = remember(riwayatData, selectedJenisLaporan) {
+        when (tipeLaporanNormal(selectedJenisLaporan)) {
+            REPORT_PRODUKSI -> riwayatData.filter { it.jenis.equals("Produksi", true) || it.jenis.equals("Produk Olahan", true) }
+            else -> riwayatData.filter { it.jenis.equals("Penjualan", true) || it.jenis.equals("Pengeluaran", true) }
+        }
     }
 
     LaunchedEffect(selectedRange) {
         isLoading = true
-        runCatching { RepositoriFirebaseUtama.muatLaporan(selectedRange.second) }
-            .onSuccess { report -> reportData = report; isLoading = false }
-            .onFailure { e -> isLoading = false; onShowMessage(e.message ?: "Gagal memuat laporan") }
+        runCatching {
+            val report = RepositoriFirebaseUtama.muatLaporan(selectedRange.second)
+            val rows = RepositoriFirebaseUtama.muatRiwayatTransaksi(report.rangeKey)
+            val allRows = if (report.rangeKey == "semua") rows else RepositoriFirebaseUtama.muatRiwayatTransaksi("semua")
+            val stokText = RepositoriFirebaseUtama.buildStokProdukPdfText(report.rangeKey)
+            val (_, products) = parseStokProduk(stokText)
+            DataMuatLaporan(report, rows, allRows, products)
+        }.onSuccess { data ->
+            reportData = data.report
+            riwayatData = data.rows
+            riwayatSemuaData = data.allRows
+            stokProdukData = data.products
+            isLoading = false
+        }.onFailure { e ->
+            isLoading = false
+            reportData = null
+            riwayatData = emptyList()
+            riwayatSemuaData = emptyList()
+            stokProdukData = emptyList()
+            onShowMessage(e.message ?: "Gagal memuat data laporan")
+        }
     }
 
     Scaffold(
@@ -303,8 +854,8 @@ private fun ReportDashboardScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text("Pusat Laporan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text(reportData?.rangeLabel ?: "Ringkasan & Analitik", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Laporan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
+                            Text(selectedJenisLaporan, style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -314,95 +865,156 @@ private fun ReportDashboardScreen(
         },
         containerColor = bgColor
     ) { paddingValues ->
-        Column(modifier = Modifier.fillMaxSize().padding(paddingValues).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            // --- HEADER FILTER STICKY ---
-            Surface(shape = RoundedCornerShape(100), color = surfaceColor, border = BorderStroke(1.dp, borderColor), modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp).clickable { showFilterDialog = true }) {
-                Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Periode Analisis Laporan", color = mutedColor, style = MaterialTheme.typography.labelSmall)
-                        Text(selectedRange.first, fontWeight = FontWeight.Bold, color = primaryColor, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-                    }
-                    Surface(shape = CircleShape, color = primaryColor.copy(alpha = 0.12f), modifier = Modifier.size(44.dp)) {
-                        Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.FilterList, "Filter Waktu", tint = primaryColor, modifier = Modifier.size(22.dp)) }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(paddingValues),
+            contentPadding = PaddingValues(bottom = 40.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = surfaceColor,
+                    border = BorderStroke(1.dp, borderColor),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp).clickable { showFilterDialog = true }
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Periode", color = mutedColor, style = MaterialTheme.typography.labelSmall)
+                            Text(selectedRange.first, fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Icon(Icons.Rounded.FilterList, "Filter", tint = primaryColor)
                     }
                 }
             }
 
             if (isLoading) {
-                DashboardSkeleton(surfaceColor, borderColor)
-            } else if (reportData != null) {
-                val report = reportData!!
+                item { DashboardSkeleton(surfaceColor, borderColor) }
+            } else {
+                item {
+                    JenisLaporanFilterChips(
+                        options = pilihanJenisLaporan,
+                        selected = selectedJenisLaporan,
+                        onSelected = { selectedJenisLaporan = it },
+                        surfaceColor = surfaceColor,
+                        borderColor = borderColor,
+                        textColor = textColor,
+                        primaryColor = primaryColor,
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
+                }
 
-                // --- DASHBOARD CARDS ---
-                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    val isProfit = report.labaRugi >= 0
-                    val profitColor = if (isProfit) successColor else dangerColor
-                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = profitColor), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp), modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Box(Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) { Icon(if (isProfit) Icons.Rounded.TrendingUp else Icons.Rounded.TrendingDown, null, tint = Color.White, modifier = Modifier.size(32.dp)) }
-                            Column {
-                                Text(if (isProfit) "Laba Bersih Operasional" else "Rugi Bersih Operasional", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                Text(Formatter.currency(report.labaRugi), fontWeight = FontWeight.Black, color = Color.White, style = MaterialTheme.typography.headlineSmall)
-                            }
-                        }
-                    }
+                item {
+                    HeaderDokumenLaporan(
+                        identitasUsaha = identitasUsaha,
+                        jenisLaporan = selectedJenisLaporan,
+                        periodeLabel = reportData?.rangeLabel ?: selectedRange.first,
+                        jumlahBaris = if (tipeLaporanNormal(selectedJenisLaporan) == REPORT_PRODUKSI) productionPreviewRows.size else rowsUntukEkspor.size,
+                        description = deskripsiRingkasLaporan(selectedJenisLaporan),
+                        saldoAwal = saldoAwalKeuangan,
+                        surfaceColor = surfaceColor,
+                        borderColor = borderColor,
+                        textColor = textColor,
+                        mutedColor = mutedColor,
+                        primaryColor = primaryColor,
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
+                }
 
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        MetricCard(Modifier.weight(1f), "Pemasukan", Formatter.currency(report.totalPenjualan), Icons.Rounded.Payments, primaryColor, surfaceColor, borderColor, textColor, mutedColor)
-                        MetricCard(Modifier.weight(1f), "Pengeluaran", Formatter.currency(report.totalPengeluaran), Icons.Rounded.ReceiptLong, warningColor, surfaceColor, borderColor, textColor, mutedColor)
-                    }
+                item {
+                    LaporanMutasiToolbar(
+                        jumlahData = if (tipeLaporanNormal(selectedJenisLaporan) == REPORT_PRODUKSI) productionPreviewRows.size else rowsUntukEkspor.size,
+                        isLoading = exportLoading,
+                        onPdfClick = {
+                            val bolehEkspor = rowsUntukEkspor.isNotEmpty() || tipeLaporanNormal(selectedJenisLaporan) == REPORT_KEUANGAN || (tipeLaporanNormal(selectedJenisLaporan) == REPORT_PRODUKSI && stokProdukData.isNotEmpty())
+                            if (!bolehEkspor) onShowMessage("Belum ada data yang bisa dicetak pada periode ini")
+                            else onExportMutasiPdf(reportData?.rangeLabel ?: selectedRange.first, reportData?.rangeKey ?: selectedRange.second, selectedJenisLaporan, rowsUntukEkspor, saldoAwalKeuangan) { exportLoading = it }
+                        },
+                        onExcelClick = {
+                            val bolehEkspor = rowsUntukEkspor.isNotEmpty() || tipeLaporanNormal(selectedJenisLaporan) == REPORT_KEUANGAN || (tipeLaporanNormal(selectedJenisLaporan) == REPORT_PRODUKSI && stokProdukData.isNotEmpty())
+                            if (!bolehEkspor) onShowMessage("Belum ada data yang bisa diunduh pada periode ini")
+                            else onExportMutasiExcel(reportData?.rangeLabel ?: selectedRange.first, reportData?.rangeKey ?: selectedRange.second, selectedJenisLaporan, rowsUntukEkspor, saldoAwalKeuangan) { exportLoading = it }
+                        },
+                        surfaceColor = surfaceColor,
+                        borderColor = borderColor,
+                        textColor = textColor,
+                        mutedColor = mutedColor,
+                        primaryColor = primaryColor,
+                        successColor = successColor,
+                        dangerColor = dangerColor,
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
+                }
 
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        MetricCard(Modifier.weight(1f), "Total Produksi", "${Formatter.ribuan(report.totalProduksi.toLong())} pcs", Icons.Rounded.Factory, successColor, surfaceColor, borderColor, textColor, mutedColor)
-                        MetricCard(Modifier.weight(1f), "Item Terjual", "${Formatter.ribuan(report.totalItemTerjual.toLong())} pcs", Icons.Rounded.PointOfSale, primaryColor, surfaceColor, borderColor, textColor, mutedColor)
+                item {
+                    if (tipeLaporanNormal(selectedJenisLaporan) == REPORT_PRODUKSI) {
+                        TabelDokumenLaporan(
+                            headers = headerKolomUntukLaporan(selectedJenisLaporan),
+                            rows = productionPreviewRows.map { listOf(it.tanggal, it.produk, it.uraian, it.user, it.masuk, it.keluar, it.stok) },
+                            widths = listOf(126.dp, 150.dp, 300.dp, 96.dp, 86.dp, 86.dp, 96.dp),
+                            numericColumns = setOf(4, 5, 6),
+                            emptyRow = listOf("-", "-", "Belum ada data mutasi stok produksi pada periode ini", "-", "-", "-", "-"),
+                            surfaceColor = surfaceColor,
+                            bgColor = bgColor,
+                            borderColor = borderColor,
+                            textColor = textColor,
+                            mutedColor = mutedColor,
+                            primaryColor = primaryColor,
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
+                    } else {
+                        TabelDokumenLaporan(
+                            headers = headerKolomUntukLaporan(selectedJenisLaporan),
+                            rows = financePreviewRows.map { listOf(it.tanggal, it.uraian, it.teller, it.debit, it.kredit, it.saldo) },
+                            widths = listOf(126.dp, 320.dp, 92.dp, 110.dp, 110.dp, 118.dp),
+                            numericColumns = setOf(3, 4, 5),
+                            emptyRow = listOf("-", "Belum ada data keuangan pada periode ini", "-", "-", "-", "-"),
+                            surfaceColor = surfaceColor,
+                            bgColor = bgColor,
+                            borderColor = borderColor,
+                            textColor = textColor,
+                            mutedColor = mutedColor,
+                            primaryColor = primaryColor,
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
                     }
                 }
             }
-
-            // --- KARTU MENU AKSI UTAMA ---
-            Column {
-                Text("Pusat Analitik & Laporan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp).padding(top = 8.dp, bottom = 16.dp))
-                Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor), modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-                    Column {
-                        ActionMenuItem(Icons.Rounded.Description, successColor, "Ekspor Laporan Excel", "Unduh buku transaksi, laporan, dan stok", textColor, mutedColor) { showExportSheet = true }
-                        HorizontalDivider(color = borderColor)
-                        ActionMenuItem(Icons.Rounded.PieChart, warningColor, "Grafik & Statistik", "Analisis tren penjualan, laba, dan performa", textColor, mutedColor) { showStatsSheet = true }
-                    }
-                }
-            }
-            Spacer(Modifier.height(40.dp))
         }
 
-        // === DIALOG FILTER WAKTU (POP-UP TENGAH) ===
         if (showFilterDialog) {
             var draftRange by remember { mutableStateOf(selectedRange) }
             AlertDialog(
                 onDismissRequest = { showFilterDialog = false }, shape = RoundedCornerShape(24.dp), containerColor = surfaceColor,
                 title = { Text("Pilih Periode Laporan", fontWeight = FontWeight.Bold, color = textColor) },
                 text = {
-                    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Periode Waktu Cepat", fontWeight = FontWeight.SemiBold, color = textColor, style = MaterialTheme.typography.bodyMedium)
-                        @OptIn(ExperimentalLayoutApi::class)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            rangeOptions.forEach { pilihan ->
-                                val isSelected = draftRange.second == pilihan.second
-                                Surface(shape = RoundedCornerShape(12.dp), color = if (isSelected) primaryColor.copy(alpha = 0.15f) else bgColor, border = BorderStroke(1.dp, if (isSelected) primaryColor else borderColor), modifier = Modifier.clickable { draftRange = pilihan }) {
-                                    Text(pilihan.first, color = if (isSelected) primaryColor else textColor, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), style = MaterialTheme.typography.labelMedium)
+                    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Periode cepat", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                        rangeOptions.forEach { option ->
+                            val selected = draftRange == option
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (selected) primaryColor.copy(alpha = 0.10f) else bgColor,
+                                border = BorderStroke(1.dp, if (selected) primaryColor else borderColor),
+                                modifier = Modifier.fillMaxWidth().clickable { draftRange = option }
+                            ) {
+                                Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(option.first, color = if (selected) primaryColor else textColor, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+                                    if (selected) Icon(Icons.Rounded.CheckCircle, null, tint = primaryColor, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
                         HorizontalDivider(color = borderColor)
-                        Text("Filter Kalender Spesifik", fontWeight = FontWeight.SemiBold, color = textColor, style = MaterialTheme.typography.bodyMedium)
+                        Text("Filter kalender spesifik", color = mutedColor, style = MaterialTheme.typography.labelMedium)
                         Surface(modifier = Modifier.fillMaxWidth().clickable { showFilterDialog = false; draftTanggalMulai = ""; draftTanggalSelesai = ""; showDateRangePicker = true }, shape = RoundedCornerShape(12.dp), color = bgColor, border = BorderStroke(1.dp, borderColor)) {
                             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
-                                Text("Rentang Tanggal Custom", color = textColor, style = MaterialTheme.typography.bodyMedium)
+                                Text("Rentang tanggal custom", color = textColor, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                         Surface(modifier = Modifier.fillMaxWidth().clickable { showFilterDialog = false; showMonthPicker = true }, shape = RoundedCornerShape(12.dp), color = bgColor, border = BorderStroke(1.dp, borderColor)) {
                             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
-                                Text("Pilih Satu Bulan Penuh", color = textColor, style = MaterialTheme.typography.bodyMedium)
+                                Text("Pilih satu bulan penuh", color = textColor, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
@@ -412,19 +1024,16 @@ private fun ReportDashboardScreen(
             )
         }
 
-        // === DIALOG DATE RANGE PICKER (POP-UP KALENDER M3) ===
         if (showDateRangePicker) {
-            val localFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
             val utcFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
             val labelTanggalFormatterRange = SimpleDateFormat("dd MMM yyyy", Locale("id", "ID"))
             val dateRangePickerState = rememberDateRangePickerState()
-            var selectedPreset by remember { mutableStateOf("") }
 
             Dialog(onDismissRequest = { showDateRangePicker = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
                 Surface(modifier = Modifier.fillMaxWidth(0.95f).fillMaxHeight(0.90f), shape = RoundedCornerShape(24.dp), color = surfaceColor) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("Pilih Rentang Tanggal", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
+                            Text("Pilih rentang tanggal", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
                             IconButton(onClick = { showDateRangePicker = false }, modifier = Modifier.size(32.dp)) { Icon(Icons.Rounded.Close, "Tutup", tint = textColor) }
                         }
                         HorizontalDivider(color = borderColor)
@@ -447,9 +1056,7 @@ private fun ReportDashboardScreen(
                                         val rangeLabel = if (startLabel == endLabel) startLabel else "$startLabel - $endLabel"
                                         selectedRange = rangeLabel to "custom:$startIso:$endIso"
                                         showDateRangePicker = false
-                                    } else {
-                                        onShowMessage("Pilih rentang tanggal terlebih dahulu")
-                                    }
+                                    } else onShowMessage("Pilih rentang tanggal terlebih dahulu")
                                 },
                                 shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
                             ) { Text("Simpan", fontWeight = FontWeight.Bold) }
@@ -459,7 +1066,6 @@ private fun ReportDashboardScreen(
             }
         }
 
-        // === DIALOG CUSTOM MONTH PICKER (GRID) ===
         if (showMonthPicker) {
             val months = listOf("Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des")
             var tempYear by remember { mutableStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
@@ -467,7 +1073,7 @@ private fun ReportDashboardScreen(
             Dialog(onDismissRequest = { showMonthPicker = false }) {
                 Surface(shape = RoundedCornerShape(24.dp), color = surfaceColor, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Pilih Bulan & Tahun", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
+                        Text("Pilih bulan & tahun", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
                         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                             IconButton(onClick = { tempYear-- }, modifier = Modifier.background(bgColor, CircleShape)) { Icon(Icons.Rounded.ChevronLeft, "Tahun Sebelumnya", tint = textColor) }
                             Text("$tempYear", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
@@ -502,202 +1108,122 @@ private fun ReportDashboardScreen(
                 }
             }
         }
+    }
+}
 
-        // === BOTTOM SHEET EXPORT LAPORAN ===
-        if (showExportSheet) {
-            ModalBottomSheet(onDismissRequest = { showExportSheet = false }, containerColor = bgColor, dragHandle = { BottomSheetDefaults.DragHandle() }, windowInsets = WindowInsets.navigationBars) {
-                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("Ekspor Laporan (${selectedRange.first})", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-
-                    Text("Buku Harian", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-                    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor)) {
-                        Column {
-                            ActionMenuItem(Icons.Rounded.ReceiptLong, successColor, "Buku Harian Excel (.xlsx)", "Lihat data dulu sebelum download", textColor, mutedColor) {
-                                previewRequest = PreviewLaporanRequest("buku", "excel", "Buku Harian Excel", selectedRange.first, selectedRange.second)
-                                showExportSheet = false
-                            }
-                            HorizontalDivider(color = borderColor)
-                            ActionMenuItem(Icons.Rounded.Description, dangerColor, "Buku Harian PDF (.pdf)", "Lihat data dulu sebelum cetak/download", textColor, mutedColor) {
-                                previewRequest = PreviewLaporanRequest("buku", "pdf", "Buku Harian PDF", selectedRange.first, selectedRange.second)
-                                showExportSheet = false
-                            }
-                        }
-                    }
-
-                    Text("Stok Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-                    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor)) {
-                        Column {
-                            ActionMenuItem(Icons.Rounded.Inventory, warningColor, "Stok Produk Excel (.xlsx)", "Lihat data mutasi sebelum download", textColor, mutedColor) {
-                                previewRequest = PreviewLaporanRequest("stok", "excel", "Stok Produk Excel", selectedRange.first, selectedRange.second)
-                                showExportSheet = false
-                            }
-                            HorizontalDivider(color = borderColor)
-                            ActionMenuItem(Icons.Rounded.Description, dangerColor, "Stok Produk PDF (.pdf)", "Lihat data mutasi sebelum cetak/download", textColor, mutedColor) {
-                                previewRequest = PreviewLaporanRequest("stok", "pdf", "Stok Produk PDF", selectedRange.first, selectedRange.second)
-                                showExportSheet = false
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // === PRATINJAU DATA SEBELUM CETAK / DOWNLOAD LAPORAN ===
-        previewRequest?.let { request ->
-            var previewText by remember(request) { mutableStateOf<String?>(null) }
-            var previewError by remember(request) { mutableStateOf<String?>(null) }
-            var previewLoading by remember(request) { mutableStateOf(true) }
-            var exportLoading by remember(request) { mutableStateOf(false) }
-
-            LaunchedEffect(request) {
-                previewLoading = true
-                previewError = null
-                runCatching {
-                    if (request.jenis == "buku") RepositoriFirebaseUtama.buildBukuHarianPdfText(request.rangeKey) else RepositoriFirebaseUtama.buildStokProdukPdfText(request.rangeKey)
-                }.onSuccess { text ->
-                    previewText = text
-                    previewLoading = false
-                }.onFailure { e ->
-                    previewError = e.message ?: "Gagal menampilkan data laporan"
-                    previewLoading = false
-                }
-            }
-
-            Dialog(
-                onDismissRequest = { if (!exportLoading) previewRequest = null },
-                properties = DialogProperties(usePlatformDefaultWidth = false)
+// === KOMPONEN BANTUAN UI ===
+@Composable
+private fun JenisLaporanFilterChips(
+    options: List<String>,
+    selected: String,
+    onSelected: (String) -> Unit,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    primaryColor: Color,
+    modifier: Modifier = Modifier
+) {
+    LazyRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(options) { option ->
+            val isSelected = option == selected
+            Surface(
+                shape = RoundedCornerShape(100),
+                color = if (isSelected) primaryColor else surfaceColor,
+                border = BorderStroke(1.dp, if (isSelected) primaryColor else borderColor),
+                modifier = Modifier.clickable { onSelected(option) }
             ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .fillMaxHeight(0.86f),
-                    shape = RoundedCornerShape(24.dp),
-                    color = bgColor,
-                    border = BorderStroke(1.dp, borderColor)
-                ) {
-                    Column(
-                        Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 20.dp, vertical = 18.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Pratinjau Data Laporan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("${request.judul} · ${request.rangeLabel}", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
-                            Text("Periksa data yang akan dicetak/download. Setelah sesuai, tekan tombol lanjut di bawah.", color = mutedColor, style = MaterialTheme.typography.bodySmall)
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f, fill = true)
-                        ) {
-                            when {
-                                previewLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = primaryColor) }
-                                previewError != null -> Surface(shape = RoundedCornerShape(18.dp), color = dangerColor.copy(alpha = 0.10f), border = BorderStroke(1.dp, dangerColor.copy(alpha = 0.35f)), modifier = Modifier.fillMaxWidth()) {
-                                    Text(previewError.orEmpty(), color = dangerColor, fontWeight = FontWeight.Medium, modifier = Modifier.padding(16.dp))
-                                }
-                                previewText != null -> LaporanPreviewTable(
-                                    request = request,
-                                    text = previewText.orEmpty(),
-                                    surfaceColor = surfaceColor,
-                                    bgColor = bgColor,
-                                    borderColor = borderColor,
-                                    textColor = textColor,
-                                    mutedColor = mutedColor,
-                                    primaryColor = primaryColor,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                        }
-
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedButton(
-                                onClick = { previewRequest = null },
-                                enabled = !exportLoading,
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier.weight(1f)
-                            ) { Text("Batal") }
-                            Button(
-                                onClick = {
-                                    exportLoading = true
-                                    val done: (Boolean) -> Unit = { active ->
-                                        exportLoading = active
-                                        if (!active) previewRequest = null
-                                    }
-                                    when {
-                                        request.jenis == "buku" && request.format == "excel" -> onExportBukuHarianExcel(request.rangeKey, done)
-                                        request.jenis == "buku" && request.format == "pdf" -> onExportBukuHarianPdf(request.rangeKey, done)
-                                        request.jenis == "stok" && request.format == "excel" -> onExportStokExcel(request.rangeKey, done)
-                                        request.jenis == "stok" && request.format == "pdf" -> onExportStokPdf(request.rangeKey, done)
-                                    }
-                                },
-                                enabled = !previewLoading && previewError == null && !exportLoading,
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
-                                modifier = Modifier.weight(1.4f)
-                            ) {
-                                if (exportLoading) {
-                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
-                                    Spacer(Modifier.width(8.dp))
-                                }
-                                val labelTombol = when {
-                                    exportLoading && request.format == "excel" -> "Membuat Excel..."
-                                    exportLoading && request.format == "pdf" -> "Membuat PDF..."
-                                    request.format == "pdf" -> "Lanjut PDF"
-                                    else -> "Lanjut Excel"
-                                }
-                                Text(labelTombol, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
+                Text(option, color = if (isSelected) Color.White else textColor, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
         }
+    }
+}
 
-        // === BOTTOM SHEET STATISTIK (DARI AKTIVITAS STATISTIK) ===
-        if (showStatsSheet) {
-            var statsData by remember { mutableStateOf<DataStatistikLengkap?>(null) }
-            var isStatsLoading by remember { mutableStateOf(true) }
-
-            LaunchedEffect(selectedRange) {
-                isStatsLoading = true
-                runCatching {
-                    val lapor = RepositoriFirebaseUtama.muatLaporan(selectedRange.second)
-                    val riw = RepositoriFirebaseUtama.muatRiwayatTransaksi(lapor.rangeKey)
-                    val stk = RepositoriFirebaseUtama.muatRingkasanStokDashboard()
-                    bangunStatistikLengkap(lapor, stk, riw)
-                }.onSuccess { data -> statsData = data; isStatsLoading = false }
-                    .onFailure { e -> isStatsLoading = false; onShowMessage(e.message ?: "Gagal muat statistik") }
+@Composable
+private fun HeaderDokumenLaporan(
+    identitasUsaha: PengaturanUsahaCache.IdentitasUsaha,
+    jenisLaporan: String,
+    periodeLabel: String,
+    jumlahBaris: Int,
+    description: String,
+    saldoAwal: Long,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val tipe = tipeLaporanNormal(jenisLaporan)
+    Surface(shape = RoundedCornerShape(18.dp), color = surfaceColor, border = BorderStroke(1.dp, borderColor), modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(primaryColor.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(if (tipe == REPORT_PRODUKSI) Icons.Rounded.Inventory else Icons.Rounded.ReceiptLong, null, tint = primaryColor, modifier = Modifier.size(22.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(jenisLaporan, color = textColor, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(description, color = mutedColor, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                InfoDokumenLaporan("Periode", periodeLabel, textColor, mutedColor, Modifier.weight(1f))
+                if (tipe == REPORT_KEUANGAN) {
+                    InfoDokumenLaporan("Saldo Awal", Formatter.currency(saldoAwal), textColor, mutedColor, Modifier.weight(1f))
+                } else {
+                    InfoDokumenLaporan("Kolom", "Masuk / Keluar / Stok", textColor, mutedColor, Modifier.weight(1f))
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                InfoDokumenLaporan("Data", "$jumlahBaris baris", textColor, mutedColor, Modifier.weight(1f))
+                InfoDokumenLaporan("Output", "PDF / Excel", textColor, mutedColor, Modifier.weight(1f))
+            }
+        }
+    }
+}
 
-            ModalBottomSheet(onDismissRequest = { showStatsSheet = false }, containerColor = bgColor, dragHandle = { BottomSheetDefaults.DragHandle() }, windowInsets = WindowInsets.navigationBars) {
-                if (isStatsLoading) {
-                    Box(Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = warningColor) }
-                } else if (statsData != null) {
-                    val d = statsData!!
-                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                        Text("Analitik & Statistik (${selectedRange.first})", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
-
-                        Text("Analisis AI Otomatis", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
-                        AnalisisAiCard(d.analisisAi, surfaceColor, borderColor, textColor, mutedColor, primaryColor, successColor, warningColor, dangerColor)
-                        InsightList(d.insight, surfaceColor, borderColor, textColor, mutedColor, primaryColor)
-
-                        Text("Indikator Detail", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
-                        IndikatorDetailCard(d.indikatorDetail, surfaceColor, borderColor, textColor, mutedColor, primaryColor, successColor, warningColor, dangerColor)
-
-                        Text("Tren Harian", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
-                        TrendHarianCard(d.trenHarian, surfaceColor, borderColor, textColor, mutedColor, primaryColor, warningColor)
-
-                        Text("Produk Terlaris Hari Ini", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
-                        AnalitikList("Belum ada produk terjual.", d.laporan.produkTerlaris, surfaceColor, borderColor, textColor, mutedColor, primaryColor)
-
-                        Text("Kesehatan Stok", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
-                        StokAnalysisCard(d.stok, surfaceColor, borderColor, textColor, mutedColor, successColor, warningColor, dangerColor)
-
-                        Text("Rekomendasi Operasional", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp))
-                        InsightList(d.rekomendasi, surfaceColor, borderColor, textColor, mutedColor, successColor)
+@Composable
+private fun TabelDokumenLaporan(
+    headers: List<HeaderKolomLaporan>,
+    rows: List<List<String>>,
+    widths: List<androidx.compose.ui.unit.Dp>,
+    numericColumns: Set<Int>,
+    emptyRow: List<String>,
+    surfaceColor: Color,
+    bgColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val horizontalScroll = rememberScrollState()
+    Surface(shape = RoundedCornerShape(18.dp), color = surfaceColor, border = BorderStroke(1.dp, borderColor), modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) {
+                    Text("Data laporan", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    Text("Preview ringkas sebelum export", color = mutedColor, style = MaterialTheme.typography.labelSmall)
+                }
+                Text("${rows.size} baris", color = primaryColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+            }
+            HorizontalDivider(color = borderColor)
+            Box(Modifier.fillMaxWidth().horizontalScroll(horizontalScroll)) {
+                Column(Modifier.width(widths.fold(0.dp) { acc, item -> acc + item })) {
+                    HeaderRowDokumen(headers, widths, textColor, mutedColor, borderColor, bgColor, numericColumns)
+                    val safeRows = if (rows.isEmpty()) listOf(emptyRow) else rows
+                    safeRows.forEachIndexed { index, row ->
+                        DataRowDokumen(
+                            values = row,
+                            widths = widths,
+                            numericColumns = numericColumns,
+                            textColor = textColor,
+                            mutedColor = mutedColor,
+                            borderColor = borderColor,
+                            backgroundColor = if (index % 2 == 0) surfaceColor else bgColor.copy(alpha = 0.45f)
+                        )
                     }
                 }
             }
@@ -705,7 +1231,492 @@ private fun ReportDashboardScreen(
     }
 }
 
-// === KOMPONEN BANTUAN UI ===
+@Composable
+private fun HeaderRowDokumen(
+    headers: List<HeaderKolomLaporan>,
+    widths: List<androidx.compose.ui.unit.Dp>,
+    textColor: Color,
+    mutedColor: Color,
+    borderColor: Color,
+    backgroundColor: Color,
+    numericColumns: Set<Int>
+) {
+    Row(Modifier.background(backgroundColor).heightIn(min = 52.dp)) {
+        headers.forEachIndexed { index, header ->
+            Box(
+                modifier = Modifier.width(widths[index]).padding(horizontal = 10.dp, vertical = 8.dp),
+                contentAlignment = if (numericColumns.contains(index)) Alignment.CenterEnd else Alignment.CenterStart
+            ) {
+                Column(horizontalAlignment = if (numericColumns.contains(index)) Alignment.End else Alignment.Start) {
+                    Text(header.label, color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium, textAlign = if (numericColumns.contains(index)) TextAlign.End else TextAlign.Start)
+                    if (header.sublabel.isNotBlank()) Text(header.sublabel, color = mutedColor, style = MaterialTheme.typography.labelSmall, textAlign = if (numericColumns.contains(index)) TextAlign.End else TextAlign.Start)
+                }
+            }
+        }
+    }
+    HorizontalDivider(color = borderColor)
+}
+
+@Composable
+private fun DataRowDokumen(
+    values: List<String>,
+    widths: List<androidx.compose.ui.unit.Dp>,
+    numericColumns: Set<Int>,
+    textColor: Color,
+    mutedColor: Color,
+    borderColor: Color,
+    backgroundColor: Color
+) {
+    Row(Modifier.background(backgroundColor).heightIn(min = 48.dp)) {
+        values.forEachIndexed { index, value ->
+            Box(
+                modifier = Modifier.width(widths[index]).padding(horizontal = 10.dp, vertical = 9.dp),
+                contentAlignment = if (numericColumns.contains(index)) Alignment.CenterEnd else Alignment.CenterStart
+            ) {
+                Text(
+                    value.ifBlank { "-" },
+                    color = if (value.isBlank()) mutedColor else textColor,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = if (numericColumns.contains(index)) FontWeight.SemiBold else FontWeight.Medium,
+                    textAlign = if (numericColumns.contains(index)) TextAlign.End else TextAlign.Start,
+                    maxLines = if (index == 1 || index == 2 || index == 4) 3 else 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+    HorizontalDivider(color = borderColor)
+}
+
+@Composable
+private fun MutasiPreviewUtamaCard(
+    identitasUsaha: PengaturanUsahaCache.IdentitasUsaha,
+    periodeLabel: String,
+    jenisFilter: String,
+    jumlahData: Int,
+    totalDataSemua: Int,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color
+) {
+    val namaUsaha = identitasUsaha.namaUsaha.ifBlank { "SI Tahu" }
+    val teksLogo = identitasUsaha.teksLogo.ifBlank { PengaturanUsahaCache.buatTeksLogoDariNama(namaUsaha) }
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = surfaceColor,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.size(46.dp).clip(RoundedCornerShape(12.dp)).background(primaryColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                    Text(teksLogo.take(4).uppercase(Locale.US), color = primaryColor, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleSmall)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(namaUsaha.uppercase(Locale.US), color = textColor, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(identitasUsaha.alamat.ifBlank { "Alamat usaha belum diisi di pengaturan" }, color = mutedColor, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (identitasUsaha.nomorTelepon.isNotBlank()) {
+                        Text("Telp. ${identitasUsaha.nomorTelepon}", color = mutedColor, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+            HorizontalDivider(color = borderColor)
+            Text("MUTASI LAPORAN", color = textColor, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                InfoDokumenLaporan("Periode", periodeLabel, textColor, mutedColor, Modifier.weight(1f))
+                InfoDokumenLaporan("Jenis", jenisFilter, textColor, mutedColor, Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                InfoDokumenLaporan("Data Tampil", "$jumlahData data", textColor, mutedColor, Modifier.weight(1f))
+                InfoDokumenLaporan("Total Filter Periode", "$totalDataSemua data", textColor, mutedColor, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoDokumenLaporan(label: String, value: String, textColor: Color, mutedColor: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, color = mutedColor, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, color = textColor, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun LaporanMutasiToolbar(
+    jumlahData: Int,
+    isLoading: Boolean,
+    onPdfClick: () -> Unit,
+    onExcelClick: () -> Unit,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color,
+    successColor: Color,
+    dangerColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(shape = RoundedCornerShape(16.dp), color = surfaceColor, border = BorderStroke(1.dp, borderColor), modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Export", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(if (jumlahData > 0) "$jumlahData baris siap diekspor" else "Belum ada data", color = mutedColor, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            OutlinedButton(
+                onClick = onPdfClick,
+                enabled = !isLoading,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, dangerColor.copy(alpha = 0.45f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = dangerColor),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Icon(Icons.Rounded.Description, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (isLoading) "Proses" else "PDF", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+            }
+            OutlinedButton(
+                onClick = onExcelClick,
+                enabled = !isLoading,
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, successColor.copy(alpha = 0.45f)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = successColor),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Icon(Icons.Rounded.ReceiptLong, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Excel", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MutasiLaporanTablePreview(
+    rows: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>,
+    surfaceColor: Color,
+    bgColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val horizontalScroll = rememberScrollState()
+    val widths = listOf(136.dp, 104.dp, 104.dp, 280.dp, 124.dp, 132.dp)
+    Surface(shape = RoundedCornerShape(18.dp), color = surfaceColor, border = BorderStroke(1.dp, borderColor), modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) {
+                    Text("Preview tabel laporan", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    Text("Tampilan ini mengikuti kolom PDF dan Excel", color = mutedColor, style = MaterialTheme.typography.labelSmall)
+                }
+                Text("${rows.size} baris", color = primaryColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+            }
+            HorizontalDivider(color = borderColor)
+            Box(Modifier.fillMaxWidth().horizontalScroll(horizontalScroll)) {
+                Column(Modifier.width(widths.fold(0.dp) { acc, item -> acc + item })) {
+                    MutasiTableRow(
+                        values = listOf("Tanggal", "Jenis", "Status", "Uraian", "User", "Nominal"),
+                        widths = widths,
+                        textColor = textColor,
+                        mutedColor = mutedColor,
+                        borderColor = borderColor,
+                        backgroundColor = bgColor,
+                        isHeader = true,
+                        alignRightLast = true
+                    )
+                    if (rows.isEmpty()) {
+                        MutasiTableRow(
+                            values = listOf("-", "-", "-", "Belum ada data pada filter ini", "-", "-"),
+                            widths = widths,
+                            textColor = textColor,
+                            mutedColor = mutedColor,
+                            borderColor = borderColor,
+                            backgroundColor = surfaceColor,
+                            isHeader = false,
+                            alignRightLast = true
+                        )
+                    } else {
+                        rows.forEachIndexed { index, row ->
+                            MutasiTableRow(
+                                values = listOf(
+                                    Formatter.readableDateTime(row.tanggalIso),
+                                    row.jenis.ifBlank { "-" },
+                                    row.status.ifBlank { row.badge.ifBlank { "Tercatat" } },
+                                    row.title.ifBlank { row.subtitle.ifBlank { "-" } },
+                                    row.userName.ifBlank { "-" },
+                                    row.amount.ifBlank { "-" }
+                                ),
+                                widths = widths,
+                                textColor = textColor,
+                                mutedColor = mutedColor,
+                                borderColor = borderColor,
+                                backgroundColor = if (index % 2 == 0) surfaceColor else bgColor.copy(alpha = 0.45f),
+                                isHeader = false,
+                                alignRightLast = true
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MutasiTableRow(
+    values: List<String>,
+    widths: List<androidx.compose.ui.unit.Dp>,
+    textColor: Color,
+    mutedColor: Color,
+    borderColor: Color,
+    backgroundColor: Color,
+    isHeader: Boolean,
+    alignRightLast: Boolean
+) {
+    Row(Modifier.background(backgroundColor).heightIn(min = if (isHeader) 42.dp else 46.dp)) {
+        values.forEachIndexed { index, value ->
+            Box(
+                modifier = Modifier.width(widths[index]).heightIn(min = if (isHeader) 42.dp else 46.dp).padding(horizontal = 10.dp, vertical = 9.dp),
+                contentAlignment = if (alignRightLast && index == values.lastIndex) Alignment.CenterEnd else Alignment.CenterStart
+            ) {
+                Text(
+                    value,
+                    color = if (isHeader) textColor else if (index == values.lastIndex) textColor else mutedColor,
+                    fontWeight = if (isHeader || index == values.lastIndex) FontWeight.Bold else FontWeight.Medium,
+                    style = MaterialTheme.typography.labelMedium,
+                    textAlign = if (alignRightLast && index == values.lastIndex) TextAlign.End else TextAlign.Start,
+                    maxLines = if (index == 3) 2 else 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+    HorizontalDivider(color = borderColor)
+}
+
+@Composable
+private fun MutasiSummaryPill(title: String, value: String, tone: Color, textColor: Color, mutedColor: Color, modifier: Modifier = Modifier) {
+    Surface(shape = RoundedCornerShape(18.dp), color = tone.copy(alpha = 0.10f), border = BorderStroke(1.dp, tone.copy(alpha = 0.18f)), modifier = modifier) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, color = mutedColor, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(value, color = tone, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun JenisMutasiFilterChips(
+    options: List<String>,
+    selected: String,
+    onSelected: (String) -> Unit,
+    surfaceColor: Color,
+    bgColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Filter Jenis Riwayat", color = mutedColor, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelMedium)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 4.dp)) {
+            items(options) { option ->
+                val isSelected = option == selected
+                Surface(
+                    shape = RoundedCornerShape(100),
+                    color = if (isSelected) primaryColor else surfaceColor,
+                    border = BorderStroke(1.dp, if (isSelected) primaryColor else borderColor),
+                    modifier = Modifier.clickable { onSelected(option) }
+                ) {
+                    Text(option, color = if (isSelected) Color.White else textColor, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TanggalMutasiDivider(label: String, mutedColor: Color, borderColor: Color, modifier: Modifier = Modifier) {
+    Row(modifier = modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(label, color = mutedColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+        HorizontalDivider(color = borderColor, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun MutasiLaporanRowCard(
+    row: RepositoriFirebaseUtama.BarisRiwayatTransaksi,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color,
+    successColor: Color,
+    warningColor: Color,
+    dangerColor: Color,
+    purpleColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val accentColor = when {
+        row.status.equals("Batal", true) -> dangerColor
+        row.jenis.equals("Penjualan", true) -> successColor
+        row.jenis.equals("Pengeluaran", true) -> dangerColor
+        row.jenis.equals("Produksi", true) -> primaryColor
+        row.jenis.equals("Produk Olahan", true) -> purpleColor
+        else -> warningColor
+    }
+    val icon = when {
+        row.jenis.equals("Penjualan", true) -> Icons.Rounded.PointOfSale
+        row.jenis.equals("Pengeluaran", true) -> Icons.Rounded.ReceiptLong
+        row.jenis.equals("Produksi", true) -> Icons.Rounded.Factory
+        row.jenis.equals("Produk Olahan", true) -> Icons.Rounded.Inventory
+        else -> Icons.Rounded.FilterList
+    }
+    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor), modifier = modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(42.dp).clip(CircleShape).background(accentColor.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = accentColor, modifier = Modifier.size(21.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(row.title.ifBlank { row.jenis }, color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    Surface(shape = RoundedCornerShape(100), color = accentColor.copy(alpha = 0.10f)) {
+                        Text(row.jenis.ifBlank { "Riwayat" }, color = accentColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                    }
+                }
+                Text(row.subtitle.ifBlank { row.userName }, color = mutedColor, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${waktuMutasi(row.tanggalIso)} • ${row.status.ifBlank { row.badge.ifBlank { "Tercatat" } }}", color = mutedColor, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text(row.amount.ifBlank { "-" }, color = accentColor, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.End, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(min = 86.dp, max = 118.dp))
+        }
+    }
+}
+
+private fun labelTanggalMutasi(tanggalIso: String): String = Formatter.readableDate(tanggalIso)
+private fun waktuMutasi(tanggalIso: String): String = Formatter.readableTime(tanggalIso)
+
+@Composable
+private fun RiwayatLaporanHeader(
+    periodeLabel: String,
+    jumlahData: Int,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color
+) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = surfaceColor),
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(Modifier.size(52.dp).clip(CircleShape).background(primaryColor.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.ReceiptLong, null, tint = primaryColor, modifier = Modifier.size(26.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text("Data Riwayat", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                Text(periodeLabel, color = mutedColor, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Surface(shape = RoundedCornerShape(100), color = primaryColor.copy(alpha = 0.12f)) {
+                Text("$jumlahData data", color = primaryColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun RiwayatKosongCard(surfaceColor: Color, borderColor: Color, textColor: Color, mutedColor: Color, primaryColor: Color) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = surfaceColor),
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(Modifier.size(58.dp).clip(CircleShape).background(primaryColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.FilterList, null, tint = primaryColor, modifier = Modifier.size(28.dp))
+            }
+            Text("Belum ada riwayat", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+            Text("Tidak ada transaksi, produksi, pengeluaran, atau penyesuaian stok pada filter ini.", color = mutedColor, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+@Composable
+private fun RiwayatLaporanCard(
+    row: RepositoriFirebaseUtama.BarisRiwayatTransaksi,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color,
+    successColor: Color,
+    warningColor: Color,
+    dangerColor: Color,
+    purpleColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val accentColor = when {
+        row.status.equals("Batal", true) -> dangerColor
+        row.jenis.equals("Penjualan", true) -> primaryColor
+        row.jenis.equals("Pengeluaran", true) -> dangerColor
+        row.jenis.equals("Produksi", true) -> successColor
+        row.jenis.equals("Produk Olahan", true) -> purpleColor
+        else -> warningColor
+    }
+    val icon = when {
+        row.jenis.equals("Penjualan", true) -> Icons.Rounded.PointOfSale
+        row.jenis.equals("Pengeluaran", true) -> Icons.Rounded.ReceiptLong
+        row.jenis.equals("Produksi", true) -> Icons.Rounded.Factory
+        row.jenis.equals("Produk Olahan", true) -> Icons.Rounded.Inventory
+        else -> Icons.Rounded.FilterList
+    }
+
+    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor), modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Box(Modifier.size(46.dp).clip(CircleShape).background(accentColor.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                    Icon(icon, null, tint = accentColor, modifier = Modifier.size(22.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(row.title.ifBlank { row.jenis }, color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(row.subtitle.ifBlank { Formatter.readableDateTime(row.tanggalIso) }, color = mutedColor, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                Text(row.amount.ifBlank { "-" }, color = accentColor, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Surface(shape = RoundedCornerShape(100), color = accentColor.copy(alpha = 0.10f), border = BorderStroke(1.dp, accentColor.copy(alpha = 0.20f))) {
+                    Text(row.jenis.ifBlank { "Riwayat" }, color = accentColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                }
+                Surface(shape = RoundedCornerShape(100), color = accentColor.copy(alpha = 0.08f), border = BorderStroke(1.dp, accentColor.copy(alpha = 0.18f))) {
+                    Text(row.status.ifBlank { row.badge.ifBlank { "Tercatat" } }, color = accentColor, fontWeight = FontWeight.Medium, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                }
+                Spacer(Modifier.weight(1f))
+                Text(Formatter.readableDateTime(row.tanggalIso), color = mutedColor, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
 @Composable
 private fun MetricCard(modifier: Modifier = Modifier, title: String, value: String, icon: ImageVector, iconColor: Color, surfaceColor: Color, borderColor: Color, textColor: Color, mutedColor: Color) {
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor), modifier = modifier) {
@@ -838,29 +1849,148 @@ private fun buildPreviewRowsLaporan(request: PreviewLaporanRequest, text: String
 
 @Composable
 private fun DashboardSkeleton(surfaceColor: Color, borderColor: Color) {
-    Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor), modifier = Modifier.fillMaxWidth().height(100.dp)) {
-            Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Box(Modifier.size(56.dp).clip(CircleShape).adminShimmerEffect())
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.height(16.dp).fillMaxWidth(0.5f).clip(RoundedCornerShape(4.dp)).adminShimmerEffect()); Box(Modifier.height(24.dp).fillMaxWidth(0.7f).clip(RoundedCornerShape(4.dp)).adminShimmerEffect()) }
+    Column(
+        Modifier.padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Filter chip skeleton
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            repeat(2) { index ->
+                Surface(
+                    shape = RoundedCornerShape(100.dp),
+                    color = surfaceColor,
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Box(
+                        Modifier
+                            .padding(horizontal = if (index == 0) 18.dp else 16.dp, vertical = 10.dp)
+                            .width(if (index == 0) 112.dp else 96.dp)
+                            .height(16.dp)
+                            .clip(RoundedCornerShape(100.dp))
+                            .adminShimmerEffect()
+                    )
+                }
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            repeat(2) {
-                Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor), modifier = Modifier.weight(1f).height(120.dp)) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Box(Modifier.size(40.dp).clip(CircleShape).adminShimmerEffect())
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.height(14.dp).fillMaxWidth(0.6f).clip(RoundedCornerShape(4.dp)).adminShimmerEffect()); Box(Modifier.height(20.dp).fillMaxWidth(0.9f).clip(RoundedCornerShape(4.dp)).adminShimmerEffect()) }
+
+        // Header laporan skeleton
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = surfaceColor,
+            border = BorderStroke(1.dp, borderColor),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .adminShimmerEffect()
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(Modifier.fillMaxWidth(0.48f).height(18.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                        Box(Modifier.fillMaxWidth(0.72f).height(12.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                    }
+                }
+                HorizontalDivider(color = borderColor)
+                repeat(2) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        repeat(2) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Box(Modifier.fillMaxWidth(0.35f).height(11.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                                Box(Modifier.fillMaxWidth(0.78f).height(15.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                            }
+                        }
                     }
                 }
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            repeat(2) {
-                Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = surfaceColor), border = BorderStroke(1.dp, borderColor), modifier = Modifier.weight(1f).height(120.dp)) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Box(Modifier.size(40.dp).clip(CircleShape).adminShimmerEffect())
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { Box(Modifier.height(14.dp).fillMaxWidth(0.6f).clip(RoundedCornerShape(4.dp)).adminShimmerEffect()); Box(Modifier.height(20.dp).fillMaxWidth(0.9f).clip(RoundedCornerShape(4.dp)).adminShimmerEffect()) }
+
+        // Toolbar export skeleton
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = surfaceColor,
+            border = BorderStroke(1.dp, borderColor),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(Modifier.fillMaxWidth(0.28f).height(16.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                    Box(Modifier.fillMaxWidth(0.55f).height(12.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                }
+                repeat(2) {
+                    Box(
+                        Modifier
+                            .width(78.dp)
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .adminShimmerEffect()
+                    )
+                }
+            }
+        }
+
+        // Tabel skeleton yang mirip tampilan laporan
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = surfaceColor,
+            border = BorderStroke(1.dp, borderColor),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
+                        Box(Modifier.fillMaxWidth(0.30f).height(16.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                        Box(Modifier.fillMaxWidth(0.42f).height(12.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                    }
+                    Box(Modifier.width(64.dp).height(14.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                }
+                HorizontalDivider(color = borderColor)
+                Box(Modifier.fillMaxWidth().padding(14.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf(92.dp, 180.dp, 88.dp, 88.dp, 88.dp, 96.dp).forEach { width ->
+                                Box(Modifier.width(width).height(14.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                            }
+                        }
+                        repeat(5) { rowIndex ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                listOf(92.dp, 180.dp, 88.dp, 88.dp, 88.dp, 96.dp).forEachIndexed { cellIndex, width ->
+                                    val adjusted = when (cellIndex) {
+                                        1 -> width - 24.dp
+                                        else -> width - if (rowIndex % 2 == 0) 10.dp else 18.dp
+                                    }
+                                    Box(Modifier.width(adjusted).height(12.dp).clip(RoundedCornerShape(6.dp)).adminShimmerEffect())
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1161,6 +2291,40 @@ private fun buildStokProdukXlsxFromText(text: String): ByteArray {
     return buildXlsxWorkbook(sheets)
 }
 
+private fun buildMutasiRiwayatXlsx(
+    identitas: PengaturanUsahaCache.IdentitasUsaha,
+    rangeLabel: String,
+    jenisFilter: String,
+    rows: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>
+): ByteArray {
+    val namaUsaha = identitas.namaUsaha.ifBlank { "SI Tahu" }
+    val sheetRows = mutableListOf<List<String>>()
+    sheetRows += listOf("MUTASI LAPORAN SI TAHU")
+    sheetRows += listOf("Nama Usaha", namaUsaha)
+    if (identitas.alamat.isNotBlank()) sheetRows += listOf("Alamat", identitas.alamat)
+    if (identitas.nomorTelepon.isNotBlank()) sheetRows += listOf("Telepon", identitas.nomorTelepon)
+    sheetRows += listOf("Periode", rangeLabel)
+    sheetRows += listOf("Jenis Riwayat", jenisFilter)
+    sheetRows += listOf("Tanggal Cetak", SimpleDateFormat("dd MMM yyyy HH:mm", Locale("id", "ID")).format(Date()))
+    sheetRows += emptyList<String>()
+    sheetRows += listOf("Tanggal", "Jenis", "Status", "Uraian", "User", "Nominal")
+    if (rows.isEmpty()) {
+        sheetRows += listOf("-", "-", "-", "Belum ada data pada filter ini.", "-", "-")
+    } else {
+        rows.forEach { row ->
+            sheetRows += listOf(
+                Formatter.readableDateTime(row.tanggalIso),
+                row.jenis,
+                row.status.ifBlank { row.badge.ifBlank { "Tercatat" } },
+                row.title.ifBlank { row.subtitle },
+                row.userName,
+                row.amount.ifBlank { "-" }
+            )
+        }
+    }
+    return buildXlsxWorkbook(listOf("Mutasi" to sheetRows))
+}
+
 private fun uniqueXlsxSheetName(base: String, fallback: String, used: MutableSet<String>): String {
     var c = safeWorksheetName(base, fallback); var count = 2
     while (!used.add(c.lowercase(Locale.US))) { val suf = " $count"; c = safeWorksheetName(base.take((31 - suf.length).coerceAtLeast(1)) + suf, fallback); count++ }
@@ -1186,6 +2350,48 @@ private fun buildXlsxWorkbook(sheets: List<Pair<String, List<List<String>>>>): B
         }
     }
     return out.toByteArray()
+}
+
+private fun buildMutasiRiwayatPdf(
+    identitas: PengaturanUsahaCache.IdentitasUsaha,
+    rangeLabel: String,
+    jenisFilter: String,
+    rows: List<RepositoriFirebaseUtama.BarisRiwayatTransaksi>
+): PdfDocument {
+    val namaUsaha = identitas.namaUsaha.ifBlank { "SI Tahu" }
+    return createLandscapePdf("Mutasi Laporan SI Tahu") { state ->
+        state.drawTitle(namaUsaha.uppercase(Locale.US))
+        if (identitas.alamat.isNotBlank()) state.drawMeta("Alamat", identitas.alamat)
+        if (identitas.nomorTelepon.isNotBlank()) state.drawMeta("Telepon", identitas.nomorTelepon)
+        state.drawTitle("MUTASI LAPORAN")
+        state.drawMeta("Periode", rangeLabel)
+        state.drawMeta("Jenis Riwayat", jenisFilter)
+        state.drawMeta("Tanggal Cetak", SimpleDateFormat("dd MMM yyyy HH:mm", Locale("id", "ID")).format(Date()))
+        state.drawMeta("Jumlah Data", rows.size.toString())
+        state.space(8f)
+        val c = floatArrayOf(112f, 82f, 80f, 238f, 92f, 122f)
+        val h = listOf("Tanggal", "Jenis", "Status", "Uraian", "User", "Nominal")
+        val align = listOf(0, 0, 0, 0, 0, 1)
+        state.drawTableHeader(h, c, align)
+        if (rows.isEmpty()) {
+            state.drawTableRow(listOf("-", "-", "-", "Belum ada data pada filter ini", "-", "-"), c, align) { state.drawTableHeader(h, c, align) }
+        } else {
+            rows.forEach { row ->
+                state.drawTableRow(
+                    listOf(
+                        Formatter.readableDateTime(row.tanggalIso),
+                        row.jenis,
+                        row.status.ifBlank { row.badge.ifBlank { "Tercatat" } },
+                        row.title.ifBlank { row.subtitle },
+                        row.userName,
+                        row.amount.ifBlank { "-" }
+                    ),
+                    c,
+                    align
+                ) { state.drawTableHeader(h, c, align) }
+            }
+        }
+    }
 }
 
 private fun buildBukuHarianPdf(title: String, text: String): PdfDocument {
@@ -1230,10 +2436,62 @@ private fun parseBukuRows(text: String): Pair<Map<String, String>, List<PdfBukuR
     return meta to rows
 }
 private fun parseStokProduk(text: String): Pair<Map<String, String>, List<PdfStokProduk>> {
-    val meta = mutableMapOf<String, String>(); val p = mutableListOf<PdfStokProduk>(); var n = ""; var rows = mutableListOf<PdfStokRow>()
-    fun flush() { if (n.isNotBlank()) p += PdfStokProduk(n, "", "", "", "", rows.toList()); n = ""; rows.clear() }
-    text.lineSequence().forEach { val l = it.trimEnd(); when { l.startsWith("@@TANGGAL=") -> meta["tanggal"] = l.substringAfter("=").trim(); l.startsWith("@@PRODUCT_BEGIN") -> flush(); l.startsWith("@@PRODUK=") -> n = l.substringAfter("=").trim(); l.startsWith("@@ROW=") -> { val f = l.substringAfter("=").trim().split('\t'); rows += PdfStokRow(f.getOrElse(0){""}, f.getOrElse(1){""}, f.getOrElse(2){""}, f.getOrElse(3){""}, f.getOrElse(4){""}, f.getOrElse(5){""}, "") }; l.startsWith("@@PRODUCT_END") -> flush() } }
-    flush(); return meta to p
+    val meta = mutableMapOf<String, String>()
+    val products = mutableListOf<PdfStokProduk>()
+    var namaProduk = ""
+    var kodeKategori = ""
+    var stokSaatIni = ""
+    var stokLayak = ""
+    var rincianEd = ""
+    var rows = mutableListOf<PdfStokRow>()
+
+    fun flush() {
+        if (namaProduk.isNotBlank()) {
+            products += PdfStokProduk(
+                nama = namaProduk,
+                kodeKategori = kodeKategori,
+                stokSaatIni = stokSaatIni,
+                stokLayak = stokLayak,
+                rincianEd = rincianEd,
+                mutasi = rows.toList()
+            )
+        }
+        namaProduk = ""
+        kodeKategori = ""
+        stokSaatIni = ""
+        stokLayak = ""
+        rincianEd = ""
+        rows = mutableListOf()
+    }
+
+    text.lineSequence().forEach { line ->
+        val l = line.trimEnd()
+        when {
+            l.startsWith("@@TANGGAL=") -> meta["tanggal"] = l.substringAfter("=").trim()
+            l.startsWith("@@PERIODE=") -> meta["periode"] = l.substringAfter("=").trim()
+            l.startsWith("@@PRODUCT_BEGIN") -> flush()
+            l.startsWith("@@PRODUK=") -> namaProduk = l.substringAfter("=").trim()
+            l.startsWith("@@KODE_KATEGORI=") -> kodeKategori = l.substringAfter("=").trim()
+            l.startsWith("@@STOK_SAAT_INI=") -> stokSaatIni = l.substringAfter("=").trim()
+            l.startsWith("@@STOK_LAYAK=") -> stokLayak = l.substringAfter("=").trim()
+            l.startsWith("@@RINCIAN_ED=") -> rincianEd = l.substringAfter("=").trim()
+            l.startsWith("@@ROW=") -> {
+                val f = l.substringAfter("=").trim().split('	')
+                rows += PdfStokRow(
+                    tanggal = f.getOrElse(0) { "" },
+                    uraian = f.getOrElse(1) { "" },
+                    user = f.getOrElse(2) { "" },
+                    masuk = f.getOrElse(3) { "" },
+                    keluar = f.getOrElse(4) { "" },
+                    saldo = f.getOrElse(5) { "" },
+                    catatan = f.getOrElse(6) { "" }
+                )
+            }
+            l.startsWith("@@PRODUCT_END") -> flush()
+        }
+    }
+    flush()
+    return meta to products
 }
 private fun angkaPertama(value: String): Long = Regex("-?\\d+").find(value.replace(".", ""))?.value?.toLongOrNull() ?: 0L
 private fun angkaRincianEd(value: String, label: String): Long = Regex("$label\\s+([0-9.]+)", RegexOption.IGNORE_CASE).find(value)?.groupValues?.getOrNull(1)?.replace(".", "")?.toLongOrNull() ?: 0L

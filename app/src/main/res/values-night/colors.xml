@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="blue_primary">#E7C56C</color>
+    <color name="blue_secondary">#C79A3D</color>
+    <color name="blue_dark">#FFF3D6</color>
+    <color name="blue_soft">#3A2D1A</color>
+    <color name="blue_pale">#1B1712</color>
+
+    <color name="green_primary">#7ECF98</color>
+    <color name="green_secondary">#6F9D7C</color>
+    <color name="green_soft">#173524</color>
+    <color name="danger_primary">#F87171</color>
+    <color name="danger_soft">#3B1F1F</color>
+
+    <color name="gold_primary">#E7C56C</color>
+    <color name="gold_soft">#3A2D1A</color>
+    <color name="orange_primary">#F0B870</color>
+    <color name="orange_soft">#3A2D1A</color>
+    <color name="mint_primary">#7ECF98</color>
+    <color name="mint_soft">#173524</color>
+    <color name="purple_primary">#E7C56C</color>
+    <color name="purple_soft">#3A2D1A</color>
+    <color name="pink_primary">#E7C56C</color>
+    <color name="pink_soft">#3A2D1A</color>
+
+    <color name="text_primary">#FFF8EA</color>
+    <color name="text_secondary">#C7BBA6</color>
+    <color name="muted">#9B8D78</color>
+    <color name="screen_bg">#111827</color>
+    <color name="screen_bg_light">#1F2937</color>
+    <color name="card_surface">#1F2937</color>
+    <color name="surface_glass">#F71F2937</color>
+    <color name="surface_soft">#273244</color>
+    <color name="surface_input">#111827</color>
+    <color name="surface_pressed">#3A2D1A</color>
+    <color name="line_color">#374151</color>
+    <color name="line_strong">#4B5563</color>
+
+    <color name="brand_dark">#FFF8EA</color>
+    <color name="brand_lime">#3A2D1A</color>
+    <color name="brand_mint">#7ECF98</color>
+    <color name="brand_cream">#111827</color>
+    <color name="on_dark_soft">#FFFFFF</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+
+    <color name="floating_menu_toggle">#E7C56C</color>
+    <color name="floating_menu_surface">#1F2937</color>
+    <color name="floating_menu_overlay">#B8111827</color>
+</resources>
