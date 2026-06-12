@@ -1,5 +1,9 @@
 package muhamad.irfan.si_tahu.ui.utama
 
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -150,7 +154,15 @@ class AktivitasUtamaAdmin : AktivitasDasar() {
                     dashboardRefreshKey = dashboardRefreshKey, productionRefreshKey = productionRefreshKey,
                     salesRefreshKey = salesRefreshKey, stockRefreshKey = stockRefreshKey,
                     onTabSelected = { selectedTabId = it },
-                    onLogout = { auth.signOut(); startActivity(Intent(this, AktivitasMasuk::class.java)); finish() },
+                    onLogout = {
+                        auth.signOut()
+                        startActivity(
+                            Intent(this, AktivitasMasuk::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            }
+                        )
+                        finish()
+                    },
                     onSwitchCashier = { startActivity(AktivitasUtamaKasir.intent(this, clearTop = true)); finish() }
                 )
             }
@@ -380,34 +392,31 @@ private fun formatNominalGrafikSingkat(value: Long): String = when {
 // === LAYAR KERANGKA (APP SHELL) ===
 @Composable
 private fun AdminMainScreen(
-    namaLogin: String, selectedTabId: Int, dashboardRefreshKey: Int, productionRefreshKey: Int,
-    salesRefreshKey: Int, stockRefreshKey: Int, onTabSelected: (Int) -> Unit,
-    onLogout: () -> Unit, onSwitchCashier: () -> Unit
+    namaLogin: String,
+    selectedTabId: Int,
+    dashboardRefreshKey: Int,
+    productionRefreshKey: Int,
+    salesRefreshKey: Int,
+    stockRefreshKey: Int,
+    onTabSelected: (Int) -> Unit,
+    onLogout: () -> Unit,
+    onSwitchCashier: () -> Unit
 ) {
     val context = LocalContext.current
 
-    var notifikasiAdmin by remember { mutableStateOf<List<RepositoriFirebaseUtama.NotifikasiAdmin>>(emptyList()) }
+    var notifikasiAdmin by remember {
+        mutableStateOf<List<RepositoriFirebaseUtama.NotifikasiAdmin>>(emptyList())
+    }
+
     var isNotificationLoading by remember { mutableStateOf(false) }
     var notifRealtimeTick by remember { mutableIntStateOf(0) }
     var manualRefreshKey by remember { mutableIntStateOf(0) }
+
     val firestoreRealtime = remember { FirebaseFirestore.getInstance() }
-
-    val notifPrefs = remember {
-        context.getSharedPreferences("notifikasi_admin_dibaca", Context.MODE_PRIVATE)
-    }
-
-    var notifDibacaIds by remember {
-        mutableStateOf(notifPrefs.getStringSet("ids", emptySet())?.toSet().orEmpty())
-    }
-
-    val notifikasiBelumDibaca = remember(notifikasiAdmin, notifDibacaIds) {
-        notifikasiAdmin.filterNot { it.id in notifDibacaIds }
-    }
 
     val onRefreshCurrent: () -> Unit = {
         manualRefreshKey++
         notifRealtimeTick++
-        Toast.makeText(context, "Data diperbarui", Toast.LENGTH_SHORT).show()
     }
 
     DisposableEffect(Unit) {
@@ -420,14 +429,30 @@ private fun AdminMainScreen(
             firestoreRealtime.collection("RiwayatStok").addSnapshotListener { _, _ -> notifRealtimeTick++ },
             firestoreRealtime.collection("HargaJual").addSnapshotListener { _, _ -> notifRealtimeTick++ }
         )
-        onDispose { registrations.forEach { it.remove() } }
+
+        onDispose {
+            registrations.forEach { it.remove() }
+        }
     }
 
-    LaunchedEffect(dashboardRefreshKey, productionRefreshKey, salesRefreshKey, stockRefreshKey, notifRealtimeTick) {
+    LaunchedEffect(
+        dashboardRefreshKey,
+        productionRefreshKey,
+        salesRefreshKey,
+        stockRefreshKey,
+        notifRealtimeTick,
+        manualRefreshKey
+    ) {
         isNotificationLoading = true
-        runCatching { RepositoriFirebaseUtama.muatNotifikasiAdmin() }
-            .onSuccess { notifikasiAdmin = it }
-            .onFailure { notifikasiAdmin = emptyList() }
+
+        runCatching {
+            RepositoriFirebaseUtama.muatNotifikasiAdmin()
+        }.onSuccess { data ->
+            notifikasiAdmin = data
+        }.onFailure {
+            notifikasiAdmin = emptyList()
+        }
+
         isNotificationLoading = false
     }
 
@@ -439,10 +464,22 @@ private fun AdminMainScreen(
             SpeedDialItem("Riwayat Pasar", Icons.Rounded.ReceiptLong) {
                 context.startActivity(
                     Intent(context, AktivitasRiwayatPenjualan::class.java)
-                        .putExtra(AktivitasRiwayatPenjualan.EXTRA_SCREEN_TITLE, "Riwayat Rekap Pasar")
-                        .putExtra(AktivitasRiwayatPenjualan.EXTRA_SCREEN_SUBTITLE, "Hanya transaksi dari rekap pasar")
-                        .putExtra(AktivitasRiwayatPenjualan.EXTRA_DEFAULT_FILTER, AktivitasRiwayatPenjualan.FILTER_PASAR)
-                        .putExtra(AktivitasRiwayatPenjualan.EXTRA_LOCK_FILTER, true)
+                        .putExtra(
+                            AktivitasRiwayatPenjualan.EXTRA_SCREEN_TITLE,
+                            "Riwayat Rekap Pasar"
+                        )
+                        .putExtra(
+                            AktivitasRiwayatPenjualan.EXTRA_SCREEN_SUBTITLE,
+                            "Hanya transaksi dari rekap pasar"
+                        )
+                        .putExtra(
+                            AktivitasRiwayatPenjualan.EXTRA_DEFAULT_FILTER,
+                            AktivitasRiwayatPenjualan.FILTER_PASAR
+                        )
+                        .putExtra(
+                            AktivitasRiwayatPenjualan.EXTRA_LOCK_FILTER,
+                            true
+                        )
                 )
             }
         )
@@ -481,31 +518,59 @@ private fun AdminMainScreen(
         selectedTabId = selectedTabId,
         onTabSelected = onTabSelected,
         fabItems = currentFabItems,
-        notifikasiAdmin = notifikasiBelumDibaca,
+        notifikasiAdmin = notifikasiAdmin,
         isNotificationLoading = isNotificationLoading,
-        onRefreshClick = onRefreshCurrent,
+        onRefresh = onRefreshCurrent,
+        onLogout = onLogout,
         onNotificationClick = { item ->
-            val updatedIds = notifDibacaIds + item.id
-            notifDibacaIds = updatedIds
-            notifPrefs.edit().putStringSet("ids", updatedIds).apply()
+            when {
+                item.tujuan == "harga" -> {
+                    context.startActivity(Intent(context, AktivitasDaftarHarga::class.java))
+                }
 
-            if (item.tujuan == "harga") {
-                context.startActivity(Intent(context, AktivitasDaftarHarga::class.java))
-            } else {
-                context.startActivity(Intent(context, AktivitasMonitoringStok::class.java))
+                item.tujuan == "stok" && item.targetId.isNotBlank() -> {
+                    context.startActivity(
+                        Intent(context, AktivitasDetailStok::class.java)
+                            .putExtra(
+                                AktivitasMonitoringStok.EXTRA_PRODUCT_ID,
+                                item.targetId
+                            )
+                    )
+                }
+
+                else -> {
+                    context.startActivity(Intent(context, AktivitasMonitoringStok::class.java))
+                }
             }
         }
     ) {
         when (selectedTabId) {
-            TabIds.ADMIN_PRODUCTION -> AdminProductionPage(productionRefreshKey + manualRefreshKey)
-            TabIds.ADMIN_SALES -> AdminSalesPage(salesRefreshKey + manualRefreshKey)
-            TabIds.ADMIN_STOCK -> AdminStockPage(stockRefreshKey + manualRefreshKey)
-            TabIds.ADMIN_MENU -> AdminMenuPage(onLogout, onSwitchCashier)
-            else -> AdminDashboardPage(dashboardRefreshKey + manualRefreshKey, onSwitchCashier)
+            TabIds.ADMIN_PRODUCTION -> AdminProductionPage(
+                productionRefreshKey + manualRefreshKey
+            )
+
+            TabIds.ADMIN_SALES -> AdminSalesPage(
+                salesRefreshKey + manualRefreshKey
+            )
+
+            TabIds.ADMIN_STOCK -> AdminStockPage(
+                stockRefreshKey + manualRefreshKey
+            )
+
+            TabIds.ADMIN_MENU -> AdminMenuPage(
+                onLogout,
+                onSwitchCashier
+            )
+
+            else -> AdminDashboardPage(
+                dashboardRefreshKey + manualRefreshKey,
+                onSwitchCashier
+            )
         }
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 internal fun ProAppShell(
     title: String,
@@ -517,19 +582,36 @@ internal fun ProAppShell(
     notifikasiAdmin: List<RepositoriFirebaseUtama.NotifikasiAdmin> = emptyList(),
     isNotificationLoading: Boolean = false,
     onNotificationClick: (RepositoriFirebaseUtama.NotifikasiAdmin) -> Unit = {},
-    onRefreshClick: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onLogout: () -> Unit = {},
     content: @Composable () -> Unit
 ) {
-    Surface(color = ProTheme.background, modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = isNotificationLoading,
+        onRefresh = onRefresh
+    )
+
+    Surface(
+        color = ProTheme.background,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pullRefresh(pullRefreshState)
+        ) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+            ) {
                 MainHeader(
                     title = title,
                     subtitle = subtitle,
                     notifikasiAdmin = notifikasiAdmin,
                     isNotificationLoading = isNotificationLoading,
                     onNotificationClick = onNotificationClick,
-                    onRefreshClick = onRefreshClick
+                    onLogout = onLogout
                 )
 
                 Column(
@@ -541,8 +623,20 @@ internal fun ProAppShell(
                     content()
                 }
 
-                ProBottomNav(tabs, selectedTabId, onTabSelected)
+                ProBottomNav(
+                    tabs = tabs,
+                    selectedTabId = selectedTabId,
+                    onTabSelected = onTabSelected
+                )
             }
+
+            PullRefreshIndicator(
+                refreshing = isNotificationLoading,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+                backgroundColor = ProTheme.surface,
+                contentColor = ProTheme.primary
+            )
 
             if (fabItems.isNotEmpty()) {
                 SpeedDialMenu(items = fabItems)
@@ -558,13 +652,17 @@ internal fun MainHeader(
     notifikasiAdmin: List<RepositoriFirebaseUtama.NotifikasiAdmin> = emptyList(),
     isNotificationLoading: Boolean = false,
     onNotificationClick: (RepositoriFirebaseUtama.NotifikasiAdmin) -> Unit = {},
-    onRefreshClick: () -> Unit = {}
+    onLogout: () -> Unit = {}
 ) {
     Surface(
         color = if (isSystemInDarkTheme()) ProTheme.surface else ProTheme.primary,
         shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
         shadowElevation = if (isSystemInDarkTheme()) 0.dp else 8.dp,
-        border = if (isSystemInDarkTheme()) BorderStroke(1.dp, ProTheme.border) else null
+        border = if (isSystemInDarkTheme()) {
+            BorderStroke(1.dp, ProTheme.border)
+        } else {
+            null
+        }
     ) {
         Row(
             Modifier
@@ -578,10 +676,15 @@ internal fun MainHeader(
             Column(Modifier.weight(1f)) {
                 Text(
                     "Si Tahu • ${subtitle.shortHeaderName()}",
-                    color = if (isSystemInDarkTheme()) ProTheme.muted else ProTheme.primaryLight,
+                    color = if (isSystemInDarkTheme()) {
+                        ProTheme.muted
+                    } else {
+                        ProTheme.primaryLight
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Medium
                 )
+
                 Text(
                     title,
                     color = if (isSystemInDarkTheme()) ProTheme.text else Color.White,
@@ -593,7 +696,7 @@ internal fun MainHeader(
             }
 
             IconButton(
-                onClick = onRefreshClick,
+                onClick = onLogout,
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(10.dp))
@@ -606,8 +709,8 @@ internal fun MainHeader(
                     )
             ) {
                 Icon(
-                    Icons.Rounded.Refresh,
-                    contentDescription = "Refresh data",
+                    Icons.Rounded.Logout,
+                    contentDescription = "Keluar akun",
                     tint = if (isSystemInDarkTheme()) ProTheme.text else Color.White,
                     modifier = Modifier.size(22.dp)
                 )
@@ -1328,11 +1431,52 @@ internal fun SummaryTodayCard(summary: RepositoriFirebaseUtama.RingkasanDashboar
 }
 
 @Composable
-internal fun QuickTile(title: String, icon: ImageVector, accent: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(modifier = modifier.clickable(onClick = onClick), shape = RoundedCornerShape(16.dp), color = ProTheme.surface, border = BorderStroke(1.dp, ProTheme.border)) {
-        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(42.dp).clip(CircleShape).background(accent.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = title, tint = accent, modifier = Modifier.size(22.dp)) }
-            Text(title, color = ProTheme.text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+internal fun QuickTile(
+    title: String,
+    icon: ImageVector,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .height(62.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(13.dp),
+        color = ProTheme.surface,
+        border = BorderStroke(1.dp, ProTheme.border)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 9.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Box(
+                Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = title,
+                    tint = accent,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            Text(
+                title,
+                color = ProTheme.text,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

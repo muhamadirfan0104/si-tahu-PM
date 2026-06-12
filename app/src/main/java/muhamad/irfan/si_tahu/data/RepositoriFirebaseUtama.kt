@@ -182,7 +182,8 @@ object RepositoriFirebaseUtama {
         val isi: String,
         val jumlah: Int,
         val warna: String,
-        val tujuan: String
+        val tujuan: String,
+        val targetId: String = ""
     )
 
     private data class UserRingkas(
@@ -1037,102 +1038,110 @@ object RepositoriFirebaseUtama {
         val produkAktif = muatProdukAktif().filter { !it.deleted }
         val notifikasi = mutableListOf<NotifikasiAdmin>()
 
-        val produkEdHariIni = produkAktif.filter { it.edTodayStock > 0 }
-        val totalEdHariIni = produkEdHariIni.sumOf { it.edTodayStock }
-        if (totalEdHariIni > 0) {
-            val contoh = produkEdHariIni.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "ed_hari_ini",
-                jenis = "ED_HARI_INI",
-                judul = "Produk ED Hari Ini",
-                isi = "${produkEdHariIni.size} produk perlu diprioritaskan keluar${if (contoh.isNotBlank()) ": $contoh" else ""}.",
-                jumlah = totalEdHariIni,
-                warna = "warning",
-                tujuan = "stok"
-            )
-        }
-
-        val produkHampirEd = produkAktif.filter { it.nearExpiredStock > 0 }
-        val totalHampirEd = produkHampirEd.sumOf { it.nearExpiredStock }
-        if (totalHampirEd > 0) {
-            val contoh = produkHampirEd.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "hampir_ed",
-                jenis = "HAMPIR_ED",
-                judul = "Stok Hampir Kedaluwarsa",
-                isi = "${produkHampirEd.size} produk mendekati ED${if (contoh.isNotBlank()) ": $contoh" else ""}.",
-                jumlah = totalHampirEd,
-                warna = "orange",
-                tujuan = "stok"
-            )
-        }
-
-        val produkKadaluarsa = produkAktif.filter { it.expiredStock > 0 }
-        val totalKadaluarsa = produkKadaluarsa.sumOf { it.expiredStock }
-        if (totalKadaluarsa > 0) {
-            val contoh = produkKadaluarsa.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "kedaluwarsa",
-                jenis = "KADALUARSA",
-                judul = "Stok Kedaluwarsa",
-                isi = "${produkKadaluarsa.size} produk memiliki stok kedaluwarsa${if (contoh.isNotBlank()) ": $contoh" else ""}. Segera cek dan buang produk kedaluwarsa.",
-                jumlah = totalKadaluarsa,
-                warna = "danger",
-                tujuan = "stok"
-            )
-        }
-
-        val produkMenipis = produkAktif.filter { produk ->
-            val stokLayak = produk.safeStock + produk.nearExpiredStock + produk.edTodayStock
-            produk.minStock > 0 && stokLayak in 1..produk.minStock
-        }
-        if (produkMenipis.isNotEmpty()) {
-            val contoh = produkMenipis.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "stok_menipis",
-                jenis = "STOK_MENIPIS",
-                judul = "Stok Menipis",
-                isi = "${produkMenipis.size} produk berada di bawah batas minimum${if (contoh.isNotBlank()) ": $contoh" else ""}.",
-                jumlah = produkMenipis.size,
-                warna = "orange",
-                tujuan = "stok"
-            )
-        }
-
-        val produkHabis = produkAktif.filter { produk ->
-            val stokLayak = produk.safeStock + produk.nearExpiredStock + produk.edTodayStock
-            stokLayak <= 0 && produk.stock > 0
-        }
-        if (produkHabis.isNotEmpty()) {
-            val contoh = produkHabis.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "stok_tidak_layak",
-                jenis = "STOK_TIDAK_LAYAK",
-                judul = "Stok Tidak Layak Jual",
-                isi = "${produkHabis.size} produk punya stok fisik, tapi tidak ada stok layak jual${if (contoh.isNotBlank()) ": $contoh" else ""}.",
-                jumlah = produkHabis.size,
-                warna = "danger",
-                tujuan = "stok"
-            )
-        }
-
-        val hargaPasarBelumLengkap = produkAktif.filter { produk ->
-            produk.showInCashier && produk.channels.none { channel ->
-                channel.active && !channel.deleted && channel.price > 0L && channel.label.contains("pasar", ignoreCase = true)
+        produkAktif
+            .filter { it.expiredStock > 0 }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "kedaluwarsa_${produk.id}",
+                    jenis = "KADALUARSA",
+                    judul = "Stok Kedaluwarsa: ${produk.name}",
+                    isi = "${produk.expiredStock} ${produk.unit} sudah kedaluwarsa. Segera cek dan lakukan tindakan stok.",
+                    jumlah = produk.expiredStock,
+                    warna = "danger",
+                    tujuan = "stok",
+                    targetId = produk.id
+                )
             }
-        }
-        if (hargaPasarBelumLengkap.isNotEmpty()) {
-            val contoh = hargaPasarBelumLengkap.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "harga_pasar",
-                jenis = "HARGA_PASAR",
-                judul = "Harga Pasar Belum Lengkap",
-                isi = "${hargaPasarBelumLengkap.size} produk belum punya harga kanal Pasar${if (contoh.isNotBlank()) ": $contoh" else ""}.",
-                jumlah = hargaPasarBelumLengkap.size,
-                warna = "warning",
-                tujuan = "harga"
-            )
-        }
+
+        produkAktif
+            .filter { it.edTodayStock > 0 }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "ed_hari_ini_${produk.id}",
+                    jenis = "ED_HARI_INI",
+                    judul = "ED Hari Ini: ${produk.name}",
+                    isi = "${produk.edTodayStock} ${produk.unit} mencapai tanggal kedaluwarsa hari ini. Prioritaskan untuk dicek.",
+                    jumlah = produk.edTodayStock,
+                    warna = "warning",
+                    tujuan = "stok",
+                    targetId = produk.id
+                )
+            }
+
+        produkAktif
+            .filter { it.nearExpiredStock > 0 }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "hampir_ed_${produk.id}",
+                    jenis = "HAMPIR_ED",
+                    judul = "Hampir Kedaluwarsa: ${produk.name}",
+                    isi = "${produk.nearExpiredStock} ${produk.unit} mendekati tanggal kedaluwarsa.",
+                    jumlah = produk.nearExpiredStock,
+                    warna = "orange",
+                    tujuan = "stok",
+                    targetId = produk.id
+                )
+            }
+
+        produkAktif
+            .filter { produk ->
+                val stokLayak = produk.safeStock + produk.nearExpiredStock + produk.edTodayStock
+                produk.minStock > 0 && stokLayak in 1..produk.minStock
+            }
+            .forEach { produk ->
+                val stokLayak = produk.safeStock + produk.nearExpiredStock + produk.edTodayStock
+
+                notifikasi += NotifikasiAdmin(
+                    id = "stok_menipis_${produk.id}",
+                    jenis = "STOK_MENIPIS",
+                    judul = "Stok Menipis: ${produk.name}",
+                    isi = "Stok layak jual tersisa $stokLayak ${produk.unit}, sedangkan stok minimum ${produk.minStock} ${produk.unit}.",
+                    jumlah = stokLayak,
+                    warna = "orange",
+                    tujuan = "stok",
+                    targetId = produk.id
+                )
+            }
+
+        produkAktif
+            .filter { produk ->
+                val stokLayak = produk.safeStock + produk.nearExpiredStock + produk.edTodayStock
+                stokLayak <= 0 && produk.stock > 0
+            }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "stok_tidak_layak_${produk.id}",
+                    jenis = "STOK_TIDAK_LAYAK",
+                    judul = "Stok Tidak Layak Jual: ${produk.name}",
+                    isi = "Produk masih memiliki stok fisik ${produk.stock} ${produk.unit}, tetapi tidak ada stok yang layak jual.",
+                    jumlah = produk.stock,
+                    warna = "danger",
+                    tujuan = "stok",
+                    targetId = produk.id
+                )
+            }
+
+        produkAktif
+            .filter { produk ->
+                produk.showInCashier && produk.channels.none { channel ->
+                    channel.active &&
+                            !channel.deleted &&
+                            channel.price > 0L &&
+                            channel.label.contains("pasar", ignoreCase = true)
+                }
+            }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "harga_pasar_${produk.id}",
+                    jenis = "HARGA_PASAR",
+                    judul = "Harga Pasar Belum Lengkap: ${produk.name}",
+                    isi = "Produk ini belum memiliki harga aktif untuk kanal Pasar.",
+                    jumlah = 1,
+                    warna = "warning",
+                    tujuan = "harga",
+                    targetId = produk.id
+                )
+            }
 
         return notifikasi
     }
