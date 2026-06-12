@@ -127,7 +127,7 @@ private fun PriceFormScreen(
                     .sortedBy { it.name }
 
                 if (products.isEmpty()) {
-                    onShowMessage("Belum ada produk. Tambahkan produk dulu.")
+                    onShowMessage("Tambahkan produk terlebih dahulu.")
                     onNavigateBack()
                     return@addOnSuccessListener
                 }
@@ -222,7 +222,7 @@ private fun PriceFormScreen(
                         if (activeDocs.isEmpty()) {
                             hargaRef.document(priceIdToSave).update(mapOf("aktif" to true, "hargaUtama" to true))
                                 .addOnSuccessListener {
-                                    onShowMessage("Setiap produk harus memiliki satu harga aktif. Harga ini ditetapkan sebagai harga utama.")
+                                    onShowMessage("Harga utama telah ditetapkan.")
                                     onSaveSuccess(selectedProduct.id)
                                 }
                             return@addOnSuccessListener
@@ -243,7 +243,7 @@ private fun PriceFormScreen(
                                 val fallbackDoc = activeDocs.firstOrNull { it.id == priceIdToSave } ?: activeDocs.first()
                                 hargaRef.document(fallbackDoc.id).update("hargaUtama", true)
                                     .addOnSuccessListener {
-                                        onShowMessage("Karena belum ada default, sistem menunjuk salah satu harga sebagai Harga Utama Kasir.")
+                                        onShowMessage("Harga utama kasir ditetapkan.")
                                         onSaveSuccess(selectedProduct.id)
                                     }
                             } else {
@@ -338,7 +338,7 @@ private fun PriceFormScreen(
                             }
                             Column {
                                 Text("Produk Tujuan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                                Text("Produk induk yang diatur harganya", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                                Text("Produk", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                             }
                         }
 
@@ -375,7 +375,7 @@ private fun PriceFormScreen(
                             }
                             Column {
                                 Text("Detail Harga Jual", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                                Text("Isi kanal penjualan dan nominal harga", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                                Text("Detail harga", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                             }
                         }
 
@@ -383,7 +383,7 @@ private fun PriceFormScreen(
                             value = kanalInput,
                             onValueChange = { kanalInput = it },
                             label = { Text("Nama Kanal Penjualan") },
-                            placeholder = { Text("Contoh: Kasir, Pasar, GoFood, GrabFood") },
+                            placeholder = { Text("Kasir, Pasar, GoFood") },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                             shape = RoundedCornerShape(14.dp),
                             textStyle = LocalTextStyle.current.copy(fontWeight = FontWeight.Medium, color = textColor),
@@ -429,7 +429,7 @@ private fun PriceFormScreen(
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Harga Aktif", fontWeight = FontWeight.Bold, color = textColor)
-                                Text("Aktifkan agar harga ini bisa digunakan saat transaksi", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                                Text("Dapat digunakan saat transaksi", color = mutedColor, style = MaterialTheme.typography.labelMedium)
                             }
                             Switch(checked = aktif, onCheckedChange = { aktif = it }, colors = SwitchDefaults.colors(checkedTrackColor = primaryColor))
                         }
@@ -443,7 +443,7 @@ private fun PriceFormScreen(
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Jadikan Harga Utama Kasir", fontWeight = FontWeight.Bold, color = if (aktif) textColor else mutedColor)
-                                Text("Harga ini otomatis dipakai saat transaksi kasir dibuat", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                                Text("Harga utama kasir", color = mutedColor, style = MaterialTheme.typography.labelMedium)
                             }
                             Switch(checked = hargaUtama, onCheckedChange = { hargaUtama = it }, enabled = aktif, colors = SwitchDefaults.colors(checkedTrackColor = primaryColor))
                         }
@@ -454,7 +454,7 @@ private fun PriceFormScreen(
                 Surface(shape = RoundedCornerShape(16.dp), color = primaryColor.copy(alpha = 0.08f), modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Rounded.Info, null, tint = primaryColor, modifier = Modifier.size(20.dp).padding(top = 2.dp))
-                        Text("Setiap produk harus memiliki minimal satu harga aktif agar dapat dijual di kasir.", color = primaryColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2)
+                        Text("Minimal satu harga harus aktif.", color = primaryColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2)
                     }
                 }
 

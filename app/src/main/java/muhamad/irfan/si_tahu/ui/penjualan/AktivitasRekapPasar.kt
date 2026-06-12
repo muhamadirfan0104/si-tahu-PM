@@ -169,14 +169,14 @@ private fun MarketRecapScreen(
     fun labelStatusStokRekap(product: Produk): String = when {
         stokLayakJual(product) <= 0 && product.expiredStock > 0 -> "Kedaluwarsa"
         stokLayakJual(product) <= 0 -> "Habis"
-        product.edTodayStock > 0 -> "ED Hari Ini"
+        product.edTodayStock > 0 -> "Kedaluwarsa Hari Ini"
         product.nearExpiredStock > 0 -> "Hampir Kedaluwarsa"
         product.producedToday -> "Produksi Baru"
         else -> "Sisa Stok"
     }
     fun warnaStatusStok(status: String): Color = when (status) {
         "Kedaluwarsa", "Habis" -> dangerColor
-        "ED Hari Ini", "Hampir Kedaluwarsa" -> warningColor
+        "Kedaluwarsa Hari Ini", "Hampir Kedaluwarsa" -> warningColor
         else -> successColor
     }
     fun labelProduksiTerakhirRekap(product: Produk): String {
@@ -226,7 +226,7 @@ private fun MarketRecapScreen(
                 RepositoriFirebaseUtama.muatProdukAktif()
                     .filter { product -> stokLayakJual(product) > 0 && opsiHargaUntukRekap(product).isNotEmpty() }
                     .sortedWith(
-                        compareBy<Produk> { labelStatusStokRekap(it) != "ED Hari Ini" }
+                        compareBy<Produk> { labelStatusStokRekap(it) != "Kedaluwarsa Hari Ini" }
                             .thenBy { labelStatusStokRekap(it) != "Hampir Kedaluwarsa" }
                             .thenBy { it.name.lowercase() }
                     )
@@ -276,8 +276,8 @@ private fun MarketRecapScreen(
     val stokTidakCukupSaatInput = selectedProduk != null && qtyParsed > 0 && qtyParsed > sisaStokProdukTerpilih
     val pesanStokSaatInput = when {
         selectedProduk == null -> ""
-        stokProdukTerpilih <= 0 -> "Stok produk ini habis, tidak bisa masuk draft."
-        sisaStokProdukTerpilih <= 0 -> "Semua stok produk ini sudah masuk draft."
+        stokProdukTerpilih <= 0 -> "Stok habis."
+        sisaStokProdukTerpilih <= 0 -> "Semua stok sudah dicatat."
         stokTidakCukupSaatInput -> "Stok tidak mencukupi. Sisa bisa dijual: ${Formatter.ribuan(sisaStokProdukTerpilih.toLong())} ${selectedProduk?.unit.orEmpty()}."
         else -> ""
     }
@@ -342,7 +342,7 @@ private fun MarketRecapScreen(
             title = { Text("Batalkan rekap?", fontWeight = FontWeight.Bold, color = textColor) },
             text = {
                 Text(
-                    "Data rekap yang belum disimpan akan hilang. Lanjut kembali?",
+                    "Data belum disimpan. Kembali?",
                     color = mutedColor
                 )
             },
@@ -433,7 +433,7 @@ private fun MarketRecapScreen(
                     title = {
                         Column {
                             Text("Rekap Pasar", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Pencatatan penjualan kolektif massal", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Rekap penjualan pasar", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = {
@@ -469,7 +469,7 @@ private fun MarketRecapScreen(
                     Button(
                         onClick = {
                             if (draftItems.isEmpty()) {
-                                onShowMessage("Keranjang rekap masih kosong")
+                                onShowMessage("Keranjang kosong")
                                 return@Button
                             }
                             if (tanggal.isBlank() || waktu.isBlank()) {
@@ -590,7 +590,7 @@ private fun MarketRecapScreen(
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Tambah Produk Terjual", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                        Text("Input produk yang laku di pasar.", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                        Text("Produk terjual", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                     }
 
                     // Box Pilih Produk
@@ -622,12 +622,12 @@ private fun MarketRecapScreen(
                                     "Stok: ${Formatter.ribuan(stokLayakJual(it).toLong())} ${it.unit} • $status"
                                 } ?: "Ketuk untuk memilih"
 
-                                Text(text = meta, color = if(status == "ED Hari Ini" || status == "Hampir Kedaluwarsa") warningColor else if(status == "Kedaluwarsa" || status == "Habis") dangerColor else mutedColor, style = MaterialTheme.typography.labelMedium)
+                                Text(text = meta, color = if(status == "Kedaluwarsa Hari Ini" || status == "Hampir Kedaluwarsa") warningColor else if(status == "Kedaluwarsa" || status == "Habis") dangerColor else mutedColor, style = MaterialTheme.typography.labelMedium)
 
                                 selectedProduk?.let { produk ->
                                     val infoProduksi = labelProduksiTerakhirRekap(produk)
                                     val infoEd = when (labelStatusStokRekap(produk)) {
-                                        "ED Hari Ini" -> listOf("Prioritaskan dijual", "Prod: $infoProduksi").filter { it.isNotBlank() }.joinToString(" • ")
+                                        "Kedaluwarsa Hari Ini" -> listOf("Prioritaskan dijual", "Prod: $infoProduksi").filter { it.isNotBlank() }.joinToString(" • ")
                                         "Hampir Kedaluwarsa" -> listOf("Mendekati ED", "Prod: $infoProduksi").filter { it.isNotBlank() }.joinToString(" • ")
                                         else -> "Prod: $infoProduksi"
                                     }
@@ -748,7 +748,7 @@ private fun MarketRecapScreen(
 
                     if (draftItems.isEmpty()) {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text("Belum ada barang yang dicatat.", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
+                            Text("Belum ada item", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
                         }
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -953,7 +953,7 @@ private fun ProdukRekapPickerDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Pilih Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                Text("Daftar produk dengan semua harga aktif", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                Text("Daftar produk", color = mutedColor, style = MaterialTheme.typography.bodySmall)
             }
         },
         text = {

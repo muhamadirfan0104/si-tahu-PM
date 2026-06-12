@@ -207,7 +207,7 @@ private fun UserListScreen(
     }
 
     fun deleteUser(user: DataBarisPengguna) {
-        onShowConfirmation("Hapus pengguna?", "Pengguna ${user.namaPengguna} akan disembunyikan dari daftar aktif. Riwayat lama tetap aman.", "Hapus") {
+        onShowConfirmation("Hapus pengguna?", "Hapus pengguna ${user.namaPengguna}?", "Hapus") {
             firestore.collection("Pengguna").document(user.id)
                 .update(mapOf(
                     "dihapus" to true,
@@ -217,7 +217,7 @@ private fun UserListScreen(
                     "diperbaruiPada" to Timestamp.now()
                 ))
                 .addOnSuccessListener {
-                    onShowMessage("Pengguna berhasil dihapus dari daftar aktif.")
+                    onShowMessage("Pengguna dihapus.")
                     triggerRefresh++
                 }
                 .addOnFailureListener { e -> onShowMessage("Gagal menghapus pengguna: ${e.message}") }
@@ -315,7 +315,7 @@ private fun UserListScreen(
                         }
                     }
                 }
-                Text("Menampilkan ${filteredUsers.size} pengguna", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
+                Text("${filteredUsers.size} pengguna", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
             }
 
             // --- DAFTAR PENGGUNA ---
@@ -328,7 +328,7 @@ private fun UserListScreen(
                             Icon(Icons.Rounded.Person, null, tint = Color.Gray, modifier = Modifier.size(32.dp))
                         }
                         Text("Pengguna tidak ditemukan", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text(if (users.isEmpty()) "Belum ada pengguna." else "Coba ubah pencarian, filter, atau rentang tanggal.", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
+                        Text(if (users.isEmpty()) "Belum ada pengguna." else "Tidak ada hasil.", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             } else {
@@ -428,7 +428,7 @@ private fun PaginationListCard(
             TextButton(onClick = onPrev, enabled = halamanSaatIni > 1) {
                 Text("Sebelumnya", color = if (halamanSaatIni > 1) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
             }
-            Text("Hal $halamanSaatIni dari $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Text("$halamanSaatIni / $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             TextButton(onClick = onNext, enabled = halamanSaatIni < totalHalaman) {
                 Text("Selanjutnya", color = if (halamanSaatIni < totalHalaman) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
             }

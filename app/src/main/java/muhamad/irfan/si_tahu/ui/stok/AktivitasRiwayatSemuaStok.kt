@@ -318,7 +318,7 @@ private fun StockHistoryScreen(
                     title = {
                         Column {
                             Text("Riwayat Penyesuaian Stok", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Riwayat penyesuaian stok dan produk kedaluwarsa", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Riwayat stok", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -381,7 +381,7 @@ private fun StockHistoryScreen(
                         }
                     }
                 }
-                Text("Menampilkan ${filteredRows.size} mutasi", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
+                Text("${filteredRows.size} mutasi", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
             }
 
             // --- DAFTAR RIWAYAT SKELETON ---
@@ -394,7 +394,7 @@ private fun StockHistoryScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Belum ada riwayat yang sesuai", "Coba ubah pencarian, filter, atau rentang tanggal.")
+                    EmptyDataView("Belum ada riwayat", "Tidak ada hasil.")
                 }
             } else {
                 LazyColumn(
@@ -445,7 +445,7 @@ private fun StockHistoryScreen(
                                     IconButton(onClick = { if (halamanSaatIni > 1) halamanSaatIni-- }, enabled = halamanSaatIni > 1) {
                                         Icon(Icons.Rounded.ChevronLeft, "Sebelumnya", tint = if (halamanSaatIni > 1) primaryColor else mutedColor)
                                     }
-                                    Text("Hal $halamanSaatIni dari $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
+                                    Text("$halamanSaatIni / $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
                                     IconButton(onClick = { if (halamanSaatIni < totalPages) halamanSaatIni++ }, enabled = halamanSaatIni < totalPages) {
                                         Icon(Icons.Rounded.ChevronRight, "Selanjutnya", tint = if (halamanSaatIni < totalPages) primaryColor else mutedColor)
                                     }

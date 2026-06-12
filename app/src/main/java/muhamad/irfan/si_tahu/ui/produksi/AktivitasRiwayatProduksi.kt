@@ -352,7 +352,7 @@ private fun ProductionHistoryScreen(
                 }
 
                 Text(
-                    text = "Menampilkan ${filteredRows.size} riwayat",
+                    text = "${filteredRows.size} riwayat",
                     color = mutedColor,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(start = 4.dp)
@@ -369,7 +369,7 @@ private fun ProductionHistoryScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Belum ada riwayat yang sesuai", "Coba ubah kata kunci, filter, atau rentang tanggal.")
+                    EmptyDataView("Belum ada riwayat", "Tidak ada hasil.")
                 }
             } else {
                 LazyColumn(
@@ -428,7 +428,7 @@ private fun ProductionHistoryScreen(
                                     }
 
                                     Text(
-                                        text = "Hal $halamanSaatIni dari $totalPages",
+                                        text = "$halamanSaatIni / $totalPages",
                                         color = textColor,
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
@@ -566,14 +566,14 @@ private fun ModernCancelInputDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Riwayat ${item.title} akan dibatalkan dan memengaruhi stok. Silakan masukkan alasan pembatalan untuk pencatatan:",
+                    text = "Batalkan riwayat ${item.title}?",
                     color = mutedColor,
                     style = MaterialTheme.typography.bodyMedium
                 )
                 OutlinedTextField(
                     value = reasonText,
                     onValueChange = { reasonText = it },
-                    placeholder = { Text("Misal: Salah input jumlah", color = mutedColor) },
+                    placeholder = { Text("Salah input jumlah", color = mutedColor) },
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),

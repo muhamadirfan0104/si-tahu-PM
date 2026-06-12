@@ -307,7 +307,7 @@ private fun ParameterListScreen(
                     title = {
                         Column {
                             Text("Parameter Produksi", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Atur standar hasil setiap proses produksi", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Standar produksi", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -403,11 +403,11 @@ private fun ParameterListScreen(
                 }
             } else if (selectedProduct == null) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Pilih Produk", "Silakan pilih produk dasar terlebih dahulu untuk mengatur standar produksi.")
+                    EmptyDataView("Pilih Produk", "Pilih produk dasar.")
                 }
             } else if (parameters.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Belum Ada Parameter", "Tekan tombol + di bawah untuk menambahkan spesifikasi masak baru.")
+                    EmptyDataView("Belum Ada Parameter", "Belum ada parameter.")
                 }
             } else {
                 LazyColumn(
@@ -429,7 +429,7 @@ private fun ParameterListScreen(
                             onClick = { selectedProduct?.let { p -> onNavigateToForm(p.id, param.id) } },
                             onToggleActive = { toggleParameter(param) },
                             onDelete = {
-                                onShowConfirmation("Hapus Parameter?", "Parameter untuk ${param.namaProduk} akan dihapus permanen.", "Hapus") {
+                                onShowConfirmation("Hapus Parameter?", "Hapus parameter ${param.namaProduk}?", "Hapus") {
                                     deleteParameter(param)
                                 }
                             }
@@ -505,7 +505,7 @@ private fun PaginationListCard(
             TextButton(onClick = onPrev, enabled = halamanSaatIni > 1) {
                 Text("Sebelumnya", color = if (halamanSaatIni > 1) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
             }
-            Text("Hal $halamanSaatIni dari $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Text("$halamanSaatIni / $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             TextButton(onClick = onNext, enabled = halamanSaatIni < totalHalaman) {
                 Text("Selanjutnya", color = if (halamanSaatIni < totalHalaman) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
             }
@@ -585,7 +585,7 @@ private fun DialogPilihProdukParameter(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Pilih Produk Dasar", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                Text("Produk kategori DASAR untuk parameter produksi", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                Text("Produk dasar", color = mutedColor, style = MaterialTheme.typography.labelMedium)
             }
         },
         text = {

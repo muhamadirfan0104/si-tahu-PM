@@ -50,13 +50,20 @@ import kotlin.math.roundToInt
 
 class AktivitasProduksiTahuDasar : AktivitasDasar() {
 
+    companion object {
+        const val EXTRA_SELECTED_PRODUCT_ID = "extra_selected_product_id"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!requireLoginOrRedirect()) return
 
+        val preselectedProductId = intent.getStringExtra(EXTRA_SELECTED_PRODUCT_ID).orEmpty()
+
         setContent {
             SiTahuProTheme {
                 BasicProductionScreen(
+                    preselectedProductId = preselectedProductId,
                     onNavigateBack = { finish() },
                     onShowMessage = { pesan -> showMessage(pesan) },
                     getCurrentUserId = { currentUserId() },
@@ -77,6 +84,7 @@ class AktivitasProduksiTahuDasar : AktivitasDasar() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BasicProductionScreen(
+    preselectedProductId: String,
     onNavigateBack: () -> Unit,
     onShowMessage: (String) -> Unit,
     getCurrentUserId: () -> String,
@@ -126,10 +134,10 @@ private fun BasicProductionScreen(
         runCatching { RepositoriFirebaseUtama.muatProdukProduksiDasar() }
             .onSuccess { products ->
                 daftarProdukDasar = products
-                selectedProduk = products.firstOrNull()
+                selectedProduk = products.firstOrNull { it.id == preselectedProductId } ?: products.firstOrNull()
                 isLoading = false
                 if (products.isEmpty()) {
-                    onShowMessage("Belum ada produk dasar yang aktif di sistem.")
+                    onShowMessage("Belum ada produk dasar aktif.")
                 }
             }
             .onFailure {
@@ -226,7 +234,7 @@ private fun BasicProductionScreen(
                                     onSaveSuccess()
                                 }.onFailure { error ->
                                     isSaving = false
-                                    onShowMessage(error.message ?: "Gagal menyimpan produksi. Cek produk, parameter, dan koneksi.")
+                                    onShowMessage(error.message ?: "Gagal menyimpan produksi.")
                                 }
                             }
                         },
@@ -305,7 +313,7 @@ private fun BasicProductionScreen(
                                 val paramText = if (resultPerBatch != null) {
                                     "1x masak = ${Formatter.ribuan(resultPerBatch!!.toLong())} ${produkTerpilih.unit}"
                                 } else {
-                                    "Parameter belum diatur di menu master."
+                                    "Parameter belum diatur."
                                 }
                                 Text(paramText, color = primaryColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                             }
@@ -319,7 +327,7 @@ private fun BasicProductionScreen(
                         value = batches,
                         onValueChange = { batches = InputAngka.formatInputDesimal(it) },
                         label = { Text("Jumlah Masak (Masakes)") },
-                        placeholder = { Text("Contoh: 1,5 atau 1.000") },
+                        placeholder = { Text("1,5 atau 1.000") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
                         shape = RoundedCornerShape(16.dp),
                         textStyle = LocalTextStyle.current.copy(fontWeight = FontWeight.Bold, textAlign = TextAlign.Start, color = textColor),
@@ -429,7 +437,7 @@ private fun BasicProductionScreen(
                                 OutlinedTextField(
                                     value = catatan,
                                     onValueChange = { catatan = it },
-                                    placeholder = { Text("Tulis catatan tambahan di sini...") },
+                                    placeholder = { Text("Catatan tambahan") },
                                     shape = RoundedCornerShape(14.dp),
                                     textStyle = LocalTextStyle.current.copy(color = textColor),
                                     modifier = Modifier.fillMaxWidth().height(120.dp),
@@ -470,14 +478,14 @@ private fun ProductDropdownFieldProduksiDasar(
     var showPicker by remember { mutableStateOf(false) }
     val enabled = !isLoading && produk.isNotEmpty()
     val valueText = when {
-        isLoading -> "Memuat produk dari sistem..."
+        isLoading -> "Memuat produk..."
         produk.isEmpty() -> emptyMessage
         else -> selectedProduk?.name ?: "Pilih produk"
     }
     val supportText = selectedProduk?.let {
         val status = if (it.active) "Aktif" else "Nonaktif"
         "$status • Stok ${Formatter.ribuan(it.stock.toLong())} ${it.unit} • ${it.category}"
-    } ?: if (enabled) "Tekan untuk memilih produk" else "Pengecekan selesai."
+    } ?: if (enabled) "Pilih produk" else "Tidak tersedia"
 
     Column(Modifier.fillMaxWidth()) {
         OutlinedTextField(

@@ -323,7 +323,7 @@ class AktivitasLaporan : AktivitasDasar() {
                 resolver.openOutputStream(uri)?.use { output -> output.write(bytes) }
                 values.clear(); values.put(MediaStore.Downloads.IS_PENDING, 0)
                 resolver.update(uri, values, null, null)
-                showMessage("Tersimpan di Unduh/$folderName: $fileName")
+                showMessage("Tersimpan: $fileName")
             } catch (e: Exception) {
                 resolver.delete(uri, null, null); throw e
             }
@@ -333,7 +333,7 @@ class AktivitasLaporan : AktivitasDasar() {
             val file = File(directory, fileName)
             FileOutputStream(file).use { output -> output.write(bytes) }
             MediaScannerConnection.scanFile(this, arrayOf(file.absolutePath), arrayOf(mimeType), null)
-            showMessage("Tersimpan di Unduh/$folderName: $fileName")
+            showMessage("Tersimpan: $fileName")
         }
     }
 }
@@ -605,8 +605,8 @@ private fun headerKolomUntukLaporan(tipe: String): List<HeaderKolomLaporan> = wh
 }
 
 private fun deskripsiRingkasLaporan(tipe: String): String = when (tipeLaporanNormal(tipe)) {
-    REPORT_PRODUKSI -> "Mutasi stok produksi sesuai periode."
-    else -> "Ringkasan transaksi dan saldo sesuai periode."
+    REPORT_PRODUKSI -> "Mutasi stok produksi"
+    else -> "Ringkasan transaksi dan saldo"
 }
 
 private fun namaFileLaporanPrefix(tipe: String): String = when (tipeLaporanNormal(tipe)) {
@@ -643,14 +643,14 @@ private fun buildLaporanProduksiXlsx(
 
     val semuaRows = headerMetadataSheet(
         identitas,
-        "Laporan Produksi - Mutasi Stok Semua Produk",
+        "Mutasi Stok Produk",
         rangeLabel,
         "Mutasi stok semua produk"
     )
     semuaRows += listOf("Tanggal Mutasi", "Produk", "Uraian Mutasi", "User", "Masuk", "Keluar", "Stok")
     val semuaMutasi = buildPreviewProduksiMutasiRows(products)
     if (semuaMutasi.isEmpty()) {
-        semuaRows += listOf("-", "-", "Belum ada produk atau mutasi stok pada periode ini", "-", "-", "-", "-")
+        semuaRows += listOf("-", "-", "Belum ada mutasi stok", "-", "-", "-", "-")
     } else {
         semuaMutasi.forEach { r -> semuaRows += listOf(r.tanggal, r.produk, r.uraian, r.user, r.masuk, r.keluar, r.stok) }
     }
@@ -659,7 +659,7 @@ private fun buildLaporanProduksiXlsx(
     products.forEachIndexed { index, product ->
         val detailRows = headerMetadataSheet(
             identitas,
-            "Laporan Produksi - Detail Mutasi Produk",
+            "Detail Mutasi Produk",
             rangeLabel,
             "Detail mutasi stok per produk"
         )
@@ -702,10 +702,10 @@ private fun buildLaporanProduksiPdf(
     }
 
     return createLandscapePdf("Laporan Produksi") { state ->
-        drawHeader(state, "Laporan Produksi - Mutasi Stok Semua Produk")
+        drawHeader(state, "Mutasi Stok Produk")
         val semuaRows = buildPreviewProduksiMutasiRows(products)
         if (semuaRows.isEmpty()) {
-            state.drawTableRow(listOf("-", "-", "Belum ada produk atau mutasi stok pada periode ini", "-", "-", "-", "-"), columns, align) { state.drawTableHeader(headers, columns, align) }
+            state.drawTableRow(listOf("-", "-", "Belum ada mutasi stok", "-", "-", "-", "-"), columns, align) { state.drawTableHeader(headers, columns, align) }
         } else {
             semuaRows.forEach { r ->
                 state.drawTableRow(listOf(r.tanggal, r.produk, r.uraian, r.user, r.masuk, r.keluar, r.stok), columns, align) { state.drawTableHeader(headers, columns, align) }
@@ -753,7 +753,7 @@ private fun dataSheetUntukLaporan(
     sheetRows += emptyList<String>()
     if (tipe == REPORT_PRODUKSI) {
         sheetRows += listOf("Tanggal Mutasi", "Produk", "Uraian Mutasi", "User", "Masuk", "Keluar", "Stok")
-        sheetRows += listOf("-", "-", "Gunakan export Laporan Produksi untuk sheet Semua Produk dan detail per produk.", "-", "-", "-", "-")
+        sheetRows += listOf("-", "-", "Gunakan ekspor Laporan Produksi.", "-", "-", "-", "-")
     } else {
         sheetRows += listOf("Tanggal Transaksi", "Uraian Transaksi", "Teller", "Debet", "Kredit", "Saldo")
         val previewRows = buildPreviewKeuanganRows(rows, saldoAwal)
@@ -786,7 +786,7 @@ private fun buildPdfUntukLaporan(
             val h = listOf("Tanggal Mutasi", "Produk", "Uraian Mutasi", "User", "Masuk", "Keluar", "Stok")
             val align = listOf(0, 0, 0, 0, 1, 1, 1)
             state.drawTableHeader(h, c, align)
-            state.drawTableRow(listOf("-", "-", "Gunakan export Laporan Produksi untuk mutasi stok produk.", "-", "-", "-", "-"), c, align) { state.drawTableHeader(h, c, align) }
+            state.drawTableRow(listOf("-", "-", "Gunakan ekspor Laporan Produksi.", "-", "-", "-", "-"), c, align) { state.drawTableHeader(h, c, align) }
         } else {
             val c = floatArrayOf(108f, 270f, 88f, 94f, 94f, 94f)
             val h = listOf("Tanggal Transaksi", "Uraian Transaksi", "Teller", "Debet", "Kredit", "Saldo")
@@ -1016,12 +1016,12 @@ private fun ReportDashboardScreen(
                         isLoading = exportLoading,
                         onPdfClick = {
                             val bolehEkspor = rowsUntukEkspor.isNotEmpty() || tipeLaporanNormal(selectedJenisLaporan) == REPORT_KEUANGAN || (tipeLaporanNormal(selectedJenisLaporan) == REPORT_PRODUKSI && stokProdukData.isNotEmpty())
-                            if (!bolehEkspor) onShowMessage("Belum ada data yang bisa dicetak pada periode ini")
+                            if (!bolehEkspor) onShowMessage("Belum ada data untuk dicetak")
                             else onExportMutasiPdf(reportData?.rangeLabel ?: selectedRange.first, reportData?.rangeKey ?: selectedRange.second, selectedJenisLaporan, rowsUntukEkspor, saldoAwalKeuangan) { exportLoading = it }
                         },
                         onExcelClick = {
                             val bolehEkspor = rowsUntukEkspor.isNotEmpty() || tipeLaporanNormal(selectedJenisLaporan) == REPORT_KEUANGAN || (tipeLaporanNormal(selectedJenisLaporan) == REPORT_PRODUKSI && stokProdukData.isNotEmpty())
-                            if (!bolehEkspor) onShowMessage("Belum ada data yang bisa diunduh pada periode ini")
+                            if (!bolehEkspor) onShowMessage("Belum ada data untuk diunduh")
                             else onExportMutasiExcel(reportData?.rangeLabel ?: selectedRange.first, reportData?.rangeKey ?: selectedRange.second, selectedJenisLaporan, rowsUntukEkspor, saldoAwalKeuangan) { exportLoading = it }
                         },
                         surfaceColor = surfaceColor,
@@ -1042,7 +1042,7 @@ private fun ReportDashboardScreen(
                             rows = productionPreviewRows.map { listOf(it.tanggal, it.produk, it.uraian, it.user, it.masuk, it.keluar, it.stok) },
                             widths = listOf(126.dp, 150.dp, 300.dp, 96.dp, 86.dp, 86.dp, 96.dp),
                             numericColumns = setOf(4, 5, 6),
-                            emptyRow = listOf("-", "-", "Belum ada data mutasi stok produksi pada periode ini", "-", "-", "-", "-"),
+                            emptyRow = listOf("-", "-", "Belum ada mutasi stok", "-", "-", "-", "-"),
                             surfaceColor = surfaceColor,
                             bgColor = bgColor,
                             borderColor = borderColor,
@@ -1057,7 +1057,7 @@ private fun ReportDashboardScreen(
                             rows = financePreviewRows.map { listOf(it.tanggal, it.uraian, it.teller, it.debit, it.kredit, it.saldo) },
                             widths = listOf(126.dp, 320.dp, 92.dp, 110.dp, 110.dp, 118.dp),
                             numericColumns = setOf(3, 4, 5),
-                            emptyRow = listOf("-", "Belum ada data keuangan pada periode ini", "-", "-", "-", "-"),
+                            emptyRow = listOf("-", "Belum ada data keuangan", "-", "-", "-", "-"),
                             surfaceColor = surfaceColor,
                             bgColor = bgColor,
                             borderColor = borderColor,
@@ -1429,7 +1429,7 @@ private fun TabelDokumenLaporan(
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(Modifier.weight(1f)) {
                     Text("Data laporan", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                    Text("Preview ringkas sebelum export", color = mutedColor, style = MaterialTheme.typography.labelSmall)
+                    Text("Preview laporan", color = mutedColor, style = MaterialTheme.typography.labelSmall)
                 }
                 Text("${rows.size} baris", color = primaryColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
             }
@@ -1540,7 +1540,7 @@ private fun MutasiPreviewUtamaCard(
                 }
                 Column(Modifier.weight(1f)) {
                     Text(namaUsaha.uppercase(Locale.US), color = textColor, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(identitasUsaha.alamat.ifBlank { "Alamat usaha belum diisi di pengaturan" }, color = mutedColor, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(identitasUsaha.alamat.ifBlank { "Alamat belum diisi" }, color = mutedColor, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (identitasUsaha.nomorTelepon.isNotBlank()) {
                         Text("Telp. ${identitasUsaha.nomorTelepon}", color = mutedColor, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
@@ -1639,7 +1639,7 @@ private fun MutasiLaporanTablePreview(
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(Modifier.weight(1f)) {
                     Text("Preview tabel laporan", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                    Text("Tampilan ini mengikuti kolom PDF dan Excel", color = mutedColor, style = MaterialTheme.typography.labelSmall)
+                    Text("Sesuai format ekspor", color = mutedColor, style = MaterialTheme.typography.labelSmall)
                 }
                 Text("${rows.size} baris", color = primaryColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
             }
@@ -1879,7 +1879,7 @@ private fun RiwayatKosongCard(surfaceColor: Color, borderColor: Color, textColor
                 Icon(Icons.Rounded.FilterList, null, tint = primaryColor, modifier = Modifier.size(28.dp))
             }
             Text("Belum ada riwayat", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-            Text("Tidak ada transaksi, produksi, pengeluaran, atau penyesuaian stok pada filter ini.", color = mutedColor, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+            Text("Belum ada aktivitas pada filter ini.", color = mutedColor, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
         }
     }
 }
@@ -2346,7 +2346,7 @@ private fun StokAnalysisCard(stok: RepositoriFirebaseUtama.RingkasanStokDashboar
             }
             HorizontalDivider(color = borderColor)
             Text("Rincian ED & Stok", color = textColor, fontWeight = FontWeight.Bold)
-            Text("Aman ${Formatter.ribuan(stok.totalStokAman)} pcs • ED/Hampir Kedaluwarsa ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs • Kedaluwarsa ${Formatter.ribuan(stok.totalKadaluarsa)} pcs", color = mutedColor)
+            Text("Aman ${Formatter.ribuan(stok.totalStokAman)} pcs • Kedaluwarsa/Hampir Kedaluwarsa ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs • Kedaluwarsa ${Formatter.ribuan(stok.totalKadaluarsa)} pcs", color = mutedColor)
         }
     }
 }
@@ -2408,30 +2408,30 @@ private fun bangunStatistikLengkap(laporan: RepositoriFirebaseUtama.RingkasanLap
         StatistikIndikator("Rata-rata Transaksi", Formatter.currency(avgTransaksi), "Omzet rata-rata per transaksi", if (avgTransaksi >= 20000) "good" else "normal"),
         StatistikIndikator("Item per Transaksi", formatAngkaDesimal(itemPerTransaksi), "Jumlah pcs rata-rata per transaksi", if (itemPerTransaksi >= 3.0) "good" else "normal"),
         StatistikIndikator("Transaksi per Hari", formatAngkaDesimal(laporan.totalTransaksi.toDouble() / hariAktif.toDouble()), "Rata-rata aktivitas jual harian", "normal"),
-        StatistikIndikator("Produksi vs Terjual", formatPersen(produksiTerjualRatio), "Perbandingan item terjual terhadap produksi", if (produksiTerjualRatio in 70.0..120.0) "good" else "warn"),
+        StatistikIndikator("Produksi vs Terjual", formatPersen(produksiTerjualRatio), "Terjual vs produksi", if (produksiTerjualRatio in 70.0..120.0) "good" else "warn"),
         StatistikIndikator("Kesehatan Stok", formatPersen(stokLayakRatio), "Stok layak dari total stok fisik", if (stokLayakRatio >= 80.0) "good" else if (stokLayakRatio < 50.0) "bad" else "warn"),
         StatistikIndikator("Ketergantungan Produk", formatPersen(produkTopShare), "Porsi produk terlaris dari total item", if (produkTopShare > 60.0) "warn" else "good"),
         StatistikIndikator("Kanal Dominan", kanalDominan, "Kanal dengan omzet/aktivitas terbesar", "normal"),
         StatistikIndikator("Hari Terbaik", hariTerbaik?.let { "${it.label} • ${Formatter.currency(it.pemasukan)}" } ?: "-", "Pemasukan harian tertinggi", "good"),
-        StatistikIndikator("Perubahan Tren", formatPersen(perubahanTren), "Perbandingan paruh akhir vs paruh awal tren", if (perubahanTren >= 0.0) "good" else "warn")
+        StatistikIndikator("Perubahan Tren", formatPersen(perubahanTren), "Perbandingan tren", if (perubahanTren >= 0.0) "good" else "warn")
     )
 
     val analisisAi = bangunAnalisisAiStatistik(laporan, stok, margin, rasioBiaya, avgTransaksi, produkTopShare, perubahanTren, produkTop, pengeluaranTop, kanalDominan, userTeraktif)
 
     val insight = mutableListOf<String>()
-    insight += if (laporan.labaRugi >= 0) "Periode ini menghasilkan laba ${Formatter.currency(laporan.labaRugi)} dengan margin sekitar ${formatPersen(margin)}." else "Periode ini masih rugi ${Formatter.currency(abs(laporan.labaRugi))}. Pengeluaran perlu dikontrol sebelum omzet berikutnya masuk."
-    insight += "Rata-rata nilai per transaksi adalah ${Formatter.currency(avgTransaksi)} dari ${Formatter.ribuan(laporan.totalTransaksi.toLong())} transaksi."
-    insight += "Rasio pengeluaran terhadap pemasukan sekitar ${formatPersen(rasioBiaya)}. Semakin kecil rasio ini, semakin sehat laba bersih."
-    if (produkTop != null) insight += "Produk paling kuat adalah ${produkTop.title} dengan ${Formatter.ribuan(produkTop.qty.toLong())} pcs terjual dan omzet ${Formatter.currency(produkTop.nominal)}."
-    insight += "Stok layak jual saat ini ${Formatter.ribuan(stok.totalStokLayakJual)} pcs dari total stok fisik ${Formatter.ribuan(stok.totalStokFisik)} pcs."
-    if (hariTerbaik != null) insight += "Hari terbaik pada data tren adalah ${hariTerbaik.label} dengan pemasukan ${Formatter.currency(hariTerbaik.pemasukan)}."
+    insight += if (laporan.labaRugi >= 0) "Laba ${Formatter.currency(laporan.labaRugi)} • margin ${formatPersen(margin)}." else "Rugi ${Formatter.currency(abs(laporan.labaRugi))}."
+    insight += "Rata-rata transaksi: ${Formatter.currency(avgTransaksi)}."
+    insight += "Rasio biaya: ${formatPersen(rasioBiaya)}."
+    if (produkTop != null) insight += "Produk terkuat: ${produkTop.title}."
+    insight += "Stok layak jual: ${Formatter.ribuan(stok.totalStokLayakJual)} pcs."
+    if (hariTerbaik != null) insight += "Hari terbaik: ${hariTerbaik.label}."
 
     val rekomendasi = mutableListOf<String>()
-    if (stok.totalKadaluarsa > 0) rekomendasi += "Segera tindak ${Formatter.ribuan(stok.totalKadaluarsa)} pcs stok kedaluwarsa agar tidak tercampur dengan stok layak jual."
-    if (stok.totalHampirKadaluarsa > 0) rekomendasi += "Prioritaskan penjualan ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs stok ED hari ini/hampir kedaluwarsa dengan prinsip stok lama keluar lebih dulu."
-    if (stok.totalMenipis > 0 || stok.totalHabis > 0) rekomendasi += "Ada ${stok.totalMenipis + stok.totalHabis} produk menipis/habis. Jadwalkan produksi atau restock bahan untuk produk prioritas."
-    if (rasioBiaya > 70.0) rekomendasi += "Rasio pengeluaran tinggi. Periksa biaya terbesar dan bandingkan dengan omzet produk terlaris."
-    if (rekomendasi.isEmpty()) rekomendasi += "Kondisi periode ini relatif aman. Pertahankan pencatatan produksi, penjualan, pengeluaran, dan stok secara konsisten."
+    if (stok.totalKadaluarsa > 0) rekomendasi += "Pisahkan ${Formatter.ribuan(stok.totalKadaluarsa)} pcs stok kedaluwarsa."
+    if (stok.totalHampirKadaluarsa > 0) rekomendasi += "Prioritaskan ${Formatter.ribuan(stok.totalHampirKadaluarsa)} pcs stok hampir kedaluwarsa."
+    if (stok.totalMenipis > 0 || stok.totalHabis > 0) rekomendasi += "${stok.totalMenipis + stok.totalHabis} produk menipis/habis."
+    if (rasioBiaya > 70.0) rekomendasi += "Rasio pengeluaran tinggi. Cek biaya terbesar."
+    if (rekomendasi.isEmpty()) rekomendasi += "Kondisi periode ini relatif aman."
 
     return DataStatistikLengkap(laporan, stok, riwayat, aktivitasUser, jenis, kanal, tren, indikatorDetail, analisisAi, insight, rekomendasi)
 }
@@ -2460,18 +2460,18 @@ private fun bangunAnalisisAiStatistik(laporan: RepositoriFirebaseUtama.Ringkasan
     skor = skor.coerceIn(0, 100)
 
     val status = when { skor >= 85 -> "Sangat Sehat"; skor >= 70 -> "Sehat"; skor >= 55 -> "Cukup Stabil"; skor >= 40 -> "Perlu Perhatian"; else -> "Perlu Tindakan Cepat" }
-    val ringkasan = when { laporan.totalTransaksi <= 0 -> "AI belum menemukan transaksi pada periode ini."; laporan.labaRugi < 0 -> "AI melihat bisnis masih rugi pada periode ini. Pengeluaran lebih besar dari pemasukan."; skor >= 70 -> "AI melihat kondisi usaha cukup baik."; else -> "AI melihat beberapa indikator perlu diperbaiki, terutama biaya dan stok kritis." }
+    val ringkasan = when { laporan.totalTransaksi <= 0 -> "Belum ada transaksi pada periode ini."; laporan.labaRugi < 0 -> "Periode ini masih rugi."; skor >= 70 -> "Kondisi usaha cukup baik."; else -> "Beberapa indikator perlu diperbaiki." }
 
     val prioritas = mutableListOf<String>()
-    if (laporan.labaRugi < 0) prioritas += "Pulihkan laba: cek harga jual, biaya bahan, dan pengeluaran terbesar."
-    if (rasioBiaya > 70.0) prioritas += "Tekan pengeluaran: rasio biaya ${formatPersen(rasioBiaya)} cukup tinggi."
-    if (stok.totalKadaluarsa > 0) prioritas += "Tindak stok kedaluwarsa: ${Formatter.ribuan(stok.totalKadaluarsa)} pcs perlu dipisah."
-    if (prioritas.isEmpty()) prioritas += "Tidak ada prioritas kritis. Pertahankan pencatatan."
+    if (laporan.labaRugi < 0) prioritas += "Cek harga jual, biaya bahan, dan pengeluaran."
+    if (rasioBiaya > 70.0) prioritas += "Rasio biaya ${formatPersen(rasioBiaya)} cukup tinggi."
+    if (stok.totalKadaluarsa > 0) prioritas += "Pisahkan ${Formatter.ribuan(stok.totalKadaluarsa)} pcs stok kedaluwarsa."
+    if (prioritas.isEmpty()) prioritas += "Tidak ada prioritas kritis."
 
     val peluang = mutableListOf<String>()
-    if (produkTop != null) peluang += "Perkuat produk unggulan ${produkTop.title}: kontribusinya ${formatPersen(produkTopShare)} dari item terjual."
-    if (kanalDominan != "-") peluang += "Optimalkan kanal $kanalDominan karena paling dominan."
-    if (peluang.isEmpty()) peluang += "Tambahkan lebih banyak transaksi agar AI bisa membaca peluang produk."
+    if (produkTop != null) peluang += "Perkuat produk unggulan ${produkTop.title}."
+    if (kanalDominan != "-") peluang += "Optimalkan kanal $kanalDominan."
+    if (peluang.isEmpty()) peluang += "Tambahkan transaksi agar analisis lebih akurat."
 
     return AnalisisAiStatistik(skor, status, ringkasan, prioritas.take(5), peluang.take(5))
 }
@@ -2485,7 +2485,7 @@ private fun buildBukuHarianXlsxFromText(text: String): ByteArray {
     sheetRows += listOf("Saldo Awal", meta["saldoAwal"].orEmpty())
     sheetRows += emptyList<String>()
     sheetRows += listOf("Tanggal Transaksi", "Uraian Transaksi", "User", "Debit/Pengeluaran", "Kredit/Pemasukan", "Saldo")
-    if (rows.isEmpty()) sheetRows += listOf("Belum ada data yang ditampilkan pada periode ini.") else rows.forEach { sheetRows += listOf(it.tanggal, it.uraian, it.user, it.debit, it.kredit, it.saldo) }
+    if (rows.isEmpty()) sheetRows += listOf("Belum ada data pada periode ini.") else rows.forEach { sheetRows += listOf(it.tanggal, it.uraian, it.user, it.debit, it.kredit, it.saldo) }
     sheetRows += emptyList<String>()
     sheetRows += listOf("Saldo Akhir", meta["saldo"].orEmpty())
     return buildXlsxWorkbook(listOf("Buku Harian" to sheetRows))
@@ -2499,7 +2499,7 @@ private fun buildStokProdukXlsxFromText(text: String): ByteArray {
     sumRows += listOf("Tanggal Laporan", meta["tanggal"].orEmpty())
     sumRows += emptyList<String>()
     sumRows += listOf("Produk", "Kode", "Fisik", "Layak", "ED", "Hampir Kedaluwarsa", "Kedaluwarsa")
-    if (products.isEmpty()) sumRows += listOf("Belum ada produk aktif.") else products.forEach { sumRows += listOf(it.nama, it.kodeKategori, it.stokSaatIni, it.stokLayak, angkaRincianEd(it.rincianEd, "ED Hari Ini").toString(), angkaRincianEd(it.rincianEd, "Hampir Kedaluwarsa").toString(), angkaRincianEd(it.rincianEd, "Kedaluwarsa").toString()) }
+    if (products.isEmpty()) sumRows += listOf("Belum ada produk aktif.") else products.forEach { sumRows += listOf(it.nama, it.kodeKategori, it.stokSaatIni, it.stokLayak, angkaRincianEd(it.rincianEd, "Kedaluwarsa Hari Ini").toString(), angkaRincianEd(it.rincianEd, "Hampir Kedaluwarsa").toString(), angkaRincianEd(it.rincianEd, "Kedaluwarsa").toString()) }
     sheets += "Ringkasan" to sumRows
     val used = mutableSetOf("ringkasan")
     products.forEachIndexed { i, p ->

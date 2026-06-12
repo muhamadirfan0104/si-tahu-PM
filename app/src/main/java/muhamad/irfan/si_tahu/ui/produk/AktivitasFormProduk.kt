@@ -222,7 +222,7 @@ private fun ProductFormScreen(
         if (isEditing) {
             onShowConfirmation(
                 "Hapus produk?",
-                "Produk $namaProduk akan dinonaktifkan dan dihapus dari daftar aktif.",
+                "Hapus produk $namaProduk?",
                 "Hapus"
             ) {
                 isSaving = true
@@ -335,7 +335,7 @@ private fun ProductFormScreen(
                             value = namaProduk,
                             onValueChange = { namaProduk = it },
                             label = { Text("Nama Produk") },
-                            placeholder = { Text("Misal: Tahu Putih Besar") },
+                            placeholder = { Text("Tahu Putih Besar") },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                             shape = RoundedCornerShape(14.dp),
                             textStyle = LocalTextStyle.current.copy(fontWeight = FontWeight.Medium, color = textColor),
@@ -395,7 +395,7 @@ private fun ProductFormScreen(
                             }
                             Column {
                                 Text("Aturan Stok & ED", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                                Text("Batas minimum dan kedaluwarsa", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                                Text("Stok & Kedaluwarsa", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                             }
                         }
 
@@ -403,7 +403,7 @@ private fun ProductFormScreen(
                             value = stokMinimum,
                             onValueChange = { stokMinimum = InputAngka.formatInput(it) },
                             label = { Text("Peringatan Stok Minimum") },
-                            placeholder = { Text("Misal: 50") },
+                            placeholder = { Text("50") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                             shape = RoundedCornerShape(14.dp),
                             textStyle = LocalTextStyle.current.copy(fontWeight = FontWeight.Medium, color = textColor),
@@ -439,7 +439,7 @@ private fun ProductFormScreen(
                         Surface(shape = RoundedCornerShape(16.dp), color = primaryColor.copy(alpha = 0.08f), modifier = Modifier.fillMaxWidth()) {
                             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Icon(Icons.Rounded.Info, null, tint = primaryColor, modifier = Modifier.size(20.dp).padding(top = 2.dp))
-                                Text("Barang otomatis berstatus 'Hampir Kedaluwarsa' ketika sisa hari mencapai angka warning di atas.", color = primaryColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2)
+                                Text("Status berubah saat mendekati ED.", color = primaryColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2)
                             }
                         }
                     }
@@ -468,7 +468,7 @@ private fun ProductFormScreen(
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Produk Aktif", fontWeight = FontWeight.Bold, color = textColor)
-                                Text("Bisa diproduksi dan tampil di harga", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                                Text("Tampil di produksi dan harga", color = mutedColor, style = MaterialTheme.typography.labelMedium)
                             }
                             Switch(checked = aktifDijual, onCheckedChange = { aktifDijual = it }, colors = SwitchDefaults.colors(checkedTrackColor = primaryColor))
                         }
@@ -482,7 +482,7 @@ private fun ProductFormScreen(
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Tampil di Kasir", fontWeight = FontWeight.Bold, color = if (aktifDijual) textColor else mutedColor)
-                                Text("Shortcut tombol cepat di menu Kasir", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                                Text("Tombol cepat kasir", color = mutedColor, style = MaterialTheme.typography.labelMedium)
                             }
                             Switch(checked = tampilDiKasir, onCheckedChange = { tampilDiKasir = it }, enabled = aktifDijual, colors = SwitchDefaults.colors(checkedTrackColor = primaryColor))
                         }

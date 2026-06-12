@@ -182,7 +182,8 @@ object RepositoriFirebaseUtama {
         val isi: String,
         val jumlah: Int,
         val warna: String,
-        val tujuan: String
+        val tujuan: String,
+        val targetId: String = ""
     )
 
     private data class UserRingkas(
@@ -419,7 +420,7 @@ object RepositoriFirebaseUtama {
         val stokLayak = safe + near + edToday
         val status = when {
             stokLayak <= 0L && expired > 0L -> "Kedaluwarsa"
-            edToday > 0L -> "ED Hari Ini"
+            edToday > 0L -> "Kedaluwarsa Hari Ini"
             near > 0L -> "Hampir Kedaluwarsa"
             producedToday -> "Produksi Hari Ini"
             safe > 0L -> "Stok Sisa"
@@ -1037,102 +1038,137 @@ object RepositoriFirebaseUtama {
         val produkAktif = muatProdukAktif().filter { !it.deleted }
         val notifikasi = mutableListOf<NotifikasiAdmin>()
 
-        val produkEdHariIni = produkAktif.filter { it.edTodayStock > 0 }
-        val totalEdHariIni = produkEdHariIni.sumOf { it.edTodayStock }
-        if (totalEdHariIni > 0) {
-            val contoh = produkEdHariIni.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "ed_hari_ini",
-                jenis = "ED_HARI_INI",
-                judul = "Produk ED Hari Ini",
-                isi = "${produkEdHariIni.size} produk perlu diprioritaskan keluar${if (contoh.isNotBlank()) ": $contoh" else ""}.",
-                jumlah = totalEdHariIni,
-                warna = "warning",
-                tujuan = "stok"
-            )
-        }
+        fun stokLayakJual(produk: Produk): Int =
+            produk.safeStock + produk.nearExpiredStock + produk.edTodayStock
 
-        val produkHampirEd = produkAktif.filter { it.nearExpiredStock > 0 }
-        val totalHampirEd = produkHampirEd.sumOf { it.nearExpiredStock }
-        if (totalHampirEd > 0) {
-            val contoh = produkHampirEd.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "hampir_ed",
-                jenis = "HAMPIR_ED",
-                judul = "Stok Hampir Kedaluwarsa",
-                isi = "${produkHampirEd.size} produk mendekati ED${if (contoh.isNotBlank()) ": $contoh" else ""}.",
-                jumlah = totalHampirEd,
-                warna = "orange",
-                tujuan = "stok"
-            )
-        }
-
-        val produkKadaluarsa = produkAktif.filter { it.expiredStock > 0 }
-        val totalKadaluarsa = produkKadaluarsa.sumOf { it.expiredStock }
-        if (totalKadaluarsa > 0) {
-            val contoh = produkKadaluarsa.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "kedaluwarsa",
-                jenis = "KADALUARSA",
-                judul = "Stok Kedaluwarsa",
-                isi = "${produkKadaluarsa.size} produk memiliki stok kedaluwarsa${if (contoh.isNotBlank()) ": $contoh" else ""}. Segera cek dan buang produk kedaluwarsa.",
-                jumlah = totalKadaluarsa,
-                warna = "danger",
-                tujuan = "stok"
-            )
-        }
-
-        val produkMenipis = produkAktif.filter { produk ->
-            val stokLayak = produk.safeStock + produk.nearExpiredStock + produk.edTodayStock
-            produk.minStock > 0 && stokLayak in 1..produk.minStock
-        }
-        if (produkMenipis.isNotEmpty()) {
-            val contoh = produkMenipis.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "stok_menipis",
-                jenis = "STOK_MENIPIS",
-                judul = "Stok Menipis",
-                isi = "${produkMenipis.size} produk berada di bawah batas minimum${if (contoh.isNotBlank()) ": $contoh" else ""}.",
-                jumlah = produkMenipis.size,
-                warna = "orange",
-                tujuan = "stok"
-            )
-        }
-
-        val produkHabis = produkAktif.filter { produk ->
-            val stokLayak = produk.safeStock + produk.nearExpiredStock + produk.edTodayStock
-            stokLayak <= 0 && produk.stock > 0
-        }
-        if (produkHabis.isNotEmpty()) {
-            val contoh = produkHabis.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "stok_tidak_layak",
-                jenis = "STOK_TIDAK_LAYAK",
-                judul = "Stok Tidak Layak Jual",
-                isi = "${produkHabis.size} produk punya stok fisik, tapi tidak ada stok layak jual${if (contoh.isNotBlank()) ": $contoh" else ""}.",
-                jumlah = produkHabis.size,
-                warna = "danger",
-                tujuan = "stok"
-            )
-        }
-
-        val hargaPasarBelumLengkap = produkAktif.filter { produk ->
-            produk.showInCashier && produk.channels.none { channel ->
-                channel.active && !channel.deleted && channel.price > 0L && channel.label.contains("pasar", ignoreCase = true)
+        // 1. Paling penting: stok yang sudah melewati tanggal kedaluwarsa.
+        produkAktif
+            .filter { it.expiredStock > 0 }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "kedaluwarsa_${produk.id}",
+                    jenis = "KADALUARSA",
+                    judul = "Stok Kedaluwarsa: ${produk.name}",
+                    isi = "${produk.expiredStock} ${produk.unit} sudah kedaluwarsa. Segera lakukan penanganan stok.",
+                    jumlah = produk.expiredStock,
+                    warna = "danger",
+                    tujuan = "stok",
+                    targetId = produk.id
+                )
             }
-        }
-        if (hargaPasarBelumLengkap.isNotEmpty()) {
-            val contoh = hargaPasarBelumLengkap.take(2).joinToString(", ") { it.name }
-            notifikasi += NotifikasiAdmin(
-                id = "harga_pasar",
-                jenis = "HARGA_PASAR",
-                judul = "Harga Pasar Belum Lengkap",
-                isi = "${hargaPasarBelumLengkap.size} produk belum punya harga kanal Pasar${if (contoh.isNotBlank()) ": $contoh" else ""}.",
-                jumlah = hargaPasarBelumLengkap.size,
-                warna = "warning",
-                tujuan = "harga"
-            )
-        }
+
+        // 2. Stok yang mencapai tanggal kedaluwarsa pada hari ini.
+        produkAktif
+            .filter { it.edTodayStock > 0 }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "ed_hari_ini_${produk.id}",
+                    jenis = "ED_HARI_INI",
+                    judul = "Kedaluwarsa Hari Ini: ${produk.name}",
+                    isi = "${produk.edTodayStock} ${produk.unit} mencapai tanggal kedaluwarsa hari ini.",
+                    jumlah = produk.edTodayStock,
+                    warna = "warning",
+                    tujuan = "stok",
+                    targetId = produk.id
+                )
+            }
+
+        // 3. Stok fisik masih ada, tetapi tidak ada stok yang aman dijual.
+        produkAktif
+            .filter { produk ->
+                stokLayakJual(produk) <= 0 && produk.stock > 0
+            }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "stok_tidak_layak_${produk.id}",
+                    jenis = "STOK_TIDAK_LAYAK",
+                    judul = "Stok Tidak Layak: ${produk.name}",
+                    isi = "Stok fisik ${produk.stock} ${produk.unit}, tetapi tidak ada stok yang layak dijual.",
+                    jumlah = produk.stock,
+                    warna = "danger",
+                    tujuan = "stok",
+                    targetId = produk.id
+                )
+            }
+
+        // 4. Produk aktif yang stok layak jualnya habis.
+        produkAktif
+            .filter { produk ->
+                stokLayakJual(produk) <= 0 &&
+                        produk.stock <= 0 &&
+                        (produk.showInCashier || produk.minStock > 0)
+            }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "stok_habis_${produk.id}",
+                    jenis = "STOK_HABIS",
+                    judul = "Stok Habis: ${produk.name}",
+                    isi = "Stok tersedia habis. Catat produksi untuk menambah stok.",
+                    jumlah = 0,
+                    warna = "danger",
+                    tujuan = if (produk.category.equals("OLAHAN", ignoreCase = true)) "produksi_olahan" else "produksi_dasar",
+                    targetId = produk.id
+                )
+            }
+
+        // 5. Stok yang mendekati tanggal kedaluwarsa.
+        produkAktif
+            .filter { it.nearExpiredStock > 0 }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "hampir_ed_${produk.id}",
+                    jenis = "HAMPIR_ED",
+                    judul = "Hampir Kedaluwarsa: ${produk.name}",
+                    isi = "${produk.nearExpiredStock} ${produk.unit} mendekati tanggal kedaluwarsa.",
+                    jumlah = produk.nearExpiredStock,
+                    warna = "orange",
+                    tujuan = "stok",
+                    targetId = produk.id
+                )
+            }
+
+        // 6. Stok layak jual sudah sama atau di bawah batas minimum.
+        produkAktif
+            .filter { produk ->
+                val stokLayak = stokLayakJual(produk)
+                produk.minStock > 0 && stokLayak in 1..produk.minStock
+            }
+            .forEach { produk ->
+                val stokLayak = stokLayakJual(produk)
+
+                notifikasi += NotifikasiAdmin(
+                    id = "stok_menipis_${produk.id}",
+                    jenis = "STOK_MENIPIS",
+                    judul = "Stok Menipis: ${produk.name}",
+                    isi = "Stok layak jual tersisa $stokLayak ${produk.unit}. Minimum stok ${produk.minStock} ${produk.unit}.",
+                    jumlah = stokLayak,
+                    warna = "orange",
+                    tujuan = "stok",
+                    targetId = produk.id
+                )
+            }
+
+        // 7. Harga sudah aman jika produk punya minimal satu harga aktif dengan nominal lebih dari 0.
+        produkAktif
+            .filter { produk ->
+                produk.showInCashier && produk.channels.none { channel ->
+                    channel.active &&
+                            !channel.deleted &&
+                            channel.price > 0L
+                }
+            }
+            .forEach { produk ->
+                notifikasi += NotifikasiAdmin(
+                    id = "harga_${produk.id}",
+                    jenis = "HARGA_BELUM_DIATUR",
+                    judul = "Harga Belum Diatur: ${produk.name}",
+                    isi = "Tambahkan minimal satu harga aktif untuk produk ini.",
+                    jumlah = 1,
+                    warna = "warning",
+                    tujuan = "harga",
+                    targetId = produk.id
+                )
+            }
 
         return notifikasi
     }
@@ -1966,7 +2002,7 @@ $pembatalanBlock
                     produk.expiredStock > 0 -> "Perlu Tindakan"
                     status == "Habis" -> "Habis"
                     status == "Menipis" -> "Menipis"
-                    produk.edTodayStock > 0 -> "ED Hari Ini"
+                    produk.edTodayStock > 0 -> "Kedaluwarsa Hari Ini"
                     produk.nearExpiredStock > 0 -> "Hampir Kedaluwarsa"
                     else -> "Aman"
                 },
@@ -4334,7 +4370,7 @@ $rowXml
         summaryRows += listOf("Tanggal Laporan", Formatter.readableDateTime(formatIso.format(Date())))
         summaryRows += listOf("Periode Mutasi", label)
         summaryRows += emptyList<String>()
-        summaryRows += listOf("Kode", "Nama Produk", "Kategori", "Stok Fisik", "Layak Jual", "ED Hari Ini", "Hampir Kedaluwarsa", "Kedaluwarsa", "Stok Minimum")
+        summaryRows += listOf("Kode", "Nama Produk", "Kategori", "Stok Fisik", "Layak Jual", "Kedaluwarsa Hari Ini", "Hampir Kedaluwarsa", "Kedaluwarsa", "Stok Minimum")
         produk.forEach { item ->
             summaryRows += listOf(
                 item.code,
@@ -4371,7 +4407,7 @@ $rowXml
             rows += listOf("Periode", label)
             rows += listOf("Stok Fisik Saat Ini", item.stock.toString())
             rows += listOf("Layak Jual", (item.safeStock + item.nearExpiredStock + item.edTodayStock).toString())
-            rows += listOf("Rincian ED", "ED Hari Ini ${item.edTodayStock}, Hampir Kedaluwarsa ${item.nearExpiredStock}, Kedaluwarsa ${item.expiredStock}")
+            rows += listOf("Rincian ED", "Kedaluwarsa Hari Ini ${item.edTodayStock}, Hampir Kedaluwarsa ${item.nearExpiredStock}, Kedaluwarsa ${item.expiredStock}")
             rows += emptyList<String>()
             rows += listOf("Tanggal Transaksi", "Uraian Transaksi", "User", "Masuk", "Keluar", "Saldo", "Catatan")
             val mutasi = grouped[item.id].orEmpty()
@@ -4612,7 +4648,7 @@ $rowXml
             appendLine(row("Tanggal Laporan", Formatter.readableDateTime(formatIso.format(Date()))))
             appendLine(row("Periode Mutasi", label))
             appendLine(row(""))
-            appendLine(row("Kode", "Nama Produk", "Kategori", "Stok Fisik", "Layak Jual", "ED Hari Ini", "Hampir Kedaluwarsa", "Kedaluwarsa", "Stok Minimum"))
+            appendLine(row("Kode", "Nama Produk", "Kategori", "Stok Fisik", "Layak Jual", "Kedaluwarsa Hari Ini", "Hampir Kedaluwarsa", "Kedaluwarsa", "Stok Minimum"))
             produk.forEach { item ->
                 appendLine(row(
                     item.code,
@@ -4673,7 +4709,7 @@ $rowXml
                 appendLine("@@KODE_KATEGORI=${field("${item.code} / ${item.category}")}")
                 appendLine("@@STOK_SAAT_INI=${field("${Formatter.ribuan(item.stock.toLong())} ${item.unit}")}")
                 appendLine("@@STOK_LAYAK=${field("${Formatter.ribuan((item.safeStock + item.nearExpiredStock + item.edTodayStock).toLong())} ${item.unit}")}")
-                appendLine("@@RINCIAN_ED=${field("ED Hari Ini ${item.edTodayStock}, Hampir ED ${item.nearExpiredStock}, Kadaluarsa ${item.expiredStock}")}")
+                appendLine("@@RINCIAN_ED=${field("Kedaluwarsa Hari Ini ${item.edTodayStock}, Hampir Kedaluwarsa ${item.nearExpiredStock}, Kedaluwarsa ${item.expiredStock}")}")
                 grouped[item.id].orEmpty().forEach { baris ->
                     appendLine(
                         listOf(
@@ -4739,7 +4775,7 @@ $rowXml
                     title = item.name,
                     subtitle = item.nearestExpiryDate.takeIf { it.isNotBlank() }?.let { "ED terdekat ${Formatter.readableShortDate(it)}" } ?: "Perlu diprioritaskan",
                     amount = "${Formatter.ribuan(qtyPerhatian.toLong())} ${item.unit}",
-                    badge = if (item.expiredStock > 0) "Kedaluwarsa" else if (item.edTodayStock > 0) "ED Hari Ini" else "Hampir Kedaluwarsa",
+                    badge = if (item.expiredStock > 0) "Kedaluwarsa" else if (item.edTodayStock > 0) "Kedaluwarsa Hari Ini" else "Hampir Kedaluwarsa",
                     tanggalIso = todayKey
                 )
             }

@@ -62,7 +62,7 @@ class AktivitasMidtransPaymentWebView : AktivitasDasar() {
             append("Total: ")
             append(Formatter.currency(total))
             if (orderId.isNotBlank()) append("\nOrder ID: ").append(orderId)
-            append("\nSetelah pelanggan membayar, tekan Cek Pembayaran.")
+            append("\nCek status setelah pelanggan membayar.")
         }
     }
 
@@ -181,7 +181,7 @@ class AktivitasMidtransPaymentWebView : AktivitasDasar() {
     private fun konfirmasiKeluar() {
         showConfirmationModal(
             title = "Kembali ke checkout?",
-            message = "Pembayaran tidak otomatis disimpan. Setelah pelanggan selesai bayar, tekan Cek Pembayaran dari checkout.",
+            message = "Cek pembayaran setelah pelanggan membayar.",
             confirmLabel = "Kembali",
             onConfirm = { finish() }
         )

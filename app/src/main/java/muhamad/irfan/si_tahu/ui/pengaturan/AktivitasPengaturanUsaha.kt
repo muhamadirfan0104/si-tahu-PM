@@ -162,7 +162,7 @@ private fun BusinessSettingsScreen(
             return
         }
         if (logoBersih.length > 8) {
-            onShowMessage("Teks Logo maksimal 8 karakter.")
+            onShowMessage("Logo maksimal 8 karakter.")
             return
         }
 
@@ -198,7 +198,7 @@ private fun BusinessSettingsScreen(
                 )
                 logoText = logoFinal
                 isSaving = false
-                onShowMessage("Pengaturan usaha berhasil disimpan dan akan tampil di halaman login.")
+                onShowMessage("Pengaturan berhasil disimpan.")
             }
             .addOnFailureListener { e ->
                 isSaving = false
@@ -358,7 +358,7 @@ private fun BusinessSettingsScreen(
                             value = namaUsaha,
                             onValueChange = { namaUsaha = it },
                             label = { Text("Nama Usaha", color = mutedColor) },
-                            placeholder = { Text("Misal: Tahu Maju Jaya") },
+                            placeholder = { Text("Tahu Maju Jaya") },
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next),
                             shape = RoundedCornerShape(14.dp),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -437,7 +437,7 @@ private fun BusinessSettingsScreen(
                             value = footerStruk,
                             onValueChange = { footerStruk = it },
                             label = { Text("Pesan Penutup Nota (Footer)", color = mutedColor) },
-                            placeholder = { Text("Misal: Terima kasih telah berbelanja.") },
+                            placeholder = { Text("Terima kasih telah berbelanja.") },
                             leadingIcon = { Icon(Icons.Rounded.ReceiptLong, null, tint = mutedColor) },
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
                             shape = RoundedCornerShape(14.dp),
@@ -470,7 +470,7 @@ private fun BusinessSettingsScreen(
                         OutlinedTextField(
                             value = catatanUsaha,
                             onValueChange = { catatanUsaha = it },
-                            label = { Text("Nama Pemilik / Catatan Internal", color = mutedColor) },
+                            label = { Text("Nama Pemilik", color = mutedColor) },
                             placeholder = { Text("Info tambahan tentang usaha") },
                             leadingIcon = { Icon(Icons.Rounded.Info, null, tint = mutedColor) },
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),

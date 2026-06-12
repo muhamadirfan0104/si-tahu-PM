@@ -130,7 +130,7 @@ private fun ParameterFormScreen(
                     .sortedBy { it.namaProduk.lowercase() }
 
                 if (products.isEmpty()) {
-                    onShowMessage("Belum ada produk dasar. Tambahkan produk DASAR dulu.")
+                    onShowMessage("Tambahkan produk dasar terlebih dahulu.")
                     onNavigateBack()
                     return@addOnSuccessListener
                 }
@@ -150,7 +150,7 @@ private fun ParameterFormScreen(
                                 catatanInput = doc.getString("catatan").orEmpty()
                                 aktif = doc.getBoolean("aktif") ?: true
                             } else {
-                                onShowMessage("Parameter ini sudah dihapus atau tidak ditemukan.")
+                                onShowMessage("Parameter tidak ditemukan.")
                                 onNavigateBack()
                             }
                             isLoading = false
@@ -218,7 +218,7 @@ private fun ParameterFormScreen(
                             onSaveSuccess(selectedProduct.id)
                         }
                     }.addOnFailureListener {
-                        onShowMessage("Parameter tersimpan, namun gagal menyinkronkan status aktif.")
+                        onShowMessage("Parameter tersimpan. Status aktif gagal disinkronkan.")
                         onSaveSuccess(selectedProduct.id)
                     }
                 } else {
@@ -344,7 +344,7 @@ private fun ParameterFormScreen(
                             }
                             Column {
                                 Text("Output Produksi", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                                Text("Isi target kuantitas masak", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                                Text("Target produksi", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                             }
                         }
 
@@ -366,8 +366,8 @@ private fun ParameterFormScreen(
                         OutlinedTextField(
                             value = catatanInput,
                             onValueChange = { catatanInput = it },
-                            label = { Text("Catatan / Keterangan (Opsional)") },
-                            placeholder = { Text("Misal: Standar menggunakan cetakan kayu besar...") },
+                            label = { Text("Catatan (Opsional)") },
+                            placeholder = { Text("Catatan produksi") },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             shape = RoundedCornerShape(14.dp),
                             textStyle = LocalTextStyle.current.copy(color = textColor),
@@ -400,7 +400,7 @@ private fun ParameterFormScreen(
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Jadikan Parameter Utama", fontWeight = FontWeight.Bold, color = textColor)
-                                Text("Akan langsung digunakan saat dapur memasak produk ini", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                                Text("Jadikan parameter aktif", color = mutedColor, style = MaterialTheme.typography.labelMedium)
                             }
                             Switch(checked = aktif, onCheckedChange = { aktif = it }, colors = SwitchDefaults.colors(checkedTrackColor = primaryColor))
                         }
@@ -411,7 +411,7 @@ private fun ParameterFormScreen(
                 Surface(shape = RoundedCornerShape(16.dp), color = primaryColor.copy(alpha = 0.08f), modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Rounded.Info, null, tint = primaryColor, modifier = Modifier.size(20.dp).padding(top = 2.dp))
-                        Text("Jika opsi di atas diaktifkan, maka otomatis parameter lama yang terikat dengan produk ini akan dinonaktifkan oleh sistem.", color = primaryColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2)
+                        Text("Parameter lama akan dinonaktifkan.", color = primaryColor, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2)
                     }
                 }
 

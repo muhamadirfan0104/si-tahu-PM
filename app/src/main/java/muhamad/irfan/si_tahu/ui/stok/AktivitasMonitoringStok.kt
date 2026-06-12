@@ -29,7 +29,6 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.Inventory
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.*
@@ -49,10 +48,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import muhamad.irfan.si_tahu.data.Produk
 import muhamad.irfan.si_tahu.data.RepositoriFirebaseUtama
 import muhamad.irfan.si_tahu.ui.dasar.AktivitasDasar
+import muhamad.irfan.si_tahu.ui.produksi.AktivitasKonversiProduk
+import muhamad.irfan.si_tahu.ui.produksi.AktivitasProduksiTahuDasar
 import muhamad.irfan.si_tahu.ui.utama.SiTahuProTheme
 import muhamad.irfan.si_tahu.util.Formatter
 
@@ -70,6 +71,16 @@ class AktivitasMonitoringStok : AktivitasDasar() {
                     onNavigateToDetail = { productId ->
                         val intent = Intent(this, AktivitasDetailStok::class.java)
                         intent.putExtra(EXTRA_PRODUCT_ID, productId)
+                        startActivity(intent)
+                    },
+                    onNavigateToProduction = { produk ->
+                        val intent = if (produk.category.equals("OLAHAN", ignoreCase = true)) {
+                            Intent(this, AktivitasKonversiProduk::class.java)
+                                .putExtra(AktivitasKonversiProduk.EXTRA_SELECTED_RESULT_PRODUCT_ID, produk.id)
+                        } else {
+                            Intent(this, AktivitasProduksiTahuDasar::class.java)
+                                .putExtra(AktivitasProduksiTahuDasar.EXTRA_SELECTED_PRODUCT_ID, produk.id)
+                        }
                         startActivity(intent)
                     }
                 )
@@ -102,10 +113,9 @@ private fun Modifier.adminShimmerEffect(): Modifier = composed {
 private fun StockMonitoringScreen(
     onNavigateBack: () -> Unit,
     onShowMessage: (String) -> Unit,
-    onNavigateToDetail: (String) -> Unit
+    onNavigateToDetail: (String) -> Unit,
+    onNavigateToProduction: (Produk) -> Unit
 ) {
-    val coroutineScope = rememberCoroutineScope()
-
     // State Data
     var allProducts by remember { mutableStateOf<List<Produk>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -153,16 +163,18 @@ private fun StockMonitoringScreen(
     // Load Data
     LaunchedEffect(triggerRefresh) {
         isLoading = allProducts.isEmpty()
-        runCatching { RepositoriFirebaseUtama.muatSemuaProduk() }
-            .onSuccess { result ->
-                allProducts = result.filter { !it.deleted }.sortedBy { it.name.lowercase() }
-                isLoading = false
-            }
-            .onFailure { e ->
-                allProducts = emptyList()
-                isLoading = false
-                onShowMessage("Gagal memuat stok: ${e.message}")
-            }
+        try {
+            val result = RepositoriFirebaseUtama.muatSemuaProduk()
+            allProducts = result.filter { !it.deleted }.sortedBy { it.name.lowercase() }
+            isLoading = false
+        } catch (e: CancellationException) {
+            // Normal saat halaman/tab stok ditutup atau refresh baru menggantikan proses lama.
+            throw e
+        } catch (e: Exception) {
+            allProducts = emptyList()
+            isLoading = false
+            onShowMessage("Stok belum berhasil dimuat. Coba lagi.")
+        }
     }
 
     // Helper Status
@@ -173,6 +185,11 @@ private fun StockMonitoringScreen(
             layakJual <= produk.minStock -> "Menipis"
             else -> "Aman"
         }
+    }
+
+    fun perluProduksi(produk: Produk): Boolean {
+        val layakJual = produk.safeStock + produk.nearExpiredStock + produk.edTodayStock
+        return layakJual <= 0 && produk.stock <= 0
     }
 
     // Pemrosesan List & Filter
@@ -222,15 +239,11 @@ private fun StockMonitoringScreen(
                     title = {
                         Column {
                             Text("Monitoring Stok", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Fisik, jual, dan kedaluwarsa", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Stok produk", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
-                    actions = {
-                        IconButton(onClick = { triggerRefresh++ }) {
-                            Icon(Icons.Rounded.Refresh, "Segarkan", tint = primaryColor)
-                        }
-                    },
+                    actions = {},
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                 )
             }
@@ -299,7 +312,7 @@ private fun StockMonitoringScreen(
                         }
                     }
                 }
-                Text("Menampilkan ${filteredProducts.size} produk", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
+                Text("${filteredProducts.size} produk", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
             }
 
             // --- DAFTAR PRODUK (STOK) ---
@@ -334,7 +347,13 @@ private fun StockMonitoringScreen(
                             textColor = textColor, mutedColor = mutedColor,
                             primaryColor = primaryColor, successColor = successColor,
                             warningColor = warningColor, dangerColor = dangerColor,
-                            onClick = { onNavigateToDetail(produk.id) }
+                            onClick = {
+                                if (status == "Habis" && perluProduksi(produk)) {
+                                    onNavigateToProduction(produk)
+                                } else {
+                                    onNavigateToDetail(produk.id)
+                                }
+                            }
                         )
                     }
                 }
@@ -363,7 +382,7 @@ private fun StockMonitoringScreen(
                                     IconButton(onClick = { if (currentPage > 1) currentPage-- }, enabled = currentPage > 1) {
                                         Icon(Icons.Rounded.ChevronLeft, "Sebelumnya", tint = if (currentPage > 1) primaryColor else mutedColor)
                                     }
-                                    Text("Hal $currentPage dari $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
+                                    Text("$currentPage / $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
                                     IconButton(onClick = { if (currentPage < totalPages) currentPage++ }, enabled = currentPage < totalPages) {
                                         Icon(Icons.Rounded.ChevronRight, "Selanjutnya", tint = if (currentPage < totalPages) primaryColor else mutedColor)
                                     }
@@ -562,7 +581,7 @@ private fun StockCard(
                     Text("Fisik Total: ${Formatter.ribuan(produk.stock.toLong())} ${produk.unit}", color = mutedColor, style = MaterialTheme.typography.bodySmall)
 
                     if (produk.edTodayStock > 0) {
-                        Text("ED Hari Ini: ${Formatter.ribuan(produk.edTodayStock.toLong())} ${produk.unit}", color = warningColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text("Kedaluwarsa Hari Ini: ${Formatter.ribuan(produk.edTodayStock.toLong())} ${produk.unit}", color = warningColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     }
                     if (produk.nearExpiredStock > 0) {
                         Text("Hampir Kedaluwarsa: ${Formatter.ribuan(produk.nearExpiredStock.toLong())} ${produk.unit}", color = warningColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)

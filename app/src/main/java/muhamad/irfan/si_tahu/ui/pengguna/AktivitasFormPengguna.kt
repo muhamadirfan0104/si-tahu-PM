@@ -175,7 +175,7 @@ private fun UserFormScreen(
         if (telpBersih.isBlank()) { onShowMessage("Nomor telepon wajib diisi."); return }
 
         if (!isEditing) {
-            if (passBersih.isBlank()) { onShowMessage("Password wajib diisi untuk pengguna baru."); return }
+            if (passBersih.isBlank()) { onShowMessage("Password wajib diisi."); return }
             if (passBersih.length < 6) { onShowMessage("Password minimal 6 karakter."); return }
         }
 
@@ -343,14 +343,14 @@ private fun UserFormScreen(
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(Icons.Rounded.Person, null, tint = primaryColor, modifier = Modifier.size(20.dp))
-                            Text("Informasi Pribadi", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                            Text("Profil Pengguna", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
                         }
 
                         OutlinedTextField(
                             value = namaPengguna,
                             onValueChange = { namaPengguna = it },
                             label = { Text("Nama Lengkap") },
-                            placeholder = { Text("Masukkan nama pengguna") },
+                            placeholder = { Text("Nama pengguna") },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = primaryColor, unfocusedBorderColor = borderColor),
@@ -449,7 +449,7 @@ private fun UserFormScreen(
                             Surface(shape = RoundedCornerShape(12.dp), color = warningColor.copy(alpha = 0.1f), modifier = Modifier.fillMaxWidth()) {
                                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Icon(Icons.Rounded.Info, null, tint = warningColor, modifier = Modifier.size(20.dp))
-                                    Text("Password tidak dapat dilihat/diubah langsung untuk keamanan.", color = warningColor, style = MaterialTheme.typography.bodySmall)
+                                    Text("Password tidak dapat dilihat.", color = warningColor, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
 
@@ -494,7 +494,7 @@ private fun UserFormScreen(
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text("Izinkan Masuk (Aktif)", fontWeight = FontWeight.Bold, color = textColor)
-                                Text("Pengguna dapat login dan menggunakan sistem", color = mutedColor, style = MaterialTheme.typography.labelMedium)
+                                Text("Akun aktif", color = mutedColor, style = MaterialTheme.typography.labelMedium)
                             }
                             Switch(checked = aktif, onCheckedChange = { aktif = it }, colors = SwitchDefaults.colors(checkedTrackColor = primaryColor))
                         }

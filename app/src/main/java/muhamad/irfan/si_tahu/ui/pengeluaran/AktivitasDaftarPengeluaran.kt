@@ -298,7 +298,7 @@ private fun ExpenseListScreen(
                     title = {
                         Column {
                             Text("Pengeluaran", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Input dan kelola biaya operasional", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Biaya operasional", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -364,7 +364,7 @@ private fun ExpenseListScreen(
                         }, primaryColor)
                     }
                 }
-                Text("Menampilkan ${filteredRows.size} pengeluaran", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
+                Text("${filteredRows.size} pengeluaran", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
             }
 
             // --- DAFTAR PENGELUARAN ---
@@ -377,7 +377,7 @@ private fun ExpenseListScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Tidak ada data pengeluaran", "Coba ubah pencarian, filter, atau rentang tanggal.")
+                    EmptyDataView("Tidak ada data pengeluaran", "Tidak ada hasil.")
                 }
             } else {
                 LazyColumn(
@@ -400,11 +400,11 @@ private fun ExpenseListScreen(
                             },
                             onEdit = { onNavigateToForm(expense.id) },
                             onDelete = {
-                                onShowConfirmation("Hapus pengeluaran", "Pengeluaran ${expense.title} akan disembunyikan dari laporan aktif.", "Hapus") {
+                                onShowConfirmation("Hapus pengeluaran", "Hapus pengeluaran ${expense.title}?", "Hapus") {
                                     coroutineScope.launch {
                                         runCatching { RepositoriFirebaseUtama.hapusPengeluaran(expense.id) }
                                             .onSuccess {
-                                                onShowMessage("Pengeluaran berhasil dihapus dari daftar aktif")
+                                                onShowMessage("Pengeluaran dihapus")
                                                 triggerRefresh++
                                             }
                                             .onFailure { onShowMessage(it.message ?: "Gagal menghapus pengeluaran") }
@@ -436,7 +436,7 @@ private fun ExpenseListScreen(
                                     IconButton(onClick = { if (halamanSaatIni > 1) halamanSaatIni-- }, enabled = halamanSaatIni > 1) {
                                         Icon(Icons.Rounded.ChevronLeft, "Sebelumnya", tint = if (halamanSaatIni > 1) primaryColor else mutedColor)
                                     }
-                                    Text("Hal $halamanSaatIni dari $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
+                                    Text("$halamanSaatIni / $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
                                     IconButton(onClick = { if (halamanSaatIni < totalPages) halamanSaatIni++ }, enabled = halamanSaatIni < totalPages) {
                                         Icon(Icons.Rounded.ChevronRight, "Selanjutnya", tint = if (halamanSaatIni < totalPages) primaryColor else mutedColor)
                                     }

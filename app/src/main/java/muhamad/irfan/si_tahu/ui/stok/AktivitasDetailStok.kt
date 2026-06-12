@@ -279,7 +279,7 @@ private fun StockDetailScreen(
                             safeStock <= 0L && kadaluarsa > 0L -> "Perlu Tindakan"
                             safeStock <= 0L -> "Habis"
                             kadaluarsa > 0L -> "Perlu Tindakan"
-                            edHariIni > 0L -> "ED Hari Ini"
+                            edHariIni > 0L -> "Kedaluwarsa Hari Ini"
                             hampir > 0L -> "Hampir Kedaluwarsa"
                             safeStock <= minStock -> "Menipis"
                             else -> "Aman"
@@ -408,7 +408,7 @@ private fun StockDetailScreen(
                     val amanStock = product.totalPhysical - product.nearExpiredStock - product.edTodayStock - product.expiredStock
                     CompactMetricRow("Aman", "${Formatter.ribuan(amanStock)} ${product.unit}", Color(0xFF10B981), mutedColor)
                     CompactMetricRow("Hampir Kedaluwarsa", "${Formatter.ribuan(product.nearExpiredStock)} ${product.unit}", Color(0xFFF59E0B), mutedColor)
-                    CompactMetricRow("ED Hari Ini", "${Formatter.ribuan(product.edTodayStock)} ${product.unit}", Color(0xFFF59E0B), mutedColor)
+                    CompactMetricRow("Kedaluwarsa Hari Ini", "${Formatter.ribuan(product.edTodayStock)} ${product.unit}", Color(0xFFF59E0B), mutedColor)
                     CompactMetricRow("Kedaluwarsa", "${Formatter.ribuan(product.expiredStock)} ${product.unit}", Color(0xFFEF4444), mutedColor)
 
                     if (product.nearestExpiryDate.isNotBlank()) {

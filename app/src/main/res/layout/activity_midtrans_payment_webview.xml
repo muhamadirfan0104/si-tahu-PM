@@ -42,7 +42,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:lineSpacingExtra="2dp"
-                android:text="Selesaikan pembayaran di halaman ini. Setelah berhasil, tekan Cek Pembayaran agar transaksi tersimpan."
+                android:text="Selesaikan pembayaran, lalu cek status."
                 android:textAppearance="@style/TextAppearance.Material3.BodySmall"
                 android:textColor="@color/text_secondary" />
         </LinearLayout>

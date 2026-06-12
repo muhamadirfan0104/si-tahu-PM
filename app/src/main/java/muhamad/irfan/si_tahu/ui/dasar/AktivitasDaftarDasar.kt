@@ -160,7 +160,7 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         onNext: (() -> Unit)?
     ) {
         binding.paginationContainer.isVisible = totalPages > 1
-        binding.tvPageInfo.text = "Halaman $currentPage dari $totalPages"
+        binding.tvPageInfo.text = "$currentPage / $totalPages"
 
         binding.btnPagePrev.isEnabled = onPrev != null
         binding.btnPagePrev.alpha = if (onPrev != null) 1f else 0.45f
@@ -187,7 +187,7 @@ abstract class AktivitasDaftarDasar : AktivitasDasar() {
         return binding.spSecondaryFilter.selectedItem?.toString().orEmpty()
     }
 
-    protected fun submitRows(rows: List<ItemBaris>, emptyMessage: String = "Belum ada data yang ditampilkan") {
+    protected fun submitRows(rows: List<ItemBaris>, emptyMessage: String = "Belum ada data") {
         rowAdapter.submitList(rows)
         binding.tvEmpty.isVisible = rows.isEmpty()
         binding.tvEmpty.text = emptyMessage

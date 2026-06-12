@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -57,6 +58,7 @@ import muhamad.irfan.si_tahu.ui.penjualan.AktivitasPenjualanRumahan
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.PembantuCetak
 import muhamad.irfan.si_tahu.util.PembuatQrBitmap
+import muhamad.irfan.si_tahu.utilitas.TemaAplikasi
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -78,6 +80,7 @@ class AktivitasUtamaKasir : AktivitasDasar() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        selectedTab = savedInstanceState?.getString(STATE_SELECTED_TAB).orEmpty().ifBlank { selectedTab }
 
         // Proteksi Akses
         if (auth.currentUser == null) {
@@ -110,6 +113,11 @@ class AktivitasUtamaKasir : AktivitasDasar() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(STATE_SELECTED_TAB, selectedTab)
+        super.onSaveInstanceState(outState)
+    }
+
     private fun loadNamaLogin() {
         val uid = auth.currentUser?.uid ?: return
         PenggunaFirestoreCompat.findByAuthUid(
@@ -125,6 +133,8 @@ class AktivitasUtamaKasir : AktivitasDasar() {
     }
 
     companion object {
+        private const val STATE_SELECTED_TAB = "state_selected_tab"
+
         fun intent(context: Context, clearTop: Boolean = false): Intent {
             return Intent(context, AktivitasUtamaKasir::class.java).apply {
                 if (clearTop) addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -191,6 +201,8 @@ private fun CashierDashboardScreen(
     val mutedColor = if (isDark) Color(0xFF9CA3AF) else Color(0xFF6B7280)
     val borderColor = if (isDark) Color(0xFF374151) else Color(0xFFE5E7EB)
     val dangerColor = if (isDark) Color(0xFFEF4444) else Color(0xFFDC2626)
+    var tampilkanDialogLogout by remember { mutableStateOf(false) }
+    val mintaKonfirmasiLogout: () -> Unit = { tampilkanDialogLogout = true }
 
     Scaffold(
         bottomBar = {
@@ -228,9 +240,23 @@ private fun CashierDashboardScreen(
             when (selectedTab) {
                 "Kasir" -> TabPointOfSale(namaLogin, kasirAuthUid, bgColor, primaryColor, surfaceColor, textColor, mutedColor, borderColor)
                 "Riwayat" -> TabHistory(kasirAuthUid, primaryColor, surfaceColor, borderColor, textColor, mutedColor)
-                "Akun" -> TabAccount(namaLogin, primaryColor, dangerColor, surfaceColor, borderColor, textColor, mutedColor, onLogout, isAdminRole, onSwitchAdmin)
+                "Akun" -> TabAccount(namaLogin, primaryColor, dangerColor, surfaceColor, borderColor, textColor, mutedColor, mintaKonfirmasiLogout, isAdminRole, onSwitchAdmin)
             }
         }
+    }
+
+    if (tampilkanDialogLogout) {
+        DialogKonfirmasiLogoutKasir(
+            dangerColor = dangerColor,
+            surfaceColor = surfaceColor,
+            textColor = textColor,
+            mutedColor = mutedColor,
+            onDismiss = { tampilkanDialogLogout = false },
+            onConfirm = {
+                tampilkanDialogLogout = false
+                onLogout()
+            }
+        )
     }
 }
 
@@ -380,7 +406,7 @@ private fun TabPointOfSale(
                     }
                 } else if (topProducts.isEmpty()) {
                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text("Belum ada transaksi kasir hari ini.", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
+                        Text("Belum ada transaksi hari ini.", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
                     }
                 } else {
                     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
@@ -450,13 +476,13 @@ private fun TabHistory(
             runCatching { RepositoriFirebaseUtama.muatInfoQrisPending(item.id) }
                 .onSuccess { info ->
                     if (!info.statusPenjualan.equals("PENDING", true)) {
-                        Toast.makeText(context, "Transaksi ini sudah tidak menunggu pembayaran", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Transaksi tidak pending.", Toast.LENGTH_SHORT).show()
                         realtimeTick++
                         return@onSuccess
                     }
                     if (info.paymentQrExpiresAtMillis > 0L && info.paymentQrExpiresAtMillis <= System.currentTimeMillis()) {
                         RepositoriFirebaseUtama.tandaiQrisTidakTerbayarJikaKadaluarsa(item.id)
-                        Toast.makeText(context, "QRIS sudah habis waktu dan ditandai Belum Terbayar", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "QRIS kedaluwarsa.", Toast.LENGTH_SHORT).show()
                         realtimeTick++
                         return@onSuccess
                     }
@@ -552,7 +578,7 @@ private fun TabHistory(
                     )
 
                     Text(
-                        "Cari transaksi, filter status, atau pilih rentang tanggal.",
+                        "Cari atau filter transaksi.",
                         color = mutedColor,
                         style = MaterialTheme.typography.labelMedium,
                         maxLines = 2,
@@ -681,8 +707,8 @@ private fun TabHistory(
                     Box(Modifier.size(64.dp).clip(CircleShape).background(primaryColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.History, null, tint = primaryColor, modifier = Modifier.size(32.dp))
                     }
-                    Text("Belum ada riwayat yang sesuai", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                    Text("Coba ubah pencarian, filter, atau rentang tanggal.", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
+                    Text("Belum ada riwayat", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                    Text("Tidak ada hasil.", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         } else {
@@ -811,7 +837,7 @@ private fun TabHistory(
                 coroutineScope.launch {
                     runCatching { RepositoriFirebaseUtama.tandaiQrisTidakTerbayarJikaKadaluarsa(qrisData.item.id) }
                     qrisDialogData = null
-                    Toast.makeText(context, "QRIS sudah habis waktu dan ditandai Belum Terbayar", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "QRIS kedaluwarsa.", Toast.LENGTH_SHORT).show()
                     realtimeTick++
                 }
             },
@@ -1151,7 +1177,7 @@ private fun KasirQrisDialog(
                             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(20.dp)) {
                                 Icon(Icons.Rounded.Info, contentDescription = null, tint = dangerColor, modifier = Modifier.size(40.dp))
                                 Text("QRIS sudah kedaluwarsa", color = dangerColor, fontWeight = FontWeight.Bold)
-                                Text("Status transaksi akan berubah menjadi Belum Terbayar.", color = mutedColor, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+                                Text("Status menjadi Belum Terbayar.", color = mutedColor, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -1170,7 +1196,7 @@ private fun KasirQrisDialog(
                                 Text("Sisa Waktu", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
                                 Text(waktuText, color = if (remainingMs > 0L) warningColor else dangerColor, fontWeight = FontWeight.Bold)
                             }
-                            Text("Gunakan tombol Cetak QRIS untuk diberikan ke pelanggan. Nota hanya tersedia setelah pembayaran sukses.", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                            Text("Cetak QRIS untuk pelanggan. Nota tersedia setelah pembayaran sukses.", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -1288,7 +1314,7 @@ private fun PaginationListCard(
             TextButton(onClick = onPrev, enabled = halamanSaatIni > 1) {
                 Text("Sebelumnya", color = if (halamanSaatIni > 1) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
             }
-            Text("Hal $halamanSaatIni dari $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Text("$halamanSaatIni / $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             TextButton(onClick = onNext, enabled = halamanSaatIni < totalHalaman) {
                 Text("Selanjutnya", color = if (halamanSaatIni < totalHalaman) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
             }
@@ -1426,7 +1452,7 @@ private fun HistoryDetailCard(
                         } else {
                             Surface(shape = RoundedCornerShape(14.dp), color = statusColor.copy(alpha = 0.10f), border = BorderStroke(1.dp, statusColor.copy(alpha = 0.18f)), modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = if (isPending) "Transaksi QRIS pending belum boleh cetak kwitansi. Cetak QRIS dari tombol QRIS." else "Kwitansi hanya bisa dicetak untuk transaksi selesai.",
+                                    text = if (isPending) "QRIS masih pending. Cetak QRIS dari tombol QRIS." else "Kwitansi tersedia setelah transaksi selesai.",
                                     color = statusColor,
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.bodySmall,
@@ -1463,12 +1489,12 @@ private fun CancelKasirTransactionDialog(
         title = { Text("Batalkan transaksi?", fontWeight = FontWeight.Bold, color = textColor) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Nota ${item.title} akan diberi status Batal dan stok akan dikembalikan.", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
+                Text("Batalkan nota ${item.title}? Stok akan dikembalikan.", color = mutedColor, style = MaterialTheme.typography.bodyMedium)
                 OutlinedTextField(
                     value = alasan,
                     onValueChange = { alasan = it },
                     label = { Text("Alasan pembatalan") },
-                    placeholder = { Text("Contoh: salah input transaksi") },
+                    placeholder = { Text("Salah input transaksi") },
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isCanceling
@@ -1608,6 +1634,10 @@ private fun TabAccount(
     isAdminRole: Boolean,
     onSwitchAdmin: () -> Unit
 ) {
+    val context = LocalContext.current
+    var modeTema by rememberSaveable { mutableStateOf(TemaAplikasi.bacaMode(context)) }
+    var tampilkanDialogTema by rememberSaveable { mutableStateOf(false) }
+
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(Modifier.padding(top = 16.dp)) {
             Text("Informasi Akun", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.headlineMedium)
@@ -1632,12 +1662,37 @@ private fun TabAccount(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Mode Kasir", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        if (isAdminRole) "Akun admin sedang menggunakan mode kasir. Kamu tetap bisa kembali ke mode admin kapan saja." else "Akun ini hanya dapat mengakses transaksi kasir dan riwayat penjualan miliknya.",
+                        if (isAdminRole) "Admin memakai mode kasir." else "Akses terbatas untuk kasir.",
                         color = mutedColor,
                         style = MaterialTheme.typography.bodySmall,
                         lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2
                     )
                 }
+            }
+        }
+
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = surfaceColor),
+            border = BorderStroke(1.dp, borderColor),
+            modifier = Modifier.fillMaxWidth().clickable {
+                modeTema = TemaAplikasi.bacaMode(context)
+                tampilkanDialogTema = true
+            }
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(shape = CircleShape, color = primaryColor.copy(alpha = 0.12f)) {
+                    Icon(Icons.Rounded.DarkMode, contentDescription = null, tint = primaryColor, modifier = Modifier.padding(10.dp).size(24.dp))
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Tema Tampilan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+                    Text("Saat ini: ${TemaAplikasi.label(modeTema)}", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                }
+                Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = mutedColor, modifier = Modifier.size(22.dp))
             }
         }
 
@@ -1668,6 +1723,76 @@ private fun TabAccount(
             Text("Keluar Akun", fontWeight = FontWeight.Bold)
         }
     }
+
+    if (tampilkanDialogTema) {
+        DialogTemaTampilan(
+            modeAktif = modeTema,
+            onDismiss = { tampilkanDialogTema = false },
+            onPilih = { mode ->
+                modeTema = mode
+                TemaAplikasi.simpanDanTerapkan(context, mode)
+                Toast.makeText(context, "Tema ${TemaAplikasi.label(mode)} diterapkan", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+}
+
+@Composable
+private fun DialogKonfirmasiLogoutKasir(
+    dangerColor: Color,
+    surfaceColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = surfaceColor,
+        titleContentColor = textColor,
+        textContentColor = textColor,
+        shape = RoundedCornerShape(24.dp),
+        icon = {
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(dangerColor.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.Logout,
+                    contentDescription = null,
+                    tint = dangerColor,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+        },
+        title = {
+            Text("Konfirmasi Logout", fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Text(
+                "Keluar dari akun ini?",
+                color = mutedColor,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal", fontWeight = FontWeight.Bold, color = mutedColor)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = dangerColor, contentColor = Color.White)
+            ) {
+                Text("Logout", fontWeight = FontWeight.Bold)
+            }
+        }
+    )
 }
 
 @Composable

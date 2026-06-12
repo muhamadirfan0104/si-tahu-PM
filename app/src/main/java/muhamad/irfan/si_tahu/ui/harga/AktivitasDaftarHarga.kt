@@ -294,7 +294,7 @@ private fun PriceListScreen(
                     val otherActiveDocs = snapshot.documents.filter { it.getBoolean("dihapus") != true && it.getBoolean("aktif") != false && it.id != channel.id }
 
                     if (otherActiveDocs.isEmpty()) {
-                        onShowMessage("Harga ini tidak dapat dinonaktifkan karena produk harus memiliki minimal satu harga aktif.")
+                        onShowMessage("Minimal satu harga harus aktif.")
                         return@addOnSuccessListener
                     }
 
@@ -323,7 +323,7 @@ private fun PriceListScreen(
                 val otherActiveDocs = snapshot.documents.filter { it.getBoolean("dihapus") != true && it.getBoolean("aktif") != false && it.id != channel.id }
 
                 if (isActive && otherActiveDocs.isEmpty()) {
-                    onShowMessage("Harga ini tidak dapat dihapus karena menjadi satu-satunya harga aktif untuk produk ini.")
+                    onShowMessage("Minimal satu harga harus aktif.")
                     return@addOnSuccessListener
                 }
 
@@ -353,7 +353,7 @@ private fun PriceListScreen(
                     title = {
                         Column {
                             Text("Harga Kanal", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Kelola harga jual berdasarkan kanal penjualan", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Harga jual", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -453,11 +453,11 @@ private fun PriceListScreen(
                 }
             } else if (selectedProduct == null) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Pilih Produk", "Pilih produk terlebih dahulu untuk melihat dan mengatur harga jual.")
+                    EmptyDataView("Pilih Produk", "Pilih produk untuk melihat harga.")
                 }
             } else if (channels.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Belum Ada Harga", "Tekan tombol tambah untuk membuat harga jual baru.")
+                    EmptyDataView("Belum Ada Harga", "Belum ada harga.")
                 }
             } else {
                 LazyColumn(
@@ -485,7 +485,7 @@ private fun PriceListScreen(
                                 ) { togglePrice(p.id, channel) }
                             }},
                             onDelete = { selectedProduct?.let { p ->
-                                onShowConfirmation("Hapus Harga Kanal?", "Harga ${channel.kanalHarga} akan dihapus. Transaksi lama tidak terpengaruh.", "Hapus") {
+                                onShowConfirmation("Hapus Harga Kanal?", "Hapus harga ${channel.kanalHarga}?", "Hapus") {
                                     deletePrice(p.id, channel)
                                 }
                             }}
@@ -564,7 +564,7 @@ private fun PaginationListCard(
             TextButton(onClick = onPrev, enabled = halamanSaatIni > 1) {
                 Text("Sebelumnya", color = if (halamanSaatIni > 1) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
             }
-            Text("Hal $halamanSaatIni dari $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Text("$halamanSaatIni / $totalHalaman", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             TextButton(onClick = onNext, enabled = halamanSaatIni < totalHalaman) {
                 Text("Selanjutnya", color = if (halamanSaatIni < totalHalaman) primaryColor else mutedColor, fontWeight = FontWeight.Bold)
             }
@@ -652,7 +652,7 @@ private fun ProductPickerHargaDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Pilih Produk", color = textColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                Text("Pilih produk untuk mengatur harga kanal", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                Text("Pilih produk", color = mutedColor, style = MaterialTheme.typography.bodySmall)
             }
         },
         text = {

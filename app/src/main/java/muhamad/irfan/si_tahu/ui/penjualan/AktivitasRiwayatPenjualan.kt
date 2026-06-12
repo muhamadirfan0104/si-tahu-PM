@@ -426,10 +426,10 @@ private fun SalesHistoryScreen(
             coroutineScope.launch {
                 runCatching { onGetQrisData(item.id) }.onSuccess { info ->
                     if (!info.statusPenjualan.equals("PENDING", true)) {
-                        onShowMessage("Transaksi ini sudah tidak menunggu pembayaran")
+                        onShowMessage("Transaksi tidak pending.")
                         triggerRefresh++
                     } else if (info.paymentQrString.isBlank()) {
-                        onShowMessage("QRIS transaksi lama belum menyimpan data QR. Batalkan lalu buat QRIS baru.")
+                        onShowMessage("QRIS lama tidak tersedia. Buat QRIS baru.")
                     } else {
                         val bitmap = PembuatQrBitmap.buat(info.paymentQrString, 1000)
                         qrisDialogData = QrisDialogData(item, info, bitmap)
@@ -524,7 +524,7 @@ private fun SalesHistoryScreen(
                         }
                     }
                 }
-                Text("Menampilkan ${filteredRows.size} transaksi", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
+                Text("${filteredRows.size} transaksi", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
             }
 
             // --- DAFTAR RIWAYAT ---
@@ -537,7 +537,7 @@ private fun SalesHistoryScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Tidak ada transaksi ditemukan", "Coba ubah kata kunci pencarian atau hapus filter kalender.")
+                    EmptyDataView("Belum ada transaksi", "Tidak ada hasil.")
                 }
             } else {
                 LazyColumn(
@@ -604,7 +604,7 @@ private fun SalesHistoryScreen(
                                     IconButton(onClick = { if (halamanSaatIni > 1) halamanSaatIni-- }, enabled = halamanSaatIni > 1) {
                                         Icon(Icons.Rounded.ChevronLeft, "Sebelumnya", tint = if (halamanSaatIni > 1) primaryColor else mutedColor)
                                     }
-                                    Text("Hal $halamanSaatIni dari $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
+                                    Text("$halamanSaatIni / $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
                                     IconButton(onClick = { if (halamanSaatIni < totalPages) halamanSaatIni++ }, enabled = halamanSaatIni < totalPages) {
                                         Icon(Icons.Rounded.ChevronRight, "Selanjutnya", tint = if (halamanSaatIni < totalPages) primaryColor else mutedColor)
                                     }
@@ -816,14 +816,14 @@ private fun ModernCancelInputDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Nota ${item.title} akan dibatalkan dan statusnya berubah. Silakan masukkan alasan pembatalan untuk pencatatan:",
+                    text = "Batalkan nota ${item.title}?",
                     color = mutedColor,
                     style = MaterialTheme.typography.bodyMedium
                 )
                 OutlinedTextField(
                     value = reasonText,
                     onValueChange = { reasonText = it },
-                    placeholder = { Text("Misal: Salah input harga/produk", color = mutedColor) },
+                    placeholder = { Text("Salah input harga/produk", color = mutedColor) },
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),

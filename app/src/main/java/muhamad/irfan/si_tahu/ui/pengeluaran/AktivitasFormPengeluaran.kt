@@ -201,7 +201,7 @@ private fun ExpenseFormScreen(
                     title = {
                         Column {
                             Text(if (isEditing) "Edit Pengeluaran" else "Input Pengeluaran", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Catat biaya operasional usaha", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Data pengeluaran", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -273,7 +273,7 @@ private fun ExpenseFormScreen(
                             value = namaPengeluaran,
                             onValueChange = { namaPengeluaran = it },
                             label = { Text("Nama / Jenis Pengeluaran") },
-                            placeholder = { Text("Misal: Listrik, Gaji, Bahan Baku") },
+                            placeholder = { Text("Listrik, gaji, bahan baku") },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                             shape = RoundedCornerShape(14.dp),
                             textStyle = LocalTextStyle.current.copy(fontWeight = FontWeight.Medium, color = textColor),
@@ -310,7 +310,7 @@ private fun ExpenseFormScreen(
                             }
                             Column {
                                 Text("Waktu & Catatan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                                Text("Tanggal transaksi dan keterangan", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                                Text("Waktu transaksi", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                             }
                         }
 
@@ -371,8 +371,8 @@ private fun ExpenseFormScreen(
                         OutlinedTextField(
                             value = catatan,
                             onValueChange = { catatan = it },
-                            label = { Text("Catatan Tambahan (Opsional)") },
-                            placeholder = { Text("Misal: Pembelian dari toko Bintang...") },
+                            label = { Text("Catatan (Opsional)") },
+                            placeholder = { Text("Catatan pengeluaran") },
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             shape = RoundedCornerShape(14.dp),
                             textStyle = LocalTextStyle.current.copy(color = textColor),

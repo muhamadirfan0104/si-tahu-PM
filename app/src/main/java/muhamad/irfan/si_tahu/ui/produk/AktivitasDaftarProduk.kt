@@ -85,7 +85,7 @@ class AktivitasDaftarProduk : AktivitasDasar() {
                     onConfirmDelete = { product, onSuccess ->
                         showConfirmationModal(
                             title = "Hapus produk?",
-                            message = "Produk ${product.namaProduk} akan dihapus dari daftar aktif.",
+                            message = "Hapus produk ${product.namaProduk}?",
                             confirmLabel = "Hapus"
                         ) {
                             FirebaseFirestore.getInstance().collection("Produk").document(product.id)
@@ -285,7 +285,7 @@ private fun ProductListScreen(
                     title = {
                         Column {
                             Text("Daftar Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Kelola produk dasar & olahan", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Data produk", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -360,7 +360,7 @@ private fun ProductListScreen(
                         FilterChipVisual(label = "Jenis: $kategoriAktif", onRemove = { kategoriAktif = "Semua" }, primaryColor)
                     }
                 }
-                Text("Menampilkan ${filteredRows.size} produk", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
+                Text("${filteredRows.size} produk", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
             }
 
             // --- DAFTAR PRODUK ---
@@ -373,7 +373,7 @@ private fun ProductListScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Produk tidak ditemukan", "Coba ubah pencarian, filter, atau rentang tanggal.")
+                    EmptyDataView("Produk tidak ditemukan", "Tidak ada hasil.")
                 }
             } else {
                 LazyColumn(
@@ -422,7 +422,7 @@ private fun ProductListScreen(
                                     IconButton(onClick = { if (halamanSaatIni > 1) halamanSaatIni-- }, enabled = halamanSaatIni > 1) {
                                         Icon(Icons.Rounded.ChevronLeft, "Sebelumnya", tint = if (halamanSaatIni > 1) primaryColor else mutedColor)
                                     }
-                                    Text("Hal $halamanSaatIni dari $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
+                                    Text("$halamanSaatIni / $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
                                     IconButton(onClick = { if (halamanSaatIni < totalPages) halamanSaatIni++ }, enabled = halamanSaatIni < totalPages) {
                                         Icon(Icons.Rounded.ChevronRight, "Selanjutnya", tint = if (halamanSaatIni < totalPages) primaryColor else mutedColor)
                                     }

@@ -123,7 +123,7 @@ private fun StockAdjustmentScreen(
 
     // State Form
     var qtyInput by remember { mutableStateOf("") }
-    var noteInput by remember { mutableStateOf(if (modeKadaluarsa) "Dibuang karena kedaluwarsa / tidak layak jual" else "") }
+    var noteInput by remember { mutableStateOf(if (modeKadaluarsa) "Dibuang karena kedaluwarsa" else "") }
     var tanggal by remember { mutableStateOf(Formatter.currentDateOnly()) }
     var waktu by remember { mutableStateOf(Formatter.currentTimeOnly()) }
     var showDateTime by remember { mutableStateOf(false) }
@@ -142,7 +142,7 @@ private fun StockAdjustmentScreen(
 
     val activeColor = if (modeKadaluarsa) dangerColor else primaryColor
     val titleText = if (modeKadaluarsa) "Buang Kedaluwarsa" else "Penyesuaian Stok"
-    val subtitleText = if (modeKadaluarsa) "Tindak lanjuti stok tak layak jual" else "Koreksi selisih stok fisik & sistem"
+    val subtitleText = if (modeKadaluarsa) "Buang stok kedaluwarsa" else "Penyesuaian stok"
     val qtyLabel = if (modeKadaluarsa) "Jumlah Dibuang" else "Jumlah Dikurangi"
 
     // Muat ulang otomatis ketika stok, batch, atau riwayat penyesuaian berubah.
@@ -328,12 +328,12 @@ private fun StockAdjustmentScreen(
                         }
                         Column {
                             Text(if (isProductLocked) "Produk Tujuan" else "Pilih Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                            Text("Data stok terbaru dari sistem", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                            Text("Data stok", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        val displayValue = if (isLoading) "Memuat produk..." else selectedProduk?.name ?: "Pilih produk yang akan diproses"
+                        val displayValue = if (isLoading) "Memuat produk..." else selectedProduk?.name ?: "Pilih produk"
 
                         OutlinedTextField(
                             value = displayValue,
@@ -371,8 +371,8 @@ private fun StockAdjustmentScreen(
                             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Icon(Icons.Rounded.Info, null, tint = activeColor, modifier = Modifier.size(20.dp).padding(top = 2.dp))
                                 Text(
-                                    text = if (modeKadaluarsa) "Sistem mencatat ada ${Formatter.ribuan(stokKadaluarsaTerpilih)} ${produkTerpilih.unit} stok kedaluwarsa. Tindakan ini akan membuangnya secara permanen."
-                                    else "Tersedia fisik ${Formatter.ribuan(produkTerpilih.stock.toLong())} ${produkTerpilih.unit}. Penyesuaian mengurangi stok fisik dan mengambil dari batch layak jual (FEFO).",
+                                    text = if (modeKadaluarsa) "Stok kedaluwarsa: ${Formatter.ribuan(stokKadaluarsaTerpilih)} ${produkTerpilih.unit}."
+                                    else "Stok fisik: ${Formatter.ribuan(produkTerpilih.stock.toLong())} ${produkTerpilih.unit}.",
                                     color = activeColor,
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium,
@@ -398,7 +398,7 @@ private fun StockAdjustmentScreen(
                         }
                         Column {
                             Text("Detail Penyesuaian", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
-                            Text("Isi jumlah stok dan alasan pencatatan", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                            Text("Jumlah dan alasan", color = mutedColor, style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
@@ -417,7 +417,7 @@ private fun StockAdjustmentScreen(
                                 Icon(Icons.Rounded.SyncAlt, contentDescription = null, tint = activeColor, modifier = Modifier.size(20.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text("Kurangi Stok", color = activeColor, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                    Text("Gunakan untuk stok rusak, hilang, selisih fisik, atau koreksi pengurangan.", color = activeColor.copy(alpha=0.8f), style = MaterialTheme.typography.labelSmall)
+                                    Text("Untuk stok rusak, hilang, atau selisih.", color = activeColor.copy(alpha=0.8f), style = MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
@@ -447,7 +447,7 @@ private fun StockAdjustmentScreen(
                         value = noteInput,
                         onValueChange = { noteInput = it },
                         label = { Text("Alasan Penyesuaian (Wajib)") },
-                        placeholder = { Text("Contoh: Produk rusak saat dipindahkan") },
+                        placeholder = { Text("Produk rusak saat dipindahkan") },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         shape = RoundedCornerShape(14.dp),
                         textStyle = LocalTextStyle.current.copy(color = textColor),
@@ -550,7 +550,7 @@ private fun StockAdjustmentProductPickerDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Pilih Produk", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                Text("Daftar stok tersedia di sistem", color = mutedColor, style = MaterialTheme.typography.bodySmall)
+                Text("Daftar stok", color = mutedColor, style = MaterialTheme.typography.bodySmall)
             }
         },
         text = {

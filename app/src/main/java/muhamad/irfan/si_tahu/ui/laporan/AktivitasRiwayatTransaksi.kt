@@ -344,7 +344,7 @@ private fun TransactionHistoryScreen(
 
             // --- INFO FILTER AKTIF ---
             if (jumlahFilterAktif > 0) {
-                Text("Menampilkan ${filteredRows.size} transaksi", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 8.dp))
+                Text("${filteredRows.size} transaksi", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 8.dp))
             }
 
             // --- DAFTAR TRANSAKSI ---
@@ -357,7 +357,7 @@ private fun TransactionHistoryScreen(
                 }
             } else if (filteredRows.isEmpty()) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EmptyDataView("Tidak ada transaksi", "Coba ubah pencarian, filter, atau rentang tanggal.")
+                    EmptyDataView("Tidak ada transaksi", "Tidak ada hasil.")
                 }
             } else {
                 LazyColumn(
@@ -399,7 +399,7 @@ private fun TransactionHistoryScreen(
                                     IconButton(onClick = { if (halamanSaatIni > 1) halamanSaatIni-- }, enabled = halamanSaatIni > 1) {
                                         Icon(Icons.Rounded.ChevronLeft, "Sebelumnya", tint = if (halamanSaatIni > 1) primaryColor else mutedColor)
                                     }
-                                    Text("Hal $halamanSaatIni dari $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
+                                    Text("$halamanSaatIni / $totalPages", color = textColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp))
                                     IconButton(onClick = { if (halamanSaatIni < totalPages) halamanSaatIni++ }, enabled = halamanSaatIni < totalPages) {
                                         Icon(Icons.Rounded.ChevronRight, "Selanjutnya", tint = if (halamanSaatIni < totalPages) primaryColor else mutedColor)
                                     }
@@ -443,7 +443,7 @@ private fun TransactionHistoryScreen(
                     selectedRentang = rentang
                     if (rentang == "Rentang") {
                         if (mulai.isNullOrBlank()) {
-                            onShowMessage("Tanggal mulai wajib diisi untuk filter rentang.")
+                            onShowMessage("Tanggal mulai wajib diisi.")
                             return@ModernHistoryFilterDialog
                         }
                         tanggalMulaiFilter = mulai

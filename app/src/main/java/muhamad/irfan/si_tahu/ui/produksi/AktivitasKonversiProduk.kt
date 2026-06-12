@@ -55,7 +55,7 @@ private fun stokLayakPakaiBahan(produk: Produk): Int = produk.safeStock + produk
 private fun labelStatusLayakPakai(produk: Produk): String = when {
     stokLayakPakaiBahan(produk) <= 0 && produk.expiredStock > 0 -> "Kedaluwarsa"
     stokLayakPakaiBahan(produk) <= 0 -> "Habis"
-    produk.edTodayStock > 0 -> "ED Hari Ini"
+    produk.edTodayStock > 0 -> "Kedaluwarsa Hari Ini"
     produk.nearExpiredStock > 0 -> "Hampir Kedaluwarsa"
     produk.producedToday -> "Produksi Hari Ini"
     else -> "Aman"
@@ -63,13 +63,20 @@ private fun labelStatusLayakPakai(produk: Produk): String = when {
 
 class AktivitasKonversiProduk : AktivitasDasar() {
 
+    companion object {
+        const val EXTRA_SELECTED_RESULT_PRODUCT_ID = "extra_selected_result_product_id"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!requireLoginOrRedirect()) return
 
+        val preselectedResultProductId = intent.getStringExtra(EXTRA_SELECTED_RESULT_PRODUCT_ID).orEmpty()
+
         setContent {
             SiTahuProTheme {
                 ConversionScreen(
+                    preselectedResultProductId = preselectedResultProductId,
                     onNavigateBack = { finish() },
                     onShowMessage = { pesan -> showMessage(pesan) },
                     getCurrentUserId = { currentUserId() },
@@ -89,6 +96,7 @@ class AktivitasKonversiProduk : AktivitasDasar() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConversionScreen(
+    preselectedResultProductId: String,
     onNavigateBack: () -> Unit,
     onShowMessage: (String) -> Unit,
     getCurrentUserId: () -> String,
@@ -138,11 +146,11 @@ private fun ConversionScreen(
             daftarProdukDasar = produkDasarLayak
             daftarProdukOlahan = produkOlahan
             selectedProdukDasar = produkDasarLayak.firstOrNull()
-            selectedProdukOlahan = produkOlahan.firstOrNull()
+            selectedProdukOlahan = produkOlahan.firstOrNull { it.id == preselectedResultProductId } ?: produkOlahan.firstOrNull()
             isLoading = false
             when {
-                produkDasar.isEmpty() || produkOlahan.isEmpty() -> onShowMessage("Produk dasar atau olahan belum lengkap di sistem.")
-                produkDasarLayak.isEmpty() -> onShowMessage("Semua bahan dasar habis atau kedaluwarsa. Tidak ada stok layak pakai untuk produksi olahan.")
+                produkDasar.isEmpty() || produkOlahan.isEmpty() -> onShowMessage("Produk dasar/olahan belum lengkap.")
+                produkDasarLayak.isEmpty() -> onShowMessage("Tidak ada bahan layak pakai.")
             }
         }.onFailure {
             isLoading = false
@@ -161,7 +169,7 @@ private fun ConversionScreen(
                     title = {
                         Column {
                             Text("Konversi Olahan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text("Ubah bahan mentah menjadi hasil", style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text("Konversi produk", style = MaterialTheme.typography.labelMedium, color = mutedColor)
                         }
                     },
                     navigationIcon = {
@@ -196,7 +204,7 @@ private fun ConversionScreen(
                     Button(
                         onClick = {
                             if (selectedProdukDasar == null || selectedProdukOlahan == null) {
-                                onShowMessage("Pilih bahan dan hasil terlebih dahulu.")
+                                onShowMessage("Pilih bahan dan hasil.")
                                 return@Button
                             }
                             if (selectedProdukDasar!!.id == selectedProdukOlahan!!.id) {
@@ -242,7 +250,7 @@ private fun ConversionScreen(
                                     onSaveSuccess()
                                 }.onFailure { error ->
                                     isSaving = false
-                                    onShowMessage(error.message ?: "Gagal menyimpan produk olahan. Cek stok bahan dan koneksi.")
+                                    onShowMessage(error.message ?: "Gagal menyimpan konversi.")
                                 }
                             }
                         },
@@ -479,7 +487,7 @@ private fun ConversionScreen(
 
                         // Toggle Catatan
                         ToggleSection(
-                            title = "Catatan Tambahan (Opsional)",
+                            title = "Catatan (Opsional)",
                             icon = Icons.Rounded.Edit,
                             isExpanded = showNote,
                             onToggle = { showNote = !showNote },
@@ -490,7 +498,7 @@ private fun ConversionScreen(
                                 OutlinedTextField(
                                     value = catatan,
                                     onValueChange = { catatan = it },
-                                    placeholder = { Text("Tulis keterangan...") },
+                                    placeholder = { Text("Catatan tambahan") },
                                     shape = RoundedCornerShape(14.dp),
                                     textStyle = LocalTextStyle.current.copy(color = textColor),
                                     modifier = Modifier.fillMaxWidth().height(120.dp),
@@ -532,7 +540,7 @@ private fun ProductDropdownFieldKonversi(
     var showPicker by remember { mutableStateOf(false) }
     val enabled = !isLoading && produk.isNotEmpty()
     val valueText = when {
-        isLoading -> "Memuat produk dari sistem..."
+        isLoading -> "Memuat produk..."
         produk.isEmpty() -> emptyMessage
         else -> selectedProduk?.name ?: "Pilih produk"
     }
@@ -544,7 +552,7 @@ private fun ProductDropdownFieldKonversi(
             "Stok ${Formatter.ribuan(it.stock.toLong())} ${it.unit} • ${it.category}"
         }
         "$status • $stokInfo"
-    } ?: if (enabled) "Tekan untuk memilih produk" else "Pengecekan selesai."
+    } ?: if (enabled) "Pilih produk" else "Tidak tersedia"
 
     Column(Modifier.fillMaxWidth()) {
         OutlinedTextField(

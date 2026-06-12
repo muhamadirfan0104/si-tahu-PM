@@ -165,9 +165,9 @@ class AktivitasMasuk : AktivitasDasar() {
                 updateLoadingState(false) // PERBAIKAN: Menggunakan nama fungsi baru
 
                 val message = when (e) {
-                    is FirebaseAuthInvalidUserException -> "Email belum terdaftar sebagai pengguna aplikasi."
-                    is FirebaseAuthInvalidCredentialsException -> "Password salah atau format email tidak valid."
-                    is FirebaseNetworkException -> "Koneksi ke server sedang bermasalah. Periksa internet lalu coba lagi."
+                    is FirebaseAuthInvalidUserException -> "Email belum terdaftar."
+                    is FirebaseAuthInvalidCredentialsException -> "Email atau password salah."
+                    is FirebaseNetworkException -> "Periksa koneksi internet."
                     else -> "Login gagal: ${e.message}"
                 }
 
@@ -215,7 +215,7 @@ class AktivitasMasuk : AktivitasDasar() {
         if (email.isBlank()) {
             updateLoadingState(false) // PERBAIKAN: Menggunakan nama fungsi baru
             auth.signOut()
-            showMessage("Data pengguna tidak ditemukan di Firestore.")
+            showMessage("Data pengguna tidak ditemukan.")
             return
         }
 
@@ -263,7 +263,7 @@ class AktivitasMasuk : AktivitasDasar() {
             onNotFound = {
                 updateLoadingState(false) // PERBAIKAN: Menggunakan nama fungsi baru
                 auth.signOut()
-                showMessage("Data pengguna tidak ditemukan di Firestore.")
+                showMessage("Data pengguna tidak ditemukan.")
             },
             onError = { e ->
                 updateLoadingState(false) // PERBAIKAN: Menggunakan nama fungsi baru

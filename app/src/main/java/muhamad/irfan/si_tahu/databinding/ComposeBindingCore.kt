@@ -832,7 +832,7 @@ internal fun ListHandleView(handle: ComposeRecyclerState, modifier: Modifier = M
         is AdapterBarisUmum -> GenericRowList(adapter, modifier)
         is AdapterProduk -> ProductList(adapter, modifier)
         is AdapterKeranjang -> CartList(adapter, modifier)
-        else -> EmptyState("Belum ada data yang ditampilkan")
+        else -> EmptyState("Belum ada data")
     }
 }
 
@@ -1015,7 +1015,7 @@ private fun ProductCard(product: Produk, adapter: AdapterProduk, modifier: Modif
             SmallPill(status, when (status) {
                 "Produksi Hari Ini" -> WarnaBaris.GREEN
                 "Stok Sisa" -> WarnaBaris.GOLD
-                "ED Hari Ini" -> WarnaBaris.ORANGE
+                "Kedaluwarsa Hari Ini" -> WarnaBaris.ORANGE
                 "Hampir Kedaluwarsa" -> WarnaBaris.ORANGE
                 "Kedaluwarsa", "Habis" -> WarnaBaris.RED
                 else -> WarnaBaris.DEFAULT
