@@ -360,6 +360,10 @@ private data class DataMuatLaporan(val report: RepositoriFirebaseUtama.Ringkasan
 
 private const val REPORT_KEUANGAN = "Laporan Keuangan"
 private const val REPORT_PRODUKSI = "Laporan Produksi"
+private const val STATUS_LAPORAN_SEMUA = "semua"
+private const val STATUS_LAPORAN_PENDING = "pending"
+private const val STATUS_LAPORAN_SELESAI = "selesai"
+private const val STATUS_LAPORAN_BATAL_GAGAL = "batal_gagal"
 
 private data class HeaderKolomLaporan(val label: String, val sublabel: String = "")
 private data class BarisPreviewKeuangan(
@@ -383,6 +387,45 @@ private data class BarisPreviewProduksiMutasi(
 private fun tipeLaporanNormal(value: String): String = when {
     value.equals(REPORT_PRODUKSI, true) -> REPORT_PRODUKSI
     else -> REPORT_KEUANGAN
+}
+
+private fun cocokStatusLaporan(
+    row: RepositoriFirebaseUtama.BarisRiwayatTransaksi,
+    statusKey: String
+): Boolean {
+    val status = row.status.trim().lowercase(Locale("id", "ID"))
+    val badge = row.badge.trim().lowercase(Locale("id", "ID"))
+    val gabungan = "$status $badge"
+
+    return when (statusKey) {
+        STATUS_LAPORAN_PENDING -> {
+            row.jenis.equals("Penjualan", true) &&
+                    (
+                            gabungan.contains("pending") ||
+                                    gabungan.contains("belum terbayar") ||
+                                    gabungan.contains("belum dibayar") ||
+                                    gabungan.contains("menunggu")
+                            )
+        }
+
+        STATUS_LAPORAN_SELESAI -> {
+            gabungan.contains("selesai") ||
+                    gabungan.contains("paid") ||
+                    gabungan.contains("lunas") ||
+                    gabungan.contains("tercatat")
+        }
+
+        STATUS_LAPORAN_BATAL_GAGAL -> {
+            gabungan.contains("batal") ||
+                    gabungan.contains("dibatalkan") ||
+                    gabungan.contains("cancel") ||
+                    gabungan.contains("cancelled") ||
+                    gabungan.contains("gagal") ||
+                    gabungan.contains("tidak terbayar")
+        }
+
+        else -> true
+    }
 }
 
 private fun awalPeriode(rangeKey: String): Date? {
@@ -790,6 +833,17 @@ private fun ReportDashboardScreen(
     var selectedJenisLaporan by remember { mutableStateOf(REPORT_KEUANGAN) }
     var exportLoading by remember { mutableStateOf(false) }
 
+    val statusOptions = remember {
+        listOf(
+            "Semua status" to STATUS_LAPORAN_SEMUA,
+            "Pembayaran pending" to STATUS_LAPORAN_PENDING,
+            "Selesai" to STATUS_LAPORAN_SELESAI,
+            "Dibatalkan / gagal" to STATUS_LAPORAN_BATAL_GAGAL
+        )
+    }
+
+    var selectedStatusLaporan by remember { mutableStateOf(statusOptions.first()) }
+
     var draftTanggalMulai by remember { mutableStateOf("") }
     var draftTanggalSelesai by remember { mutableStateOf("") }
 
@@ -813,13 +867,33 @@ private fun ReportDashboardScreen(
     val pilihanJenisLaporan = remember { listOf(REPORT_KEUANGAN, REPORT_PRODUKSI) }
     val labelBulanFormatter = remember { SimpleDateFormat("MMMM yyyy", Locale("id", "ID")) }
 
-    val saldoAwalKeuangan = remember(riwayatSemuaData, selectedRange) { hitungSaldoSebelumPeriode(riwayatSemuaData, selectedRange.second) }
-    val financePreviewRows = remember(riwayatData, saldoAwalKeuangan) { buildPreviewKeuanganRows(riwayatData, saldoAwalKeuangan) }
-    val productionPreviewRows = remember(stokProdukData) { buildPreviewProduksiMutasiRows(stokProdukData) }
-    val rowsUntukEkspor = remember(riwayatData, selectedJenisLaporan) {
+    val saldoAwalKeuangan = remember(riwayatSemuaData, selectedRange) {
+        hitungSaldoSebelumPeriode(riwayatSemuaData, selectedRange.second) }
+    val riwayatDataTerfilterStatus = remember(
+        riwayatData,
+        selectedJenisLaporan,
+        selectedStatusLaporan
+    ) {
+        if (tipeLaporanNormal(selectedJenisLaporan) == REPORT_PRODUKSI) {
+            riwayatData
+        } else {
+            riwayatData.filter { row ->
+                cocokStatusLaporan(row, selectedStatusLaporan.second)
+            }
+        }
+    }
+    val financePreviewRows = remember(riwayatDataTerfilterStatus, saldoAwalKeuangan) {
+        buildPreviewKeuanganRows(riwayatDataTerfilterStatus, saldoAwalKeuangan) }
+    val productionPreviewRows = remember(stokProdukData) {
+        buildPreviewProduksiMutasiRows(stokProdukData) }
+    val rowsUntukEkspor = remember(riwayatDataTerfilterStatus, selectedJenisLaporan) {
         when (tipeLaporanNormal(selectedJenisLaporan)) {
-            REPORT_PRODUKSI -> riwayatData.filter { it.jenis.equals("Produksi", true) || it.jenis.equals("Produk Olahan", true) }
-            else -> riwayatData.filter { it.jenis.equals("Penjualan", true) || it.jenis.equals("Pengeluaran", true) }
+            REPORT_PRODUKSI -> riwayatDataTerfilterStatus.filter {
+                it.jenis.equals("Produksi", true) || it.jenis.equals("Produk Olahan", true)
+            }
+            else -> riwayatDataTerfilterStatus.filter {
+                it.jenis.equals("Penjualan", true) || it.jenis.equals("Pengeluaran", true)
+            }
         }
     }
 
@@ -855,7 +929,17 @@ private fun ReportDashboardScreen(
                     title = {
                         Column {
                             Text("Laporan", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleLarge)
-                            Text(selectedJenisLaporan, style = MaterialTheme.typography.labelMedium, color = mutedColor)
+                            Text(
+                                if (tipeLaporanNormal(selectedJenisLaporan) == REPORT_PRODUKSI) {
+                                    selectedJenisLaporan
+                                } else {
+                                    "$selectedJenisLaporan • ${selectedStatusLaporan.first}"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = mutedColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     },
                     navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Rounded.ArrowBack, "Kembali", tint = textColor) } },
@@ -894,7 +978,13 @@ private fun ReportDashboardScreen(
                     JenisLaporanFilterChips(
                         options = pilihanJenisLaporan,
                         selected = selectedJenisLaporan,
-                        onSelected = { selectedJenisLaporan = it },
+                        onSelected = {
+                            selectedJenisLaporan = it
+
+                            if (tipeLaporanNormal(it) == REPORT_PRODUKSI) {
+                                selectedStatusLaporan = statusOptions.first()
+                            }
+                        },
                         surfaceColor = surfaceColor,
                         borderColor = borderColor,
                         textColor = textColor,
@@ -982,45 +1072,179 @@ private fun ReportDashboardScreen(
         }
 
         if (showFilterDialog) {
-            var draftRange by remember { mutableStateOf(selectedRange) }
+            var draftStatus by remember { mutableStateOf(selectedStatusLaporan) }
+
             AlertDialog(
-                onDismissRequest = { showFilterDialog = false }, shape = RoundedCornerShape(24.dp), containerColor = surfaceColor,
-                title = { Text("Pilih Periode Laporan", fontWeight = FontWeight.Bold, color = textColor) },
+                onDismissRequest = { showFilterDialog = false },
+                shape = RoundedCornerShape(24.dp),
+                containerColor = surfaceColor,
+                title = {
+                    Text(
+                        "Filter Laporan",
+                        fontWeight = FontWeight.Bold,
+                        color = textColor
+                    )
+                },
                 text = {
-                    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Periode cepat", color = mutedColor, style = MaterialTheme.typography.labelMedium)
-                        rangeOptions.forEach { option ->
-                            val selected = draftRange == option
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (selected) primaryColor.copy(alpha = 0.10f) else bgColor,
-                                border = BorderStroke(1.dp, if (selected) primaryColor else borderColor),
-                                modifier = Modifier.fillMaxWidth().clickable { draftRange = option }
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            "Filter kalender spesifik",
+                            color = mutedColor,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showFilterDialog = false
+                                    draftTanggalMulai = ""
+                                    draftTanggalSelesai = ""
+                                    showDateRangePicker = true
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            color = bgColor,
+                            border = BorderStroke(1.dp, borderColor)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(option.first, color = if (selected) primaryColor else textColor, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-                                    if (selected) Icon(Icons.Rounded.CheckCircle, null, tint = primaryColor, modifier = Modifier.size(18.dp))
+                                Icon(
+                                    Icons.Rounded.DateRange,
+                                    contentDescription = null,
+                                    tint = mutedColor
+                                )
+
+                                Text(
+                                    "Rentang tanggal custom",
+                                    color = textColor,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showFilterDialog = false
+                                    showMonthPicker = true
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            color = bgColor,
+                            border = BorderStroke(1.dp, borderColor)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.DateRange,
+                                    contentDescription = null,
+                                    tint = mutedColor
+                                )
+
+                                Text(
+                                    "Pilih satu bulan penuh",
+                                    color = textColor,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+
+                        if (tipeLaporanNormal(selectedJenisLaporan) != REPORT_PRODUKSI) {
+                            HorizontalDivider(color = borderColor)
+
+                            Text(
+                                "Status Pembayaran",
+                                color = mutedColor,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+
+                            statusOptions.forEach { option ->
+                                val isSelected = option == draftStatus
+
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isSelected) {
+                                        primaryColor.copy(alpha = 0.10f)
+                                    } else {
+                                        bgColor
+                                    },
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isSelected) primaryColor else borderColor
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            draftStatus = option
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(
+                                            horizontal = 14.dp,
+                                            vertical = 12.dp
+                                        ),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            option.first,
+                                            color = if (isSelected) primaryColor else textColor,
+                                            fontWeight = if (isSelected) {
+                                                FontWeight.Bold
+                                            } else {
+                                                FontWeight.Medium
+                                            }
+                                        )
+
+                                        if (isSelected) {
+                                            Icon(
+                                                Icons.Rounded.CheckCircle,
+                                                contentDescription = null,
+                                                tint = primaryColor,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                        HorizontalDivider(color = borderColor)
-                        Text("Filter kalender spesifik", color = mutedColor, style = MaterialTheme.typography.labelMedium)
-                        Surface(modifier = Modifier.fillMaxWidth().clickable { showFilterDialog = false; draftTanggalMulai = ""; draftTanggalSelesai = ""; showDateRangePicker = true }, shape = RoundedCornerShape(12.dp), color = bgColor, border = BorderStroke(1.dp, borderColor)) {
-                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
-                                Text("Rentang tanggal custom", color = textColor, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                        Surface(modifier = Modifier.fillMaxWidth().clickable { showFilterDialog = false; showMonthPicker = true }, shape = RoundedCornerShape(12.dp), color = bgColor, border = BorderStroke(1.dp, borderColor)) {
-                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Icon(Icons.Rounded.DateRange, contentDescription = null, tint = mutedColor)
-                                Text("Pilih satu bulan penuh", color = textColor, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
                 },
-                confirmButton = { Button(onClick = { selectedRange = draftRange; showFilterDialog = false }, shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = primaryColor)) { Text("Terapkan", fontWeight = FontWeight.Bold) } },
-                dismissButton = { TextButton(onClick = { showFilterDialog = false }) { Text("Batal", color = mutedColor) } }
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            selectedStatusLaporan = draftStatus
+                            showFilterDialog = false
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = primaryColor)
+                    ) {
+                        Text(
+                            "Terapkan",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showFilterDialog = false }
+                    ) {
+                        Text(
+                            "Batal",
+                            color = mutedColor
+                        )
+                    }
+                }
             )
         }
 

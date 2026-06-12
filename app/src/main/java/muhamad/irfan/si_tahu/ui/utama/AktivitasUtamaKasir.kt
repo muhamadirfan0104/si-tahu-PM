@@ -527,15 +527,71 @@ private fun TabHistory(
     val hasActiveFilter = statusAktif != "Semua" || rentangMulai != null || rentangSelesai != null
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Riwayat Kasir Saya", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.headlineMedium)
-            Text("Cari transaksi, filter status, atau pilih rentang tanggal seperti standar riwayat aplikasi.", color = mutedColor, style = MaterialTheme.typography.bodyLarge)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        "Riwayat Kasir Saya",
+                        fontWeight = FontWeight.Bold,
+                        color = textColor,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Text(
+                        "Cari transaksi, filter status, atau pilih rentang tanggal.",
+                        color = mutedColor,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Text(
+                    "${filteredRows.size} transaksi",
+                    color = mutedColor,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 12.dp, top = 4.dp)
+                )
+            }
+
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Cari nota / ID / status...", color = mutedColor) },
-                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = "Cari", tint = mutedColor) },
+                    placeholder = {
+                        Text(
+                            "Cari nota / ID / status...",
+                            color = mutedColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Rounded.Search,
+                            contentDescription = "Cari",
+                            tint = mutedColor
+                        )
+                    },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     shape = RoundedCornerShape(100),
@@ -545,41 +601,82 @@ private fun TabHistory(
                         focusedContainerColor = surfaceColor,
                         unfocusedContainerColor = surfaceColor
                     ),
-                    modifier = Modifier.weight(1f).height(54.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp)
                 )
+
                 Surface(
                     shape = CircleShape,
                     color = if (hasActiveFilter) primaryColor else surfaceColor,
                     border = if (hasActiveFilter) null else BorderStroke(1.dp, borderColor),
-                    modifier = Modifier.size(54.dp).clickable { showFilterDialog = true }
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clickable { showFilterDialog = true }
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.FilterList, contentDescription = "Filter", tint = if (hasActiveFilter) Color.White else textColor)
-                        if (hasActiveFilter) Box(Modifier.align(Alignment.TopEnd).padding(12.dp).size(8.dp).clip(CircleShape).background(Color.Red))
+                        Icon(
+                            Icons.Rounded.FilterList,
+                            contentDescription = "Filter",
+                            tint = if (hasActiveFilter) Color.White else textColor
+                        )
+
+                        if (hasActiveFilter) {
+                            Box(
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(10.dp)
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Red)
+                            )
+                        }
                     }
                 }
             }
+
             if (hasActiveFilter) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (statusAktif != "Semua") FilterChipVisualKasir(statusAktif, { statusAktif = "Semua" }, primaryColor)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (statusAktif != "Semua") {
+                        FilterChipVisualKasir(
+                            statusAktif,
+                            { statusAktif = "Semua" },
+                            primaryColor
+                        )
+                    }
+
                     if (rentangMulai != null && rentangSelesai != null) {
-                        val label = if (rentangMulai == rentangSelesai) Formatter.readableShortDate(rentangMulai) else "${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
-                        FilterChipVisualKasir(label, { rentangMulai = null; rentangSelesai = null }, primaryColor)
+                        val label = if (rentangMulai == rentangSelesai) {
+                            Formatter.readableShortDate(rentangMulai)
+                        } else {
+                            "${Formatter.readableShortDate(rentangMulai)} - ${Formatter.readableShortDate(rentangSelesai)}"
+                        }
+
+                        FilterChipVisualKasir(
+                            label,
+                            {
+                                rentangMulai = null
+                                rentangSelesai = null
+                            },
+                            primaryColor
+                        )
                     }
                 }
             }
-            Text("Menampilkan ${filteredRows.size} transaksi", color = mutedColor, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 4.dp))
         }
 
         if (isLoading) {
             Column(
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 repeat(4) { HistoryItemSkeletonCard(surfaceColor, borderColor) }
             }
         } else if (filteredRows.isEmpty()) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.size(64.dp).clip(CircleShape).background(primaryColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.History, null, tint = primaryColor, modifier = Modifier.size(32.dp))
@@ -591,8 +688,8 @@ private fun TabHistory(
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(rowsTampil, key = { it.id }) { item ->
                     val isExpanded = expandedId == item.id

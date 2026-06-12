@@ -85,6 +85,20 @@ import java.util.Locale
 
 internal data class MainTab(val id: Int, val label: String, val icon: ImageVector)
 internal data class SpeedDialItem(val label: String, val icon: ImageVector, val onClick: () -> Unit)
+
+private data class SeriGrafikPenjualanUi(
+    val label: String,
+    val color: Color,
+    val points: List<Float>,
+    val rawValues: List<String>
+)
+
+private data class Quadruple<A, B, C, D>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D
+)
 private val adminTabs = listOf(
     MainTab(TabIds.ADMIN_DASHBOARD, "Dasbor", Icons.Rounded.Dashboard),
     MainTab(TabIds.ADMIN_PRODUCTION, "Produksi", Icons.Rounded.Factory),
@@ -295,9 +309,41 @@ private fun trenPenjualanLabel(grafik: List<RepositoriFirebaseUtama.TitikGrafikP
 }
 
 private fun grafikPenjualanPoints(grafik: List<RepositoriFirebaseUtama.TitikGrafikPenjualan>): List<Float> {
-    val totals = grafik.map { it.totalNominal }
-    val maxValue = totals.maxOrNull()?.takeIf { it > 0L } ?: return listOf(0.05f, 0.05f, 0.05f, 0.05f, 0.05f, 0.05f, 0.05f)
-    return totals.map { (it.toFloat() / maxValue.toFloat()).coerceIn(0.08f, 1f) }
+    return normalisasiNominalGrafik(grafik.map { it.totalNominal })
+}
+
+private fun normalisasiNominalGrafik(values: List<Long>, maxPembanding: Long? = null): List<Float> {
+    val maxValue = (maxPembanding ?: values.maxOrNull() ?: 0L).takeIf { it > 0L }
+        ?: return List(values.size.coerceAtLeast(7)) { 0.05f }
+
+    return values.map { value ->
+        if (value <= 0L) 0.05f else (value.toFloat() / maxValue.toFloat()).coerceIn(0.08f, 1f)
+    }
+}
+
+@Composable
+private fun grafikPenjualanDuaSeri(
+    grafikAdmin: List<RepositoriFirebaseUtama.TitikGrafikPenjualan>,
+    grafikKasir: List<RepositoriFirebaseUtama.TitikGrafikPenjualan>
+): List<SeriGrafikPenjualanUi> {
+    val adminValues = grafikAdmin.map { it.totalNominal }
+    val kasirValues = grafikKasir.map { it.totalNominal }
+    val maxValue = (adminValues + kasirValues).maxOrNull()?.takeIf { it > 0L } ?: 0L
+
+    return listOf(
+        SeriGrafikPenjualanUi(
+            label = "Admin",
+            color = ProTheme.warning,
+            points = normalisasiNominalGrafik(adminValues, maxPembanding = maxValue),
+            rawValues = adminValues.map { Formatter.currency(it) }
+        ),
+        SeriGrafikPenjualanUi(
+            label = "Kasir",
+            color = ProTheme.primary,
+            points = normalisasiNominalGrafik(kasirValues, maxPembanding = maxValue),
+            rawValues = kasirValues.map { Formatter.currency(it) }
+        )
+    )
 }
 
 private fun grafikPenjualanLabels(grafik: List<RepositoriFirebaseUtama.TitikGrafikPenjualan>): List<String> {
@@ -311,7 +357,15 @@ private fun grafikPenjualanLabels(grafik: List<RepositoriFirebaseUtama.TitikGraf
 }
 
 private fun grafikPenjualanYLabels(grafik: List<RepositoriFirebaseUtama.TitikGrafikPenjualan>): List<String> {
-    val maxValue = grafik.maxOfOrNull { it.totalNominal }?.takeIf { it > 0L } ?: 0L
+    return yLabelsNominalGrafik(grafik.map { it.totalNominal })
+}
+
+private fun grafikPenjualanYLabelsGabungan(vararg grafik: List<RepositoriFirebaseUtama.TitikGrafikPenjualan>): List<String> {
+    return yLabelsNominalGrafik(grafik.flatMap { seri -> seri.map { it.totalNominal } })
+}
+
+private fun yLabelsNominalGrafik(values: List<Long>): List<String> {
+    val maxValue = values.maxOrNull()?.takeIf { it > 0L } ?: 0L
     val midValue = maxValue / 2L
     return listOf(formatNominalGrafikSingkat(maxValue), formatNominalGrafikSingkat(midValue), "0")
 }
@@ -331,10 +385,30 @@ private fun AdminMainScreen(
     onLogout: () -> Unit, onSwitchCashier: () -> Unit
 ) {
     val context = LocalContext.current
+
     var notifikasiAdmin by remember { mutableStateOf<List<RepositoriFirebaseUtama.NotifikasiAdmin>>(emptyList()) }
     var isNotificationLoading by remember { mutableStateOf(false) }
     var notifRealtimeTick by remember { mutableIntStateOf(0) }
+    var manualRefreshKey by remember { mutableIntStateOf(0) }
     val firestoreRealtime = remember { FirebaseFirestore.getInstance() }
+
+    val notifPrefs = remember {
+        context.getSharedPreferences("notifikasi_admin_dibaca", Context.MODE_PRIVATE)
+    }
+
+    var notifDibacaIds by remember {
+        mutableStateOf(notifPrefs.getStringSet("ids", emptySet())?.toSet().orEmpty())
+    }
+
+    val notifikasiBelumDibaca = remember(notifikasiAdmin, notifDibacaIds) {
+        notifikasiAdmin.filterNot { it.id in notifDibacaIds }
+    }
+
+    val onRefreshCurrent: () -> Unit = {
+        manualRefreshKey++
+        notifRealtimeTick++
+        Toast.makeText(context, "Data diperbarui", Toast.LENGTH_SHORT).show()
+    }
 
     DisposableEffect(Unit) {
         val registrations = listOf(
@@ -351,70 +425,140 @@ private fun AdminMainScreen(
 
     LaunchedEffect(dashboardRefreshKey, productionRefreshKey, salesRefreshKey, stockRefreshKey, notifRealtimeTick) {
         isNotificationLoading = true
-        runCatching { RepositoriFirebaseUtama.muatNotifikasiAdmin() }.onSuccess { notifikasiAdmin = it }.onFailure { notifikasiAdmin = emptyList() }
+        runCatching { RepositoriFirebaseUtama.muatNotifikasiAdmin() }
+            .onSuccess { notifikasiAdmin = it }
+            .onFailure { notifikasiAdmin = emptyList() }
         isNotificationLoading = false
     }
 
     val currentFabItems = when (selectedTabId) {
         TabIds.ADMIN_SALES -> listOf(
-            SpeedDialItem("Catat Rekap Pasar", Icons.Rounded.Storefront) { context.startActivity(Intent(context, AktivitasRekapPasar::class.java)) },
+            SpeedDialItem("Catat Rekap Pasar", Icons.Rounded.Storefront) {
+                context.startActivity(Intent(context, AktivitasRekapPasar::class.java))
+            },
             SpeedDialItem("Riwayat Pasar", Icons.Rounded.ReceiptLong) {
-                context.startActivity(Intent(context, AktivitasRiwayatPenjualan::class.java).putExtra(AktivitasRiwayatPenjualan.EXTRA_SCREEN_TITLE, "Riwayat Rekap Pasar").putExtra(AktivitasRiwayatPenjualan.EXTRA_SCREEN_SUBTITLE, "Hanya transaksi dari rekap pasar").putExtra(AktivitasRiwayatPenjualan.EXTRA_DEFAULT_FILTER, AktivitasRiwayatPenjualan.FILTER_PASAR).putExtra(AktivitasRiwayatPenjualan.EXTRA_LOCK_FILTER, true))
+                context.startActivity(
+                    Intent(context, AktivitasRiwayatPenjualan::class.java)
+                        .putExtra(AktivitasRiwayatPenjualan.EXTRA_SCREEN_TITLE, "Riwayat Rekap Pasar")
+                        .putExtra(AktivitasRiwayatPenjualan.EXTRA_SCREEN_SUBTITLE, "Hanya transaksi dari rekap pasar")
+                        .putExtra(AktivitasRiwayatPenjualan.EXTRA_DEFAULT_FILTER, AktivitasRiwayatPenjualan.FILTER_PASAR)
+                        .putExtra(AktivitasRiwayatPenjualan.EXTRA_LOCK_FILTER, true)
+                )
             }
         )
+
         TabIds.ADMIN_PRODUCTION -> listOf(
-            SpeedDialItem("Produksi Dasar", Icons.Rounded.Factory) { context.startActivity(Intent(context, AktivitasProduksiTahuDasar::class.java)) },
-            SpeedDialItem("Produksi Olahan", Icons.Rounded.Fastfood) { context.startActivity(Intent(context, AktivitasKonversiProduk::class.java)) },
-            SpeedDialItem("Riwayat Produksi", Icons.Rounded.History) { context.startActivity(Intent(context, AktivitasRiwayatProduksi::class.java)) }
+            SpeedDialItem("Produksi Dasar", Icons.Rounded.Factory) {
+                context.startActivity(Intent(context, AktivitasProduksiTahuDasar::class.java))
+            },
+            SpeedDialItem("Produksi Olahan", Icons.Rounded.Fastfood) {
+                context.startActivity(Intent(context, AktivitasKonversiProduk::class.java))
+            },
+            SpeedDialItem("Riwayat Produksi", Icons.Rounded.History) {
+                context.startActivity(Intent(context, AktivitasRiwayatProduksi::class.java))
+            }
         )
+
         TabIds.ADMIN_STOCK -> listOf(
-            SpeedDialItem("Monitoring Stok", Icons.Rounded.Inventory) { context.startActivity(Intent(context, AktivitasMonitoringStok::class.java)) },
-            SpeedDialItem("Penyesuaian Stok", Icons.Rounded.SyncAlt) { context.startActivity(Intent(context, AktivitasStockAdjustment::class.java)) },
-            SpeedDialItem("Riwayat Stok", Icons.Rounded.History) { context.startActivity(Intent(context, AktivitasRiwayatSemuaStok::class.java)) }
+            SpeedDialItem("Monitoring Stok", Icons.Rounded.Inventory) {
+                context.startActivity(Intent(context, AktivitasMonitoringStok::class.java))
+            },
+            SpeedDialItem("Penyesuaian Stok", Icons.Rounded.SyncAlt) {
+                context.startActivity(Intent(context, AktivitasStockAdjustment::class.java))
+            },
+            SpeedDialItem("Riwayat Stok", Icons.Rounded.History) {
+                context.startActivity(Intent(context, AktivitasRiwayatSemuaStok::class.java))
+            }
         )
+
         else -> emptyList()
     }
 
     ProAppShell(
-        title = titleForAdminTab(selectedTabId), subtitle = namaLogin, tabs = adminTabs, selectedTabId = selectedTabId,
-        onTabSelected = onTabSelected, fabItems = currentFabItems, notifikasiAdmin = notifikasiAdmin, isNotificationLoading = isNotificationLoading,
-        onNotificationClick = { item -> if(item.tujuan == "harga") context.startActivity(Intent(context, AktivitasDaftarHarga::class.java)) else context.startActivity(Intent(context, AktivitasMonitoringStok::class.java)) }
+        title = titleForAdminTab(selectedTabId),
+        subtitle = namaLogin,
+        tabs = adminTabs,
+        selectedTabId = selectedTabId,
+        onTabSelected = onTabSelected,
+        fabItems = currentFabItems,
+        notifikasiAdmin = notifikasiBelumDibaca,
+        isNotificationLoading = isNotificationLoading,
+        onRefreshClick = onRefreshCurrent,
+        onNotificationClick = { item ->
+            val updatedIds = notifDibacaIds + item.id
+            notifDibacaIds = updatedIds
+            notifPrefs.edit().putStringSet("ids", updatedIds).apply()
+
+            if (item.tujuan == "harga") {
+                context.startActivity(Intent(context, AktivitasDaftarHarga::class.java))
+            } else {
+                context.startActivity(Intent(context, AktivitasMonitoringStok::class.java))
+            }
+        }
     ) {
         when (selectedTabId) {
-            TabIds.ADMIN_PRODUCTION -> AdminProductionPage(productionRefreshKey)
-            TabIds.ADMIN_SALES -> AdminSalesPage(salesRefreshKey)
-            TabIds.ADMIN_STOCK -> AdminStockPage(stockRefreshKey)
+            TabIds.ADMIN_PRODUCTION -> AdminProductionPage(productionRefreshKey + manualRefreshKey)
+            TabIds.ADMIN_SALES -> AdminSalesPage(salesRefreshKey + manualRefreshKey)
+            TabIds.ADMIN_STOCK -> AdminStockPage(stockRefreshKey + manualRefreshKey)
             TabIds.ADMIN_MENU -> AdminMenuPage(onLogout, onSwitchCashier)
-            else -> AdminDashboardPage(dashboardRefreshKey, onSwitchCashier)
+            else -> AdminDashboardPage(dashboardRefreshKey + manualRefreshKey, onSwitchCashier)
         }
     }
 }
 
 @Composable
 internal fun ProAppShell(
-    title: String, subtitle: String, tabs: List<MainTab>, selectedTabId: Int,
-    onTabSelected: (Int) -> Unit, fabItems: List<SpeedDialItem> = emptyList(),
+    title: String,
+    subtitle: String,
+    tabs: List<MainTab>,
+    selectedTabId: Int,
+    onTabSelected: (Int) -> Unit,
+    fabItems: List<SpeedDialItem> = emptyList(),
     notifikasiAdmin: List<RepositoriFirebaseUtama.NotifikasiAdmin> = emptyList(),
     isNotificationLoading: Boolean = false,
     onNotificationClick: (RepositoriFirebaseUtama.NotifikasiAdmin) -> Unit = {},
+    onRefreshClick: () -> Unit = {},
     content: @Composable () -> Unit
 ) {
     Surface(color = ProTheme.background, modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
-                MainHeader(title = title, subtitle = subtitle, notifikasiAdmin = notifikasiAdmin, isNotificationLoading = isNotificationLoading, onNotificationClick = onNotificationClick)
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 16.dp)) { content() }
+                MainHeader(
+                    title = title,
+                    subtitle = subtitle,
+                    notifikasiAdmin = notifikasiAdmin,
+                    isNotificationLoading = isNotificationLoading,
+                    onNotificationClick = onNotificationClick,
+                    onRefreshClick = onRefreshClick
+                )
+
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 16.dp)
+                ) {
+                    content()
+                }
+
                 ProBottomNav(tabs, selectedTabId, onTabSelected)
             }
-            if (fabItems.isNotEmpty()) { SpeedDialMenu(items = fabItems) }
+
+            if (fabItems.isNotEmpty()) {
+                SpeedDialMenu(items = fabItems)
+            }
         }
     }
 }
 
 @Composable
 internal fun MainHeader(
-    title: String, subtitle: String, notifikasiAdmin: List<RepositoriFirebaseUtama.NotifikasiAdmin> = emptyList(),
-    isNotificationLoading: Boolean = false, onNotificationClick: (RepositoriFirebaseUtama.NotifikasiAdmin) -> Unit = {}
+    title: String,
+    subtitle: String,
+    notifikasiAdmin: List<RepositoriFirebaseUtama.NotifikasiAdmin> = emptyList(),
+    isNotificationLoading: Boolean = false,
+    onNotificationClick: (RepositoriFirebaseUtama.NotifikasiAdmin) -> Unit = {},
+    onRefreshClick: () -> Unit = {}
 ) {
     Surface(
         color = if (isSystemInDarkTheme()) ProTheme.surface else ProTheme.primary,
@@ -422,13 +566,58 @@ internal fun MainHeader(
         shadowElevation = if (isSystemInDarkTheme()) 0.dp else 8.dp,
         border = if (isSystemInDarkTheme()) BorderStroke(1.dp, ProTheme.border) else null
     ) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             ProfileBubble(subtitle.initials())
+
             Column(Modifier.weight(1f)) {
-                Text("Si Tahu • ${subtitle.shortHeaderName()}", color = if (isSystemInDarkTheme()) ProTheme.muted else ProTheme.primaryLight, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium)
-                Text(title, color = if (isSystemInDarkTheme()) ProTheme.text else Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "Si Tahu • ${subtitle.shortHeaderName()}",
+                    color = if (isSystemInDarkTheme()) ProTheme.muted else ProTheme.primaryLight,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    title,
+                    color = if (isSystemInDarkTheme()) ProTheme.text else Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-            NotificationIcon(items = notifikasiAdmin, isLoading = isNotificationLoading, onNotificationClick = onNotificationClick)
+
+            IconButton(
+                onClick = onRefreshClick,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (isSystemInDarkTheme()) {
+                            ProTheme.background
+                        } else {
+                            Color.White.copy(alpha = 0.2f)
+                        }
+                    )
+            ) {
+                Icon(
+                    Icons.Rounded.Refresh,
+                    contentDescription = "Refresh data",
+                    tint = if (isSystemInDarkTheme()) ProTheme.text else Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            NotificationIcon(
+                items = notifikasiAdmin,
+                isLoading = isNotificationLoading,
+                onNotificationClick = onNotificationClick
+            )
         }
     }
 }
@@ -484,8 +673,12 @@ internal fun SpeedDialMenu(items: List<SpeedDialItem>, modifier: Modifier = Modi
 @Composable
 private fun AdminDashboardPage(dashboardRefreshKey: Int, onSwitchCashier: () -> Unit) {
     val context = LocalContext.current
+
     var ringkasan by remember { mutableStateOf<RepositoriFirebaseUtama.RingkasanDashboard?>(null) }
-    var grafikPenjualan by remember { mutableStateOf<List<RepositoriFirebaseUtama.TitikGrafikPenjualan>>(emptyList()) }
+    var grafikPenjualanAdmin by remember { mutableStateOf<List<RepositoriFirebaseUtama.TitikGrafikPenjualan>>(emptyList()) }
+    var grafikPenjualanKasir by remember { mutableStateOf<List<RepositoriFirebaseUtama.TitikGrafikPenjualan>>(emptyList()) }
+    var grafikPenjualanTotal by remember { mutableStateOf<List<RepositoriFirebaseUtama.TitikGrafikPenjualan>>(emptyList()) }
+
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var realtimeTick by remember { mutableIntStateOf(0) }
@@ -507,9 +700,31 @@ private fun AdminDashboardPage(dashboardRefreshKey: Int, onSwitchCashier: () -> 
     LaunchedEffect(dashboardRefreshKey, realtimeTick) {
         isLoading = ringkasan == null
         errorMessage = null
-        runCatching { RepositoriFirebaseUtama.muatRingkasanDashboard() to RepositoriFirebaseUtama.muatGrafikPenjualan7Hari() }
-            .onSuccess { (summary, salesChart) -> ringkasan = summary; grafikPenjualan = salesChart; isLoading = false }
-            .onFailure { error -> errorMessage = error.message ?: "Gagal memuat ringkasan dasbor"; isLoading = false }
+
+        runCatching {
+            val summary = RepositoriFirebaseUtama.muatRingkasanDashboard()
+
+            val chartAdmin = RepositoriFirebaseUtama.muatGrafikPenjualan7Hari(
+                sourceFilter = "PASAR"
+            )
+
+            val chartKasir = RepositoriFirebaseUtama.muatGrafikPenjualan7Hari(
+                sourceFilter = "KASIR"
+            )
+
+            val chartTotal = RepositoriFirebaseUtama.muatGrafikPenjualan7Hari()
+
+            Quadruple(summary, chartAdmin, chartKasir, chartTotal)
+        }.onSuccess { result ->
+            ringkasan = result.first
+            grafikPenjualanAdmin = result.second
+            grafikPenjualanKasir = result.third
+            grafikPenjualanTotal = result.fourth
+            isLoading = false
+        }.onFailure { error ->
+            errorMessage = error.message ?: "Gagal memuat ringkasan dasbor"
+            isLoading = false
+        }
     }
 
     if (errorMessage != null) InfoStateCard(errorMessage.orEmpty())
@@ -518,41 +733,142 @@ private fun AdminDashboardPage(dashboardRefreshKey: Int, onSwitchCashier: () -> 
 
     Spacer(Modifier.height(16.dp))
     SectionTitle("Akses Cepat", "Buka proses utama usaha dari satu tempat")
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        QuickTile("Data Produk", Icons.Rounded.Inventory, ProTheme.primary, Modifier.weight(1f)) { context.startActivity(Intent(context, AktivitasDaftarProduk::class.java)) }
-        QuickTile("Kasir", Icons.Rounded.PointOfSale, ProTheme.success, Modifier.weight(1f), onSwitchCashier)
+
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        QuickTile(
+            "Data Produk",
+            Icons.Rounded.Inventory,
+            ProTheme.primary,
+            Modifier.weight(1f)
+        ) {
+            context.startActivity(Intent(context, AktivitasDaftarProduk::class.java))
+        }
+
+        QuickTile(
+            "Kasir",
+            Icons.Rounded.PointOfSale,
+            ProTheme.success,
+            Modifier.weight(1f),
+            onSwitchCashier
+        )
     }
+
     Spacer(Modifier.height(12.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        QuickTile("Pusat Laporan", Icons.Rounded.PieChart, ProTheme.pro, Modifier.weight(1f)) { context.startActivity(Intent(context, AktivitasLaporan::class.java)) }
-        QuickTile("Pengeluaran", Icons.Rounded.AccountBalanceWallet, ProTheme.warning, Modifier.weight(1f)) { context.startActivity(Intent(context, AktivitasDaftarPengeluaran::class.java)) }
+
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        QuickTile(
+            "Pusat Laporan",
+            Icons.Rounded.PieChart,
+            ProTheme.pro,
+            Modifier.weight(1f)
+        ) {
+            context.startActivity(Intent(context, AktivitasLaporan::class.java))
+        }
+
+        QuickTile(
+            "Pengeluaran",
+            Icons.Rounded.AccountBalanceWallet,
+            ProTheme.warning,
+            Modifier.weight(1f)
+        ) {
+            context.startActivity(Intent(context, AktivitasDaftarPengeluaran::class.java))
+        }
     }
 
     Spacer(Modifier.height(16.dp))
     SectionTitle("Pantauan Stok", "Produk yang perlu diprioritaskan hari ini")
+
     StockAttentionCard(
-        stokMenipis = ringkasan?.stokMenipis.orEmpty(), hampirEd = ringkasan?.hampirEd.orEmpty(), isLoading = isLoading,
-        onOpenStock = { productId -> context.startActivity(Intent(context, AktivitasDetailStok::class.java).putExtra(AktivitasMonitoringStok.EXTRA_PRODUCT_ID, productId)) }
+        stokMenipis = ringkasan?.stokMenipis.orEmpty(),
+        hampirEd = ringkasan?.hampirEd.orEmpty(),
+        isLoading = isLoading,
+        onOpenStock = { productId ->
+            context.startActivity(
+                Intent(context, AktivitasDetailStok::class.java)
+                    .putExtra(AktivitasMonitoringStok.EXTRA_PRODUCT_ID, productId)
+            )
+        }
     )
 
     Spacer(Modifier.height(16.dp))
-    SectionTitle("Grafik Penjualan", "Semua penjualan 7 hari terakhir")
-    val rawSalesValues = grafikPenjualan.map { Formatter.currency(it.totalNominal) }
+    SectionTitle(
+        "Grafik Penjualan Admin dan Kasir",
+        "2 garis dalam 1 grafik selama 7 hari terakhir"
+    )
+
+    MultiSalesChartCard(
+        isLoading = isLoading,
+        trend = if (isLoading) "" else trenPenjualanLabel(grafikPenjualanTotal),
+        chartTitle = "Admin vs Kasir",
+        chartSubtitle = "Admin = rekap pasar, Kasir = transaksi kasir",
+        series = grafikPenjualanDuaSeri(
+            grafikAdmin = grafikPenjualanAdmin,
+            grafikKasir = grafikPenjualanKasir
+        ),
+        labels = grafikPenjualanLabels(
+            if (grafikPenjualanTotal.isNotEmpty()) {
+                grafikPenjualanTotal
+            } else {
+                grafikPenjualanAdmin.ifEmpty { grafikPenjualanKasir }
+            }
+        ),
+        yLabels = grafikPenjualanYLabelsGabungan(
+            grafikPenjualanAdmin,
+            grafikPenjualanKasir
+        )
+    )
+
+    Spacer(Modifier.height(16.dp))
+    SectionTitle(
+        "Grafik Total Keseluruhan Penjualan",
+        "Total gabungan admin + kasir 7 hari terakhir"
+    )
+
+    val rawSalesValues = grafikPenjualanTotal.map { Formatter.currency(it.totalNominal) }
+
     SalesChartCard(
-        isLoading = isLoading, trend = if (isLoading) "" else trenPenjualanLabel(grafikPenjualan),
-        points = grafikPenjualanPoints(grafikPenjualan), labels = grafikPenjualanLabels(grafikPenjualan), yLabels = grafikPenjualanYLabels(grafikPenjualan), rawValues = rawSalesValues
+        isLoading = isLoading,
+        trend = if (isLoading) "" else trenPenjualanLabel(grafikPenjualanTotal),
+        chartTitle = "Total Penjualan",
+        chartSubtitle = "Gabungan rekap admin dan transaksi kasir",
+        points = grafikPenjualanPoints(grafikPenjualanTotal),
+        labels = grafikPenjualanLabels(grafikPenjualanTotal),
+        yLabels = grafikPenjualanYLabels(grafikPenjualanTotal),
+        rawValues = rawSalesValues
     )
 
     Spacer(Modifier.height(16.dp))
     SectionTitle("Produk Terlaris Hari Ini", "Produk dengan penjualan terbanyak hari ini")
-    ProductSalesCard(rows = ringkasan?.topProducts.orEmpty(), isLoading = isLoading, title = "Top Produk Hari Ini", emptyText = "Belum ada produk terjual hari ini")
+
+    ProductSalesCard(
+        rows = ringkasan?.topProducts.orEmpty(),
+        isLoading = isLoading,
+        title = "Top Produk Hari Ini",
+        emptyText = "Belum ada produk terjual hari ini"
+    )
 
     Spacer(Modifier.height(16.dp))
     SectionTitle("Pengeluaran Terbesar Hari Ini", "Pengeluaran operasional terbesar hari ini")
-    ProductSalesCard(rows = ringkasan?.expenseCategories.orEmpty(), isLoading = isLoading, title = "Kategori Pengeluaran Hari Ini", emptyText = "Belum ada pengeluaran hari ini")
+
+    ProductSalesCard(
+        rows = ringkasan?.expenseCategories.orEmpty(),
+        isLoading = isLoading,
+        title = "Kategori Pengeluaran Hari Ini",
+        emptyText = "Belum ada pengeluaran hari ini"
+    )
 
     Spacer(Modifier.height(16.dp))
-    RecentActivityCard(ringkasan?.recentItems.orEmpty(), isLoading)
+
+    RecentActivityCard(
+        ringkasan?.recentItems.orEmpty(),
+        isLoading
+    )
 }
 
 // === TAMPILAN PENJUALAN ===
@@ -1050,6 +1366,136 @@ private fun KpiCard(title: String, value: String, badge: String, accent: Color, 
 }
 
 @Composable
+private fun MultiSalesChartCard(
+    isLoading: Boolean,
+    trend: String,
+    chartTitle: String,
+    chartSubtitle: String,
+    series: List<SeriGrafikPenjualanUi>,
+    labels: List<String> = emptyList(),
+    yLabels: List<String> = emptyList()
+) {
+    if (isLoading) {
+        ChartCardSkeleton("Grafik Penjualan")
+        return
+    }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = ProTheme.surface),
+        border = BorderStroke(1.dp, ProTheme.border)
+    ) {
+        Column(
+            Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        chartTitle,
+                        fontWeight = FontWeight.Bold,
+                        color = ProTheme.text,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        chartSubtitle,
+                        color = ProTheme.muted,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+
+                if (trend.isNotBlank()) {
+                    StatusPill(
+                        trend,
+                        ProTheme.success,
+                        ProTheme.successLight
+                    )
+                }
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                series.forEach { seri ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(seri.color)
+                        )
+
+                        Text(
+                            seri.label,
+                            color = ProTheme.muted,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            MultiMiniChartWithYAxis(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(142.dp),
+                series = series,
+                yLabels = yLabels
+            )
+
+            if (labels.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Spacer(Modifier.width(54.dp))
+
+                    Row(
+                        Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        labels.forEach { label ->
+                            val parts = label.split("\n")
+
+                            Column(
+                                Modifier.weight(1f),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    parts.getOrElse(0) { "-" },
+                                    color = ProTheme.text,
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Text(
+                                    parts.drop(1).joinToString("\n"),
+                                    color = ProTheme.muted,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = MaterialTheme.typography.labelSmall.lineHeight
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SalesChartCard(isLoading: Boolean, trend: String, chartTitle: String = "Penjualan Kasir + Admin", chartSubtitle: String = "Tren 7 hari terakhir", points: List<Float> = listOf(0.2f, 0.4f, 0.3f, 0.6f, 0.5f, 0.8f, 0.7f), labels: List<String> = emptyList(), yLabels: List<String> = emptyList(), rawValues: List<String> = emptyList()) {
     if (isLoading) { ChartCardSkeleton("Grafik Penjualan"); return }
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = ProTheme.surface), border = BorderStroke(1.dp, ProTheme.border)) {
@@ -1513,6 +1959,215 @@ private fun MiniChartWithYAxis(modifier: Modifier, points: List<Float> = listOf(
         }
         Spacer(Modifier.width(8.dp))
         MiniChart(Modifier.weight(1f).fillMaxHeight(), points, rawValues)
+    }
+}
+
+@Composable
+private fun MultiMiniChartWithYAxis(
+    modifier: Modifier,
+    series: List<SeriGrafikPenjualanUi>,
+    yLabels: List<String> = emptyList()
+) {
+    Row(
+        modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(46.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.End
+        ) {
+            val labels = if (yLabels.size >= 3) {
+                yLabels.take(3)
+            } else {
+                listOf("0", "0", "0")
+            }
+
+            labels.forEach { label ->
+                Text(
+                    label,
+                    color = ProTheme.muted,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End
+                )
+            }
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        MultiMiniChart(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            series = series
+        )
+    }
+}
+
+@Composable
+private fun MultiMiniChart(
+    modifier: Modifier,
+    series: List<SeriGrafikPenjualanUi>
+) {
+    val safeSeries = series.map { seri ->
+        seri.copy(
+            points = if (seri.points.size >= 2) {
+                seri.points
+            } else {
+                listOf(0.05f, 0.05f)
+            }
+        )
+    }
+
+    val borderColor = ProTheme.border
+    val surfaceColor = ProTheme.surface
+    val primaryColor = ProTheme.primary
+
+    var selectedIndex by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(series) {
+        selectedIndex = null
+    }
+
+    Box(modifier) {
+        Canvas(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(safeSeries) {
+                    detectTapGestures { offset ->
+                        val pointCount = safeSeries.firstOrNull()?.points?.size ?: 2
+                        val cellWidth = size.width / pointCount
+
+                        selectedIndex = (offset.x / cellWidth)
+                            .toInt()
+                            .coerceIn(0, pointCount - 1)
+                    }
+                }
+        ) {
+            val w = size.width
+            val h = size.height
+            val pointCount = safeSeries.firstOrNull()?.points?.size ?: 2
+            val cellWidth = w / pointCount
+            val chartTopPadding = 8.dp.toPx()
+            val chartBottomPadding = 8.dp.toPx()
+            val usableHeight = h - chartTopPadding - chartBottomPadding
+
+            repeat(4) { i ->
+                val y = chartTopPadding + (usableHeight * (i / 3f))
+
+                drawLine(
+                    borderColor,
+                    Offset(0f, y),
+                    Offset(w, y),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+
+            safeSeries.forEach { seri ->
+                val coordinates = seri.points.mapIndexed { i, pt ->
+                    Offset(
+                        x = (cellWidth * i) + (cellWidth / 2f),
+                        y = chartTopPadding + usableHeight - (pt * usableHeight)
+                    )
+                }
+
+                if (coordinates.size >= 2) {
+                    val path = Path()
+
+                    coordinates.forEachIndexed { i, point ->
+                        if (i == 0) {
+                            path.moveTo(point.x, point.y)
+                        } else {
+                            path.lineTo(point.x, point.y)
+                        }
+                    }
+
+                    drawPath(
+                        path = path,
+                        color = seri.color,
+                        style = Stroke(
+                            width = 3.dp.toPx(),
+                            cap = StrokeCap.Round,
+                            join = StrokeJoin.Round
+                        )
+                    )
+
+                    val lastPoint = coordinates.last()
+
+                    drawCircle(
+                        surfaceColor,
+                        6.dp.toPx(),
+                        lastPoint
+                    )
+
+                    drawCircle(
+                        seri.color,
+                        4.dp.toPx(),
+                        lastPoint
+                    )
+
+                    selectedIndex?.let { idx ->
+                        coordinates.getOrNull(idx)?.let { point ->
+                            drawCircle(
+                                seri.color,
+                                7.dp.toPx(),
+                                point
+                            )
+
+                            drawCircle(
+                                surfaceColor,
+                                3.dp.toPx(),
+                                point
+                            )
+                        }
+                    }
+                }
+            }
+
+            selectedIndex?.let { idx ->
+                val x = (cellWidth * idx) + (cellWidth / 2f)
+
+                drawLine(
+                    color = primaryColor.copy(alpha = 0.35f),
+                    start = Offset(x, chartTopPadding),
+                    end = Offset(x, h - chartBottomPadding),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
+                )
+            }
+        }
+
+        selectedIndex?.let { idx ->
+            val tooltip = safeSeries.joinToString("  •  ") { seri ->
+                "${seri.label}: ${seri.rawValues.getOrNull(idx).orEmpty()}"
+            }
+
+            if (tooltip.isNotBlank()) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-10).dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = ProTheme.text,
+                    shadowElevation = 4.dp
+                ) {
+                    Text(
+                        tooltip,
+                        color = ProTheme.surface,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(
+                            horizontal = 10.dp,
+                            vertical = 6.dp
+                        )
+                    )
+                }
+            }
+        }
     }
 }
 
