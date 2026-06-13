@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowBack
@@ -76,7 +77,9 @@ class AktivitasDaftarHarga : AktivitasDasar() {
         super.onCreate(savedInstanceState)
         if (!requireLoginOrRedirect()) return
 
-        val initialProductId = intent.getStringExtra(EkstraAplikasi.EXTRA_PRODUCT_ID)
+        val notifHighlightProductId = intent.getStringExtra("extra_notif_highlight_id")
+        val initialProductId = notifHighlightProductId
+            ?: intent.getStringExtra(EkstraAplikasi.EXTRA_PRODUCT_ID)
 
         setContent {
             SiTahuProTheme {
@@ -84,6 +87,7 @@ class AktivitasDaftarHarga : AktivitasDasar() {
                 PriceListScreen(
                     autoRefreshTrigger = autoRefreshTrigger,
                     initialProductId = initialProductId,
+                    highlightProductId = notifHighlightProductId.orEmpty(),
                     onNavigateBack = { finish() },
                     onShowMessage = { pesan -> showMessage(pesan) },
                     onShowConfirmation = { title, message, confirmLabel, action ->
@@ -142,6 +146,7 @@ private fun Modifier.adminShimmerEffect(): Modifier = composed {
 private fun PriceListScreen(
     autoRefreshTrigger: Int,
     initialProductId: String?,
+    highlightProductId: String = "",
     onNavigateBack: () -> Unit,
     onShowMessage: (String) -> Unit,
     onShowConfirmation: (String, String, String, () -> Unit) -> Unit,
@@ -165,6 +170,16 @@ private fun PriceListScreen(
     var halamanHargaSaatIni by remember { mutableStateOf(1) }
     val itemKecilPerHalaman = 15
 
+    val hargaListState = rememberLazyListState()
+
+    var pendingHighlightId by remember { mutableStateOf(highlightProductId) }
+
+    var activeProductHighlight by remember { mutableStateOf(false) }
+    var productHighlightBlink by remember { mutableStateOf(false) }
+
+    var activeChannelHighlightId by remember { mutableStateOf("") }
+    var channelHighlightBlink by remember { mutableStateOf(false) }
+
     // Tema Warna Pro
     val isDark = isSystemInDarkTheme()
     val bgColor = if (isDark) Color(0xFF111827) else Color(0xFFF3F4F6)
@@ -182,6 +197,68 @@ private fun PriceListScreen(
     val totalHalamanHarga = maxOf(1, ((channels.size - 1) / itemKecilPerHalaman) + 1)
     if (halamanHargaSaatIni > totalHalamanHarga) halamanHargaSaatIni = totalHalamanHarga
     val daftarHargaTampil = channels.drop((halamanHargaSaatIni - 1) * itemKecilPerHalaman).take(itemKecilPerHalaman)
+
+    LaunchedEffect(highlightProductId) {
+        if (highlightProductId.isNotBlank()) {
+            pendingHighlightId = highlightProductId
+            halamanHargaSaatIni = 1
+        }
+    }
+
+    LaunchedEffect(isLoadingProducts, products, pendingHighlightId) {
+        val targetId = pendingHighlightId
+
+        if (!isLoadingProducts && targetId.isNotBlank() && products.isNotEmpty()) {
+            val produkTarget = products.firstOrNull { produk ->
+                produk.id == targetId
+            }
+
+            if (produkTarget != null && selectedProduct?.id != produkTarget.id) {
+                selectedProduct = produkTarget
+                triggerRefreshChannels++
+                halamanHargaSaatIni = 1
+            }
+        }
+    }
+
+    LaunchedEffect(isLoadingChannels, selectedProduct?.id, channels, pendingHighlightId) {
+        val targetId = pendingHighlightId
+
+        if (!isLoadingChannels && targetId.isNotBlank()) {
+            if (selectedProduct?.id == targetId) {
+                activeProductHighlight = true
+                productHighlightBlink = true
+                pendingHighlightId = ""
+            } else {
+                val globalIndex = channels.indexOfFirst { channel ->
+                    channel.id == targetId
+                }
+
+                if (globalIndex >= 0) {
+                    halamanHargaSaatIni = (globalIndex / itemKecilPerHalaman) + 1
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(halamanHargaSaatIni, daftarHargaTampil, pendingHighlightId) {
+        val targetId = pendingHighlightId
+
+        if (!isLoadingChannels && targetId.isNotBlank()) {
+            val localIndex = daftarHargaTampil.indexOfFirst { channel ->
+                channel.id == targetId
+            }
+
+            if (localIndex >= 0) {
+                hargaListState.animateScrollToItem(localIndex)
+
+                activeChannelHighlightId = targetId
+
+                channelHighlightBlink = true
+                pendingHighlightId = ""
+            }
+        }
+    }
 
     LaunchedEffect(selectedProduct?.id, channels.size) {
         halamanHargaSaatIni = 1
@@ -379,11 +456,32 @@ private fun PriceListScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // --- KARTU PILIH PRODUK (HEADER) ---
+            val productHeaderContainerColor = if (activeProductHighlight) {
+                if (surfaceColor == Color(0xFFFFFFFF)) {
+                    Color(0xFFF3F4F6)
+                } else {
+                    Color(0xFF374151)
+                }
+            } else {
+                surfaceColor
+            }
+
+            val productHeaderBorder = if (activeProductHighlight) {
+                BorderStroke(
+                    width = 2.dp,
+                    color = mutedColor.copy(alpha = 0.45f)
+                )
+            } else {
+                BorderStroke(1.dp, borderColor)
+            }
+
             Card(
                 shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
-                colors = CardDefaults.cardColors(containerColor = surfaceColor),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                border = BorderStroke(1.dp, borderColor)
+                colors = CardDefaults.cardColors(containerColor = productHeaderContainerColor),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = if (activeProductHighlight && productHighlightBlink) 8.dp else 0.dp
+                ),
+                border = productHeaderBorder
             ) {
                 Column(Modifier.padding(20.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -461,6 +559,7 @@ private fun PriceListScreen(
                 }
             } else {
                 LazyColumn(
+                    state = hargaListState,
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -468,6 +567,8 @@ private fun PriceListScreen(
                     items(daftarHargaTampil) { channel ->
                         PriceCard(
                             channel = channel,
+                            isHighlighted = channel.id == activeChannelHighlightId,
+                            highlightBlink = channelHighlightBlink,
                             surfaceColor = surfaceColor,
                             borderColor = borderColor,
                             textColor = textColor,
@@ -759,8 +860,15 @@ private fun ProductPickerHargaDialog(
 @Composable
 private fun PriceCard(
     channel: DataBarisHarga,
-    surfaceColor: Color, borderColor: Color, textColor: Color, mutedColor: Color,
-    successColor: Color, warningColor: Color, dangerColor: Color,
+    isHighlighted: Boolean = false,
+    highlightBlink: Boolean = false,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    successColor: Color,
+    warningColor: Color,
+    dangerColor: Color,
     onEdit: () -> Unit,
     onSetDefault: () -> Unit,
     onToggleActive: () -> Unit,
@@ -769,45 +877,123 @@ private fun PriceCard(
     val statusColor = if (channel.aktif) successColor else warningColor
     val badgeText = if (channel.aktif) "Aktif" else "Nonaktif"
 
-    // State internal kartu untuk mengontrol tampilan DropdownMenu melayang (anchored)
+    val cardContainerColor = if (isHighlighted) {
+        if (surfaceColor == Color(0xFFFFFFFF)) {
+            Color(0xFFF3F4F6)
+        } else {
+            Color(0xFF374151)
+        }
+    } else {
+        surfaceColor
+    }
+
+    val cardBorder = if (isHighlighted) {
+        BorderStroke(
+            width = 2.dp,
+            color = mutedColor.copy(alpha = 0.45f)
+        )
+    } else {
+        BorderStroke(1.dp, borderColor)
+    }
+
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, borderColor),
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit)
+        colors = CardDefaults.cardColors(containerColor = cardContainerColor),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isHighlighted && highlightBlink) 8.dp else 0.dp
+        ),
+        border = cardBorder,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onEdit)
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Box(Modifier.size(48.dp).clip(CircleShape).background(statusColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Rounded.AttachMoney, null, tint = statusColor, modifier = Modifier.size(24.dp))
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(statusColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.AttachMoney,
+                    contentDescription = null,
+                    tint = statusColor,
+                    modifier = Modifier.size(24.dp)
+                )
             }
 
             Column(Modifier.weight(1f)) {
-                Text(channel.kanalHarga, fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.1f)) {
-                        Text(badgeText, color = statusColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                Text(
+                    channel.kanalHarga,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Row(
+                    Modifier.padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = statusColor.copy(alpha = 0.1f)
+                    ) {
+                        Text(
+                            badgeText,
+                            color = statusColor,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
                     }
+
                     if (channel.hargaUtama) {
-                        Surface(shape = RoundedCornerShape(6.dp), color = successColor.copy(alpha = 0.1f)) {
-                            Text("Harga Utama Kasir", color = successColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = successColor.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                "Harga Utama Kasir",
+                                color = successColor,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
                         }
                     }
                 }
             }
 
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(Formatter.currency(channel.hargaSatuan), fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.titleMedium)
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    Formatter.currency(channel.hargaSatuan),
+                    fontWeight = FontWeight.Bold,
+                    color = textColor,
+                    style = MaterialTheme.typography.titleMedium
+                )
 
-                // Kontainer jangkar Dropdown Menu
                 Box {
                     IconButton(
                         onClick = { showMenu = true },
                         modifier = Modifier.size(32.dp)
                     ) {
-                        Icon(Icons.Rounded.MoreVert, "Opsi", tint = mutedColor)
+                        Icon(
+                            Icons.Rounded.MoreVert,
+                            contentDescription = "Opsi",
+                            tint = mutedColor
+                        )
                     }
 
                     DropdownMenu(
@@ -817,26 +1003,54 @@ private fun PriceCard(
                     ) {
                         DropdownMenuItem(
                             text = { Text("Edit Harga Ini", color = textColor) },
-                            onClick = { showMenu = false; onEdit() }
+                            onClick = {
+                                showMenu = false
+                                onEdit()
+                            }
                         )
 
                         if (!channel.hargaUtama) {
                             DropdownMenuItem(
                                 text = { Text("Jadikan Harga Utama Kasir", color = successColor) },
-                                onClick = { showMenu = false; onSetDefault() }
+                                onClick = {
+                                    showMenu = false
+                                    onSetDefault()
+                                }
                             )
                         }
 
-                        val toggleText = if (channel.aktif) "Nonaktifkan Harga" else "Aktifkan Harga"
-                        val toggleColor = if (channel.aktif) warningColor else successColor
+                        val toggleText = if (channel.aktif) {
+                            "Nonaktifkan Harga"
+                        } else {
+                            "Aktifkan Harga"
+                        }
+
+                        val toggleColor = if (channel.aktif) {
+                            warningColor
+                        } else {
+                            successColor
+                        }
+
                         DropdownMenuItem(
                             text = { Text(toggleText, color = toggleColor) },
-                            onClick = { showMenu = false; onToggleActive() }
+                            onClick = {
+                                showMenu = false
+                                onToggleActive()
+                            }
                         )
 
                         DropdownMenuItem(
-                            text = { Text("Hapus Harga", color = dangerColor, fontWeight = FontWeight.SemiBold) },
-                            onClick = { showMenu = false; onDelete() }
+                            text = {
+                                Text(
+                                    "Hapus Harga",
+                                    color = dangerColor,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onDelete()
+                            }
                         )
                     }
                 }

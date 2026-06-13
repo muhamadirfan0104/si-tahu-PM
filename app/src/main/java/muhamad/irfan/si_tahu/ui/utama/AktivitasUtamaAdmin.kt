@@ -86,6 +86,7 @@ import muhamad.irfan.si_tahu.ui.stok.AktivitasRiwayatSemuaStok
 import muhamad.irfan.si_tahu.ui.stok.AktivitasStockAdjustment
 import muhamad.irfan.si_tahu.util.Formatter
 import muhamad.irfan.si_tahu.util.PembantuCetak
+import muhamad.irfan.si_tahu.util.EkstraAplikasi
 import muhamad.irfan.si_tahu.utilitas.TemaAplikasi
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -133,6 +134,18 @@ private fun bukaProduksiSesuaiProduk(context: Context, productId: String, katego
 }
 
 private fun String.initials(): String = split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercaseChar().toString() }.ifBlank { "A" }
+private const val EXTRA_NOTIF_HIGHLIGHT_ID = "extra_notif_highlight_id"
+private const val EXTRA_NOTIF_HIGHLIGHT_TYPE = "extra_notif_highlight_type"
+private const val EXTRA_NOTIF_HIGHLIGHT_TITLE = "extra_notif_highlight_title"
+
+private fun Intent.withNotifHighlight(
+    item: RepositoriFirebaseUtama.NotifikasiAdmin
+): Intent {
+    return this
+        .putExtra(EXTRA_NOTIF_HIGHLIGHT_ID, item.targetId)
+        .putExtra(EXTRA_NOTIF_HIGHLIGHT_TYPE, item.tujuan)
+        .putExtra(EXTRA_NOTIF_HIGHLIGHT_TITLE, item.judul)
+}
 
 // === AKTIVITAS UTAMA ===
 class AktivitasUtamaAdmin : AktivitasDasar() {
@@ -438,35 +451,46 @@ private fun AdminMainScreen(
 ) {
     val context = LocalContext.current
 
+    var tampilkanDialogLogout by remember { mutableStateOf(false) }
+
     var notifikasiAdmin by remember {
         mutableStateOf<List<RepositoriFirebaseUtama.NotifikasiAdmin>>(emptyList())
     }
 
     var isNotificationLoading by remember { mutableStateOf(false) }
-    var isManualRefreshing by remember { mutableStateOf(false) }
     var notifRealtimeTick by remember { mutableIntStateOf(0) }
     var manualRefreshKey by remember { mutableIntStateOf(0) }
 
     val firestoreRealtime = remember { FirebaseFirestore.getInstance() }
-    var tampilkanDialogLogout by remember { mutableStateOf(false) }
-    val mintaKonfirmasiLogout: () -> Unit = { tampilkanDialogLogout = true }
 
-    val onRefreshCurrent: () -> Unit = {
-        isManualRefreshing = true
-        manualRefreshKey++
-        notifRealtimeTick++
+    val notifPrefs = remember {
+        context.getSharedPreferences("notifikasi_admin_dibaca", Context.MODE_PRIVATE)
     }
 
-    LaunchedEffect(manualRefreshKey) {
-        if (manualRefreshKey > 0) {
-            delay(750)
-            isManualRefreshing = false
+    var notifDibacaIds by remember {
+        mutableStateOf(
+            notifPrefs
+                .getStringSet("ids", emptySet())
+                ?.toSet()
+                .orEmpty()
+        )
+    }
+
+    val jumlahNotifBelumDibaca = remember(notifikasiAdmin, notifDibacaIds) {
+        notifikasiAdmin.count { item ->
+            item.id !in notifDibacaIds
         }
+    }
+
+    val onRefreshCurrent: () -> Unit = {
+        manualRefreshKey++
+        notifRealtimeTick++
     }
 
     DisposableEffect(Unit) {
         val registrations = listOf(
             firestoreRealtime.collection("Penjualan").addSnapshotListener { _, _ -> notifRealtimeTick++ },
+            firestoreRealtime.collection("CatatanProduksi").addSnapshotListener { _, _ -> notifRealtimeTick++ },
             firestoreRealtime.collection("Pengeluaran").addSnapshotListener { _, _ -> notifRealtimeTick++ },
             firestoreRealtime.collection("Produk").addSnapshotListener { _, _ -> notifRealtimeTick++ },
             firestoreRealtime.collection("BatchStok").addSnapshotListener { _, _ -> notifRealtimeTick++ },
@@ -494,6 +518,18 @@ private fun AdminMainScreen(
             RepositoriFirebaseUtama.muatNotifikasiAdmin()
         }.onSuccess { data ->
             notifikasiAdmin = data
+
+            val idNotifAktif = data.map { it.id }.toSet()
+            val idDibacaYangMasihAktif = notifDibacaIds
+                .filter { it in idNotifAktif }
+                .toSet()
+
+            if (idDibacaYangMasihAktif != notifDibacaIds) {
+                notifDibacaIds = idDibacaYangMasihAktif
+                notifPrefs.edit()
+                    .putStringSet("ids", idDibacaYangMasihAktif.toMutableSet())
+                    .apply()
+            }
         }.onFailure {
             notifikasiAdmin = emptyList()
         }
@@ -564,42 +600,89 @@ private fun AdminMainScreen(
         onTabSelected = onTabSelected,
         fabItems = currentFabItems,
         notifikasiAdmin = notifikasiAdmin,
+        notifDibacaIds = notifDibacaIds,
+        jumlahNotifBelumDibaca = jumlahNotifBelumDibaca,
         isNotificationLoading = isNotificationLoading,
-        isRefreshing = isManualRefreshing,
         onRefresh = onRefreshCurrent,
-        onLogout = mintaKonfirmasiLogout,
+        onLogout = {
+            tampilkanDialogLogout = true
+        },
         onNotificationClick = { item ->
-            when {
-                item.tujuan == "produksi_dasar" && item.targetId.isNotBlank() -> {
+            if (item.id !in notifDibacaIds) {
+                val updatedIds = notifDibacaIds + item.id
+                notifDibacaIds = updatedIds
+
+                notifPrefs.edit()
+                    .putStringSet("ids", updatedIds.toMutableSet())
+                    .apply()
+            }
+
+            val tujuan = item.tujuan.trim().lowercase(Locale("id", "ID"))
+            val targetId = item.targetId.trim()
+
+            when (tujuan) {
+                "stok" -> {
+                    val intent = Intent(context, AktivitasMonitoringStok::class.java)
+                        .withNotifHighlight(item)
+
+                    if (targetId.isNotBlank()) {
+                        intent.putExtra(
+                            AktivitasMonitoringStok.EXTRA_PRODUCT_ID,
+                            targetId
+                        )
+                    }
+
+                    context.startActivity(intent)
+                }
+
+                "harga" -> {
                     context.startActivity(
-                        Intent(context, AktivitasProduksiTahuDasar::class.java)
-                            .putExtra(AktivitasProduksiTahuDasar.EXTRA_SELECTED_PRODUCT_ID, item.targetId)
+                        Intent(context, AktivitasDaftarHarga::class.java)
+                            .withNotifHighlight(item)
                     )
                 }
 
-                item.tujuan == "produksi_olahan" && item.targetId.isNotBlank() -> {
+                "produk" -> {
                     context.startActivity(
-                        Intent(context, AktivitasKonversiProduk::class.java)
-                            .putExtra(AktivitasKonversiProduk.EXTRA_SELECTED_RESULT_PRODUCT_ID, item.targetId)
+                        Intent(context, AktivitasDaftarProduk::class.java)
+                            .withNotifHighlight(item)
                     )
                 }
 
-                item.tujuan == "harga" -> {
-                    context.startActivity(Intent(context, AktivitasDaftarHarga::class.java))
+                "parameter" -> {
+                    context.startActivity(
+                        Intent(context, AktivitasDaftarParameter::class.java)
+                            .withNotifHighlight(item)
+                            .putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, item.targetId)
+                    )
                 }
 
-                item.tujuan == "stok" && item.targetId.isNotBlank() -> {
+                "penjualan" -> {
                     context.startActivity(
-                        Intent(context, AktivitasDetailStok::class.java)
-                            .putExtra(
-                                AktivitasMonitoringStok.EXTRA_PRODUCT_ID,
-                                item.targetId
-                            )
+                        Intent(context, AktivitasRiwayatPenjualan::class.java)
+                            .withNotifHighlight(item)
+                    )
+                }
+
+                "pengeluaran" -> {
+                    context.startActivity(
+                        Intent(context, AktivitasDaftarPengeluaran::class.java)
+                            .withNotifHighlight(item)
+                    )
+                }
+
+                "produksi" -> {
+                    context.startActivity(
+                        Intent(context, AktivitasRiwayatProduksi::class.java)
+                            .withNotifHighlight(item)
                     )
                 }
 
                 else -> {
-                    context.startActivity(Intent(context, AktivitasMonitoringStok::class.java))
+                    context.startActivity(
+                        Intent(context, AktivitasMonitoringStok::class.java)
+                            .withNotifHighlight(item)
+                    )
                 }
             }
         }
@@ -618,8 +701,8 @@ private fun AdminMainScreen(
             )
 
             TabIds.ADMIN_MENU -> AdminMenuPage(
-                mintaKonfirmasiLogout,
-                onSwitchCashier
+                onLogout = { tampilkanDialogLogout = true },
+                onSwitchCashier = onSwitchCashier
             )
 
             else -> AdminDashboardPage(
@@ -631,7 +714,9 @@ private fun AdminMainScreen(
 
     if (tampilkanDialogLogout) {
         DialogKonfirmasiLogout(
-            onDismiss = { tampilkanDialogLogout = false },
+            onDismiss = {
+                tampilkanDialogLogout = false
+            },
             onConfirm = {
                 tampilkanDialogLogout = false
                 onLogout()
@@ -650,15 +735,16 @@ internal fun ProAppShell(
     onTabSelected: (Int) -> Unit,
     fabItems: List<SpeedDialItem> = emptyList(),
     notifikasiAdmin: List<RepositoriFirebaseUtama.NotifikasiAdmin> = emptyList(),
+    notifDibacaIds: Set<String> = emptySet(),
+    jumlahNotifBelumDibaca: Int = 0,
     isNotificationLoading: Boolean = false,
-    isRefreshing: Boolean = false,
     onNotificationClick: (RepositoriFirebaseUtama.NotifikasiAdmin) -> Unit = {},
     onRefresh: () -> Unit = {},
     onLogout: () -> Unit = {},
     content: @Composable () -> Unit
 ) {
     val pullRefreshState = rememberPullRefreshState(
-        refreshing = isRefreshing,
+        refreshing = isNotificationLoading,
         onRefresh = onRefresh
     )
 
@@ -680,6 +766,8 @@ internal fun ProAppShell(
                     title = title,
                     subtitle = subtitle,
                     notifikasiAdmin = notifikasiAdmin,
+                    notifDibacaIds = notifDibacaIds,
+                    jumlahNotifBelumDibaca = jumlahNotifBelumDibaca,
                     isNotificationLoading = isNotificationLoading,
                     onNotificationClick = onNotificationClick,
                     onLogout = onLogout
@@ -702,7 +790,7 @@ internal fun ProAppShell(
             }
 
             PullRefreshIndicator(
-                refreshing = isRefreshing,
+                refreshing = isNotificationLoading,
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter),
                 backgroundColor = ProTheme.surface,
@@ -721,6 +809,8 @@ internal fun MainHeader(
     title: String,
     subtitle: String,
     notifikasiAdmin: List<RepositoriFirebaseUtama.NotifikasiAdmin> = emptyList(),
+    notifDibacaIds: Set<String> = emptySet(),
+    jumlahNotifBelumDibaca: Int = 0,
     isNotificationLoading: Boolean = false,
     onNotificationClick: (RepositoriFirebaseUtama.NotifikasiAdmin) -> Unit = {},
     onLogout: () -> Unit = {}
@@ -766,19 +856,17 @@ internal fun MainHeader(
                 )
             }
 
-            // PERBAIKAN DI SINI: verticalAlignment diubah menjadi CenterVertically
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                NotificationIcon(
-                    items = notifikasiAdmin,
-                    isLoading = isNotificationLoading,
-                    onNotificationClick = onNotificationClick
-                )
+            NotificationIcon(
+                items = notifikasiAdmin,
+                notifDibacaIds = notifDibacaIds,
+                unreadCount = jumlahNotifBelumDibaca,
+                isLoading = isNotificationLoading,
+                onNotificationClick = onNotificationClick
+            )
 
-                LogoutHeaderButton(onClick = onLogout)
-            }
+            LogoutHeaderButton(
+                onClick = onLogout
+            )
         }
     }
 }
@@ -2084,53 +2172,51 @@ private fun StatusPill(text: String, color: Color, bg: Color) {
 @Composable
 private fun NotificationIcon(
     items: List<RepositoriFirebaseUtama.NotifikasiAdmin>,
+    notifDibacaIds: Set<String>,
+    unreadCount: Int,
     isLoading: Boolean,
     onNotificationClick: (RepositoriFirebaseUtama.NotifikasiAdmin) -> Unit
 ) {
     val isDark = isSystemInDarkTheme()
     var showDialog by remember { mutableStateOf(false) }
-    val tombolBackground = if (isDark) ProTheme.background else Color.White.copy(alpha = 0.20f)
-    val tombolText = if (isDark) ProTheme.text else Color.White
 
-    Box(contentAlignment = Alignment.Center) {
-        // Ikon Lonceng Utama
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(tombolBackground)
-                .clickable { showDialog = true },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Rounded.Notifications,
-                contentDescription = "Notifikasi",
-                tint = tombolText,
-                modifier = Modifier.size(20.dp)
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                if (isDark) {
+                    ProTheme.background
+                } else {
+                    Color.White.copy(alpha = 0.2f)
+                }
             )
-        }
+            .clickable { showDialog = true },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            Icons.Rounded.Notifications,
+            contentDescription = "Notifikasi",
+            tint = if (isDark) ProTheme.text else Color.White,
+            modifier = Modifier.size(23.dp)
+        )
 
-        // PERBAIKAN BADGE: Posisi tepat di pojok kanan atas dengan outline stroke
-        if (items.isNotEmpty()) {
+        if (unreadCount > 0) {
             Box(
-                Modifier
+                modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = 6.dp, y = (-6).dp)
-                    .size(20.dp)
+                    .padding(top = 3.dp, end = 3.dp)
+                    .size(16.dp)
                     .clip(CircleShape)
-                    .background(ProTheme.danger)
-                    .border(
-                        width = 2.dp,
-                        color = if (isDark) ProTheme.surface else ProTheme.primary,
-                        shape = CircleShape
-                    ),
+                    .background(ProTheme.danger),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (items.size > 9) "9+" else items.size.toString(),
+                    text = if (unreadCount > 9) "9+" else unreadCount.toString(),
                     color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 8.sp,
+                    lineHeight = 8.sp,
                     textAlign = TextAlign.Center,
                     maxLines = 1
                 )
@@ -2147,9 +2233,19 @@ private fun NotificationIcon(
             shape = RoundedCornerShape(24.dp),
             title = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Notifikasi", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                     Text(
-                        text = if (isLoading) "Memuat notifikasi..." else if (items.isEmpty()) "Tidak ada notifikasi" else "${items.size} notifikasi aktif",
+                        "Notifikasi Sistem",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+
+                    Text(
+                        text = when {
+                            isLoading -> "Memuat notifikasi..."
+                            items.isEmpty() -> "Tidak ada masalah aktif"
+                            unreadCount > 0 -> "$unreadCount belum dibaca • ${items.size} masalah aktif"
+                            else -> "Semua sudah dibaca • ${items.size} masalah aktif"
+                        },
                         color = ProTheme.muted,
                         style = MaterialTheme.typography.labelMedium
                     )
@@ -2157,25 +2253,38 @@ private fun NotificationIcon(
             },
             text = {
                 Column(
-                    Modifier
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 400.dp)
+                        .heightIn(max = 420.dp)
                         .verticalScroll(rememberScrollState())
                         .padding(top = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     when {
-                        isLoading -> repeat(4) { NotifikasiRowSkeleton() }
+                        isLoading -> {
+                            repeat(4) {
+                                NotifikasiRowSkeleton()
+                            }
+                        }
+
                         items.isEmpty() -> {
                             EmptyDataView(
-                                title = "Tidak ada notifikasi",
-                                subtitle = "Stok dan harga aman."
+                                title = "Semua Aman",
+                                subtitle = "Tidak ada stok menipis, stok kedaluwarsa, atau harga yang perlu dicek."
                             )
                         }
-                        else -> items.forEach { item ->
-                            NotifikasiItemRow(item = item) {
-                                showDialog = false
-                                onNotificationClick(item)
+
+                        else -> {
+                            items.forEach { item ->
+                                val isRead = item.id in notifDibacaIds
+
+                                NotifikasiItemRow(
+                                    item = item,
+                                    isRead = isRead
+                                ) {
+                                    showDialog = false
+                                    onNotificationClick(item)
+                                }
                             }
                         }
                     }
@@ -2185,10 +2294,19 @@ private fun NotificationIcon(
                 Button(
                     onClick = { showDialog = false },
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ProTheme.primary, contentColor = Color.White),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ProTheme.primary,
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
                 ) {
-                    Text("Tutup", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
+                    Text(
+                        "Tutup",
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
                 }
             }
         )
@@ -2277,13 +2395,28 @@ private fun DialogKonfirmasiLogout(
 @Composable
 private fun NotifikasiItemRow(
     item: RepositoriFirebaseUtama.NotifikasiAdmin,
+    isRead: Boolean,
     onClick: () -> Unit
 ) {
-    val tone = when (item.warna) {
+    val tone = when (item.warna.lowercase()) {
         "danger" -> ProTheme.danger
         "warning", "orange" -> ProTheme.warning
         "success" -> ProTheme.success
         else -> ProTheme.primary
+    }
+
+    val warningDotColor = ProTheme.warning
+
+    val rowBackground = if (isRead) {
+        ProTheme.surface
+    } else {
+        tone.copy(alpha = 0.10f)
+    }
+
+    val borderColor = if (isRead) {
+        ProTheme.border
+    } else {
+        tone.copy(alpha = 0.45f)
     }
 
     Surface(
@@ -2292,46 +2425,105 @@ private fun NotifikasiItemRow(
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        color = tone.copy(alpha = 0.08f),
-        border = BorderStroke(1.dp, tone.copy(alpha = 0.20f))
+        color = rowBackground,
+        border = BorderStroke(1.dp, borderColor)
     ) {
         Row(
-            Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Bubble Angka/Icon
             Box(
-                Modifier.size(42.dp).clip(CircleShape).background(tone.copy(alpha = 0.15f)),
+                modifier = Modifier
+                    .size(9.dp)
+                    .clip(CircleShape)
+                    .background(warningDotColor)
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(tone.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = item.jumlah.coerceAtMost(99).toString(),
-                    color = tone,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            // Teks Konten
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(item.judul, color = ProTheme.text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                Text(item.isi, color = ProTheme.muted, style = MaterialTheme.typography.labelSmall, lineHeight = MaterialTheme.typography.labelSmall.lineHeight)
-                Text(
-                    text = when {
-                        item.tujuan.startsWith("produksi") -> "Produksi"
-                        item.tujuan == "harga" -> "Atur Harga"
-                        else -> "Lihat Stok"
+                Icon(
+                    imageVector = when (item.tujuan.lowercase()) {
+                        "harga" -> Icons.Rounded.MonetizationOn
+                        "stok" -> Icons.Rounded.Inventory
+                        else -> Icons.Rounded.Notifications
                     },
-                    color = tone,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 2.dp)
+                    contentDescription = null,
+                    tint = tone,
+                    modifier = Modifier.size(22.dp)
                 )
             }
 
-            // Panah Aksi
-            Icon(Icons.Rounded.ChevronRight, contentDescription = "Buka", tint = tone, modifier = Modifier.size(24.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = item.judul,
+                        color = ProTheme.text,
+                        fontWeight = if (isRead) FontWeight.SemiBold else FontWeight.Black,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    if (!isRead) {
+                        Surface(
+                            shape = RoundedCornerShape(100),
+                            color = tone.copy(alpha = 0.16f)
+                        ) {
+                            Text(
+                                text = "Baru",
+                                color = tone,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = item.isi,
+                    color = ProTheme.muted,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = if (isRead) {
+                        "Masih perlu ditindaklanjuti"
+                    } else {
+                        "Ketuk untuk membuka detail"
+                    },
+                    color = if (isRead) warningDotColor else tone,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Icon(
+                Icons.Rounded.ChevronRight,
+                contentDescription = "Buka",
+                tint = ProTheme.muted,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -68,6 +69,7 @@ class AktivitasDaftarProduk : AktivitasDasar() {
                 val autoRefreshTrigger by refreshOnResume.collectAsState()
                 ProductListScreen(
                     autoRefreshTrigger = autoRefreshTrigger,
+                    highlightProductId = intent.getStringExtra(EXTRA_NOTIF_HIGHLIGHT_ID).orEmpty(),
                     onNavigateBack = { finish() },
                     activityContext = this@AktivitasDaftarProduk,
                     onShowMessage = { pesan -> showMessage(pesan) },
@@ -109,6 +111,11 @@ class AktivitasDaftarProduk : AktivitasDasar() {
             }
         }
     }
+    companion object {
+        const val EXTRA_NOTIF_HIGHLIGHT_ID = "extra_notif_highlight_id"
+        const val EXTRA_NOTIF_HIGHLIGHT_TYPE = "extra_notif_highlight_type"
+        const val EXTRA_NOTIF_HIGHLIGHT_TITLE = "extra_notif_highlight_title"
+    }
 }
 
 // === MODEL DATA ===
@@ -149,6 +156,7 @@ private fun Modifier.adminShimmerEffect(): Modifier = composed {
 @Composable
 private fun ProductListScreen(
     autoRefreshTrigger: Int,
+    highlightProductId: String = "",
     onNavigateBack: () -> Unit,
     activityContext: AppCompatActivity,
     onShowMessage: (String) -> Unit,
@@ -173,6 +181,12 @@ private fun ProductListScreen(
     // State Paginasi
     var halamanSaatIni by remember { mutableStateOf(1) }
     val itemPerHalaman = 15
+
+    val produkListState = rememberLazyListState()
+
+    var pendingHighlightId by remember { mutableStateOf(highlightProductId) }
+    var activeHighlightId by remember { mutableStateOf("") }
+    var highlightBlink by remember { mutableStateOf(false) }
 
     // Tema Warna Pro
     val isDark = isSystemInDarkTheme()
@@ -274,6 +288,48 @@ private fun ProductListScreen(
     if (halamanSaatIni > totalPages) halamanSaatIni = totalPages
     val paginatedRows = filteredRows.drop((halamanSaatIni - 1) * itemPerHalaman).take(itemPerHalaman)
 
+    LaunchedEffect(highlightProductId) {
+        if (highlightProductId.isNotBlank()) {
+            pendingHighlightId = highlightProductId
+
+            // Reset filter/search supaya produk target tidak ketutup.
+            searchQuery = ""
+            kategoriAktif = "Semua"
+            halamanSaatIni = 1
+        }
+    }
+
+    LaunchedEffect(isLoading, filteredRows, pendingHighlightId) {
+        val targetId = pendingHighlightId
+
+        if (!isLoading && targetId.isNotBlank() && filteredRows.isNotEmpty()) {
+            val globalIndex = filteredRows.indexOfFirst { product ->
+                product.id == targetId
+            }
+
+            if (globalIndex >= 0) {
+                halamanSaatIni = (globalIndex / itemPerHalaman) + 1
+            }
+        }
+    }
+
+    LaunchedEffect(halamanSaatIni, paginatedRows, pendingHighlightId) {
+        val targetId = pendingHighlightId
+
+        if (!isLoading && targetId.isNotBlank()) {
+            val localIndex = paginatedRows.indexOfFirst { product ->
+                product.id == targetId
+            }
+
+            if (localIndex >= 0) {
+                produkListState.animateScrollToItem(localIndex)
+
+                activeHighlightId = targetId
+                highlightBlink = true
+                pendingHighlightId = ""
+            }
+        }
+    }
     Scaffold(
         topBar = {
             Surface(
@@ -377,6 +433,7 @@ private fun ProductListScreen(
                 }
             } else {
                 LazyColumn(
+                    state = produkListState,
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -384,6 +441,8 @@ private fun ProductListScreen(
                     items(paginatedRows) { product ->
                         ProductCard(
                             product = product,
+                            isHighlighted = product.id == activeHighlightId,
+                            highlightBlink = highlightBlink,
                             surfaceColor = surfaceColor,
                             borderColor = borderColor,
                             textColor = textColor,
@@ -514,8 +573,17 @@ private fun ProductCardSkeleton(surfaceColor: Color, borderColor: Color) {
 @Composable
 private fun ProductCard(
     product: DataBarisProduk,
-    surfaceColor: Color, borderColor: Color, textColor: Color, mutedColor: Color, primaryColor: Color,
-    successColor: Color, warningColor: Color, dangerColor: Color, infoColor: Color,
+    isHighlighted: Boolean = false,
+    highlightBlink: Boolean = false,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    primaryColor: Color,
+    successColor: Color,
+    warningColor: Color,
+    dangerColor: Color,
+    infoColor: Color,
     onClick: () -> Unit,
     onEditHarga: () -> Unit,
     onEditParameter: () -> Unit,
@@ -527,30 +595,71 @@ private fun ProductCard(
         else -> successColor
     }
 
-    val itemColor = if (product.jenisProduk.equals("OLAHAN", true)) infoColor else primaryColor
-    val iconVector = if (product.jenisProduk.equals("OLAHAN", true)) Icons.Rounded.Category else Icons.Rounded.Inventory
+    val itemColor = if (product.jenisProduk.equals("OLAHAN", true)) {
+        infoColor
+    } else {
+        primaryColor
+    }
 
-    // State untuk mengontrol kemunculan dropdown menu titik tiga
+    val iconVector = if (product.jenisProduk.equals("OLAHAN", true)) {
+        Icons.Rounded.Category
+    } else {
+        Icons.Rounded.Inventory
+    }
+
+    val cardContainerColor = if (isHighlighted) {
+        if (surfaceColor == Color(0xFFFFFFFF)) {
+            Color(0xFFF3F4F6)
+        } else {
+            Color(0xFF374151)
+        }
+    } else {
+        surfaceColor
+    }
+
+    val cardBorder = if (isHighlighted) {
+        BorderStroke(
+            width = 2.dp,
+            color = mutedColor.copy(alpha = 0.45f)
+        )
+    } else {
+        BorderStroke(1.dp, borderColor)
+    }
+
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, borderColor),
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+        colors = CardDefaults.cardColors(containerColor = cardContainerColor),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isHighlighted && highlightBlink) 8.dp else 0.dp
+        ),
+        border = cardBorder,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            // Header: Icon, Nama, Kode, dan Titik Tiga
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Box(
-                    Modifier.size(48.dp).clip(CircleShape).background(itemColor.copy(alpha = 0.15f)),
+                    Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(itemColor.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(iconVector, null, tint = itemColor, modifier = Modifier.size(24.dp))
+                    Icon(
+                        iconVector,
+                        contentDescription = null,
+                        tint = itemColor,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
 
                 Column(Modifier.weight(1f)) {
@@ -562,21 +671,27 @@ private fun ProductCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+
                     Text(
                         text = "${product.kodeProduk} • ${product.jenisProduk} • ${product.satuan}",
                         color = mutedColor,
                         style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 2.dp)
+                        modifier = Modifier.padding(top = 2.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // Dropdown Menu Titik Tiga (Terpasang Langsung)
                 Box {
                     IconButton(
                         onClick = { showMenu = true },
                         modifier = Modifier.size(32.dp)
                     ) {
-                        Icon(Icons.Rounded.MoreVert, contentDescription = "Opsi", tint = mutedColor)
+                        Icon(
+                            Icons.Rounded.MoreVert,
+                            contentDescription = "Opsi",
+                            tint = mutedColor
+                        )
                     }
 
                     DropdownMenu(
@@ -586,19 +701,34 @@ private fun ProductCard(
                     ) {
                         DropdownMenuItem(
                             text = { Text("Edit Harga Jual", color = textColor) },
-                            onClick = { showMenu = false; onEditHarga() }
+                            onClick = {
+                                showMenu = false
+                                onEditHarga()
+                            }
                         )
 
                         if (product.jenisProduk == "DASAR") {
                             DropdownMenuItem(
                                 text = { Text("Edit Parameter Produksi", color = textColor) },
-                                onClick = { showMenu = false; onEditParameter() }
+                                onClick = {
+                                    showMenu = false
+                                    onEditParameter()
+                                }
                             )
                         }
 
                         DropdownMenuItem(
-                            text = { Text("Hapus Produk", color = dangerColor, fontWeight = FontWeight.SemiBold) },
-                            onClick = { showMenu = false; onDelete() }
+                            text = {
+                                Text(
+                                    "Hapus Produk",
+                                    color = dangerColor,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onDelete()
+                            }
                         )
                     }
                 }
@@ -606,9 +736,19 @@ private fun ProductCard(
 
             HorizontalDivider(color = borderColor)
 
-            // Body: Status Aktif & Stok
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = RoundedCornerShape(6.dp), color = if (product.aktifDijual) successColor.copy(alpha = 0.1f) else mutedColor.copy(alpha = 0.1f)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (product.aktifDijual) {
+                        successColor.copy(alpha = 0.1f)
+                    } else {
+                        mutedColor.copy(alpha = 0.1f)
+                    }
+                ) {
                     Text(
                         text = if (product.aktifDijual) "Dijual (Aktif)" else "Tidak Dijual",
                         color = if (product.aktifDijual) successColor else mutedColor,
@@ -617,16 +757,25 @@ private fun ProductCard(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
-                Text("Stok ${product.stokSaatIni}", fontWeight = FontWeight.Bold, color = stockColor, style = MaterialTheme.typography.bodyLarge)
+
+                Text(
+                    "Stok ${product.stokSaatIni}",
+                    fontWeight = FontWeight.Bold,
+                    color = stockColor,
+                    style = MaterialTheme.typography.bodyLarge
+                )
             }
 
-            // Footer: Status Info Sub-Data
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 val hargaColor = when {
                     product.statusHarga.total <= 0 -> warningColor
                     product.statusHarga.aktif <= 0 -> dangerColor
                     else -> mutedColor
                 }
+
                 val paramColor = when {
                     product.jenisProduk != "DASAR" -> mutedColor
                     product.statusParameter.total <= 0 -> warningColor
@@ -634,19 +783,59 @@ private fun ProductCard(
                     else -> mutedColor
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Rounded.AttachMoney, null, tint = hargaColor, modifier = Modifier.size(14.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.AttachMoney,
+                        contentDescription = null,
+                        tint = hargaColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+
                     Text(
-                        text = if (product.statusHarga.total <= 0) "Harga Kosong" else if (product.statusHarga.aktif <= 0) "Tidak Ada Harga Aktif" else "Harga Siap",
-                        color = hargaColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium
+                        text = if (product.statusHarga.total <= 0) {
+                            "Harga Kosong"
+                        } else if (product.statusHarga.aktif <= 0) {
+                            "Tidak Ada Harga Aktif"
+                        } else {
+                            "Harga Siap"
+                        },
+                        color = hargaColor,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Rounded.Tune, null, tint = paramColor, modifier = Modifier.size(14.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Tune,
+                        contentDescription = null,
+                        tint = paramColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+
                     Text(
-                        text = if (product.jenisProduk != "DASAR") "Bukan Dasar" else if (product.statusParameter.total <= 0) "Parameter Kosong" else if (product.statusParameter.aktif <= 0) "Parameter Mati" else "Parameter Siap",
-                        color = paramColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium
+                        text = if (product.jenisProduk != "DASAR") {
+                            "Bukan Dasar"
+                        } else if (product.statusParameter.total <= 0) {
+                            "Parameter Kosong"
+                        } else if (product.statusParameter.aktif <= 0) {
+                            "Parameter Mati"
+                        } else {
+                            "Parameter Siap"
+                        },
+                        color = paramColor,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

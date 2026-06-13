@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -77,14 +78,19 @@ class AktivitasDaftarParameter : AktivitasDasar() {
         super.onCreate(savedInstanceState)
         if (!requireLoginOrRedirect()) return
 
-        val initialProductId = intent.getStringExtra(EkstraAplikasi.EXTRA_PRODUCT_ID)
+        val notifHighlightProductId = intent.getStringExtra(EXTRA_NOTIF_HIGHLIGHT_ID)
+
+        val initialProductId = notifHighlightProductId
+            ?: intent.getStringExtra(EkstraAplikasi.EXTRA_PRODUCT_ID)
 
         setContent {
             SiTahuProTheme {
                 val autoRefreshTrigger by refreshOnResume.collectAsState()
+
                 ParameterListScreen(
                     autoRefreshTrigger = autoRefreshTrigger,
                     initialProductId = initialProductId,
+                    highlightProductId = notifHighlightProductId.orEmpty(),
                     onNavigateBack = { finish() },
                     onShowMessage = { pesan -> showMessage(pesan) },
                     onShowConfirmation = { title, message, confirmLabel, action ->
@@ -93,14 +99,23 @@ class AktivitasDaftarParameter : AktivitasDasar() {
                     onNavigateToForm = { productId, parameterId ->
                         val intent = Intent(this, AktivitasFormParameter::class.java).apply {
                             putExtra(EkstraAplikasi.EXTRA_PRODUCT_ID, productId)
-                            if (parameterId != null) putExtra(EkstraAplikasi.EXTRA_PARAMETER_ID, parameterId)
+
+                            if (parameterId != null) {
+                                putExtra(EkstraAplikasi.EXTRA_PARAMETER_ID, parameterId)
+                            }
                         }
+
                         startActivity(intent)
                     },
                     activityContext = this@AktivitasDaftarParameter
                 )
             }
         }
+    }
+    companion object {
+        const val EXTRA_NOTIF_HIGHLIGHT_ID = "extra_notif_highlight_id"
+        const val EXTRA_NOTIF_HIGHLIGHT_TYPE = "extra_notif_highlight_type"
+        const val EXTRA_NOTIF_HIGHLIGHT_TITLE = "extra_notif_highlight_title"
     }
 }
 
@@ -145,6 +160,7 @@ private fun Modifier.adminShimmerEffect(): Modifier = composed {
 private fun ParameterListScreen(
     autoRefreshTrigger: Int,
     initialProductId: String?,
+    highlightProductId: String = "",
     onNavigateBack: () -> Unit,
     onShowMessage: (String) -> Unit,
     onShowConfirmation: (String, String, String, () -> Unit) -> Unit,
@@ -167,6 +183,16 @@ private fun ParameterListScreen(
     var halamanParameterSaatIni by remember { mutableStateOf(1) }
     val itemKecilPerHalaman = 15
 
+    val parameterListState = rememberLazyListState()
+
+    var pendingHighlightId by remember { mutableStateOf(highlightProductId) }
+
+    var activeProductHighlight by remember { mutableStateOf(false) }
+    var productHighlightBlink by remember { mutableStateOf(false) }
+
+    var activeParameterHighlightId by remember { mutableStateOf("") }
+    var parameterHighlightBlink by remember { mutableStateOf(false) }
+
     // Tema Warna Pro
     val isDark = isSystemInDarkTheme()
     val bgColor = if (isDark) Color(0xFF111827) else Color(0xFFF3F4F6)
@@ -185,6 +211,66 @@ private fun ParameterListScreen(
     if (halamanParameterSaatIni > totalHalamanParameter) halamanParameterSaatIni = totalHalamanParameter
     val daftarParameterTampil = parameters.drop((halamanParameterSaatIni - 1) * itemKecilPerHalaman).take(itemKecilPerHalaman)
 
+    LaunchedEffect(highlightProductId) {
+        if (highlightProductId.isNotBlank()) {
+            pendingHighlightId = highlightProductId
+            halamanParameterSaatIni = 1
+        }
+    }
+
+    LaunchedEffect(isLoadingProducts, products, pendingHighlightId) {
+        val targetId = pendingHighlightId
+
+        if (!isLoadingProducts && targetId.isNotBlank() && products.isNotEmpty()) {
+            val produkTarget = products.firstOrNull { produk ->
+                produk.id == targetId
+            }
+
+            if (produkTarget != null && selectedProduct?.id != produkTarget.id) {
+                selectedProduct = produkTarget
+                triggerRefreshParameters++
+                halamanParameterSaatIni = 1
+            }
+        }
+    }
+
+    LaunchedEffect(isLoadingParameters, selectedProduct?.id, parameters, pendingHighlightId) {
+        val targetId = pendingHighlightId
+
+        if (!isLoadingParameters && targetId.isNotBlank()) {
+            if (selectedProduct?.id == targetId) {
+                activeProductHighlight = true
+                productHighlightBlink = true
+                pendingHighlightId = ""
+            } else {
+                val globalIndex = parameters.indexOfFirst { parameter ->
+                    parameter.id == targetId
+                }
+
+                if (globalIndex >= 0) {
+                    halamanParameterSaatIni = (globalIndex / itemKecilPerHalaman) + 1
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(halamanParameterSaatIni, daftarParameterTampil, pendingHighlightId) {
+        val targetId = pendingHighlightId
+
+        if (!isLoadingParameters && targetId.isNotBlank()) {
+            val localIndex = daftarParameterTampil.indexOfFirst { parameter ->
+                parameter.id == targetId
+            }
+
+            if (localIndex >= 0) {
+                parameterListState.animateScrollToItem(localIndex)
+
+                activeParameterHighlightId = targetId
+                parameterHighlightBlink = true
+                pendingHighlightId = ""
+            }
+        }
+    }
     LaunchedEffect(selectedProduct?.id, parameters.size) {
         halamanParameterSaatIni = 1
     }
@@ -333,11 +419,32 @@ private fun ParameterListScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // --- KARTU PILIH PRODUK DASAR (HEADER PRO) ---
+            val productHeaderContainerColor = if (activeProductHighlight) {
+                if (surfaceColor == Color(0xFFFFFFFF)) {
+                    Color(0xFFF3F4F6)
+                } else {
+                    Color(0xFF374151)
+                }
+            } else {
+                surfaceColor
+            }
+
+            val productHeaderBorder = if (activeProductHighlight) {
+                BorderStroke(
+                    width = 2.dp,
+                    color = mutedColor.copy(alpha = 0.45f)
+                )
+            } else {
+                BorderStroke(1.dp, borderColor)
+            }
+
             Card(
                 shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
-                colors = CardDefaults.cardColors(containerColor = surfaceColor),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                border = BorderStroke(1.dp, borderColor)
+                colors = CardDefaults.cardColors(containerColor = productHeaderContainerColor),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = if (activeProductHighlight && productHighlightBlink) 8.dp else 0.dp
+                ),
+                border = productHeaderBorder
             ) {
                 Column(Modifier.padding(20.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -411,6 +518,7 @@ private fun ParameterListScreen(
                 }
             } else {
                 LazyColumn(
+                    state = parameterListState,
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -419,6 +527,8 @@ private fun ParameterListScreen(
                         ParameterCard(
                             parameter = param,
                             productName = selectedProduct?.namaProduk ?: "Produk",
+                            isHighlighted = param.id == activeParameterHighlightId,
+                            highlightBlink = parameterHighlightBlink,
                             surfaceColor = surfaceColor,
                             borderColor = borderColor,
                             textColor = textColor,
@@ -692,8 +802,15 @@ private fun DialogPilihProdukParameter(
 private fun ParameterCard(
     parameter: DataBarisParameter,
     productName: String,
-    surfaceColor: Color, borderColor: Color, textColor: Color, mutedColor: Color,
-    successColor: Color, warningColor: Color, dangerColor: Color,
+    isHighlighted: Boolean = false,
+    highlightBlink: Boolean = false,
+    surfaceColor: Color,
+    borderColor: Color,
+    textColor: Color,
+    mutedColor: Color,
+    successColor: Color,
+    warningColor: Color,
+    dangerColor: Color,
     onClick: () -> Unit,
     onToggleActive: () -> Unit,
     onDelete: () -> Unit
@@ -702,27 +819,79 @@ private fun ParameterCard(
     val badgeText = if (parameter.aktif) "Aktif" else "Nonaktif"
     val displayTitle = parameter.namaProduk.ifBlank { productName }
 
+    val cardContainerColor = if (isHighlighted) {
+        if (surfaceColor == Color(0xFFFFFFFF)) {
+            Color(0xFFF3F4F6)
+        } else {
+            Color(0xFF374151)
+        }
+    } else {
+        surfaceColor
+    }
+
+    val cardBorder = if (isHighlighted) {
+        BorderStroke(
+            width = 2.dp,
+            color = mutedColor.copy(alpha = 0.45f)
+        )
+    } else {
+        BorderStroke(1.dp, borderColor)
+    }
+
     var showMenu by remember { mutableStateOf(false) }
 
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = surfaceColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, borderColor),
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+        colors = CardDefaults.cardColors(containerColor = cardContainerColor),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isHighlighted && highlightBlink) 8.dp else 0.dp
+        ),
+        border = cardBorder,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Box(Modifier.size(48.dp).clip(CircleShape).background(statusColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Tune, null, tint = statusColor, modifier = Modifier.size(24.dp))
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(statusColor.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Rounded.Tune,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
 
                 Column(Modifier.weight(1f)) {
-                    Text(displayTitle, fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.bodyLarge)
-                    Text("Hasil: ${Formatter.ribuan(parameter.hasilPerProduksi)} ${parameter.satuanHasil}", color = mutedColor, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 2.dp))
+                    Text(
+                        text = displayTitle,
+                        fontWeight = FontWeight.Bold,
+                        color = textColor,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Text(
+                        text = "Hasil: ${Formatter.ribuan(parameter.hasilPerProduksi)} ${parameter.satuanHasil}",
+                        color = mutedColor,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(top = 2.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 Box {
@@ -730,7 +899,11 @@ private fun ParameterCard(
                         onClick = { showMenu = true },
                         modifier = Modifier.size(32.dp)
                     ) {
-                        Icon(Icons.Rounded.MoreVert, "Opsi", tint = mutedColor)
+                        Icon(
+                            Icons.Rounded.MoreVert,
+                            contentDescription = "Opsi",
+                            tint = mutedColor
+                        )
                     }
 
                     DropdownMenu(
@@ -740,19 +913,44 @@ private fun ParameterCard(
                     ) {
                         DropdownMenuItem(
                             text = { Text("Edit Data Parameter", color = textColor) },
-                            onClick = { showMenu = false; onClick() }
+                            onClick = {
+                                showMenu = false
+                                onClick()
+                            }
                         )
 
-                        val toggleText = if (parameter.aktif) "Nonaktifkan Parameter" else "Jadikan Aktif (Utama)"
-                        val toggleColor = if (parameter.aktif) warningColor else successColor
+                        val toggleText = if (parameter.aktif) {
+                            "Nonaktifkan Parameter"
+                        } else {
+                            "Jadikan Aktif (Utama)"
+                        }
+
+                        val toggleColor = if (parameter.aktif) {
+                            warningColor
+                        } else {
+                            successColor
+                        }
+
                         DropdownMenuItem(
                             text = { Text(toggleText, color = toggleColor) },
-                            onClick = { showMenu = false; onToggleActive() }
+                            onClick = {
+                                showMenu = false
+                                onToggleActive()
+                            }
                         )
 
                         DropdownMenuItem(
-                            text = { Text("Hapus Parameter", color = dangerColor, fontWeight = FontWeight.SemiBold) },
-                            onClick = { showMenu = false; onDelete() }
+                            text = {
+                                Text(
+                                    "Hapus Parameter",
+                                    color = dangerColor,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onDelete()
+                            }
                         )
                     }
                 }
@@ -760,15 +958,42 @@ private fun ParameterCard(
 
             HorizontalDivider(color = borderColor)
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = RoundedCornerShape(6.dp), color = statusColor.copy(alpha = 0.1f)) {
-                    Text(badgeText, color = statusColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = statusColor.copy(alpha = 0.1f)
+                ) {
+                    Text(
+                        text = badgeText,
+                        color = statusColor,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
                 }
 
                 if (parameter.catatan.isNotBlank()) {
-                    Text("📝 Ada Catatan Alasan", color = mutedColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "📝 Ada Catatan Alasan",
+                        color = mutedColor,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 } else {
-                    Text("ID: ${parameter.id.takeLast(6).uppercase()}", color = mutedColor, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
+                    Text(
+                        text = "ID: ${parameter.id.takeLast(6).uppercase()}",
+                        color = mutedColor,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
