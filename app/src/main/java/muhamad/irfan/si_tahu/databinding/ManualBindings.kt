@@ -178,7 +178,7 @@ class ActivityParameterFormBinding private constructor(val root: ComposeView) {
 }
 
 class ActivityExpenseFormBinding private constructor(val root: ComposeView) {
-    val toolbar = ComposeToolbarState(); val etDate = input("Tanggal"); val etCategory = input("Kategori"); val etAmount = input("Nominal", KeyboardType.Number); val etNote = input("Catatan"); val btnSave = button("Simpan Pengeluaran")
+    val toolbar = ComposeToolbarState(); val etDate = input("Tanggal"); val etCategory = input("Nama Pengeluaran"); val etAmount = input("Nominal", KeyboardType.Number); val etNote = input("Catatan"); val btnSave = button("Simpan Pengeluaran")
     companion object { fun inflate(inflater: LayoutInflater): ActivityExpenseFormBinding { lateinit var b: ActivityExpenseFormBinding; val root = bindingRoot(inflater.context){ b.Content() }; b = ActivityExpenseFormBinding(root); return b } }
     @Composable private fun Content() = ScreenFrame(toolbar) { FormHero("Pengeluaran", "Catat biaya operasional dengan cepat dan rapi"); PremiumFormSection("Detail Biaya") { FieldView(etDate); FieldView(etCategory); FieldView(etAmount); FieldView(etNote) }; ButtonView(btnSave, Modifier.fillMaxWidth()) }
 }

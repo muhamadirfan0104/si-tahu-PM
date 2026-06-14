@@ -1100,12 +1100,12 @@ private fun AdminDashboardPage(dashboardRefreshKey: Int, onSwitchCashier: () -> 
     )
 
     Spacer(Modifier.height(16.dp))
-    SectionTitle("Pengeluaran Terbesar Hari Ini", "Pengeluaran terbesar")
+    SectionTitle("Pengeluaran Terbesar Hari Ini", "Hari ini")
 
     ProductSalesCard(
         rows = ringkasan?.expenseCategories.orEmpty(),
         isLoading = isLoading,
-        title = "Kategori Pengeluaran Hari Ini",
+        title = "Pengeluaran Hari Ini",
         emptyText = "Belum ada pengeluaran hari ini"
     )
 
@@ -2014,7 +2014,8 @@ private fun ProductSalesCard(rows: List<RepositoriFirebaseUtama.ItemDashboard>, 
                     val colors = listOf(ProTheme.primary, ProTheme.pro, ProTheme.success, ProTheme.warning, ProTheme.muted)
                     rows.forEachIndexed { index, item ->
                         val progress = when (index) { 0 -> 1f; 1 -> 0.76f; 2 -> 0.54f; 3 -> 0.38f; else -> 0.24f }
-                        ProductRow(item.title, "${item.subtitle} • ${item.amount}", progress, colors[index % colors.size])
+                        val info = if (item.subtitle.isBlank()) item.amount else "${item.subtitle} • ${item.amount}"
+                        ProductRow(item.title, info, progress, colors[index % colors.size])
                     }
                 }
             }

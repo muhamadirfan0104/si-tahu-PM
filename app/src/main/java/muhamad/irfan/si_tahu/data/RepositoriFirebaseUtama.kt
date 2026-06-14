@@ -3839,7 +3839,7 @@ ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
             DETAIL PENGELUARAN
             ID: ${doc.id}
             Tanggal: ${Formatter.readableDateTime(tanggal)}
-            Nama Pengeluaran: $kategori
+            Pengeluaran: $kategori
             Nominal: ${Formatter.currency(nominal)}
             Catatan: $catatan
             Dicatat Oleh: $pembuat
@@ -3934,7 +3934,7 @@ ${footer.ifBlank { "Terima kasih sudah bertransaksi." }}
                 ItemAnalitikLaporan(
                     id = entry.key,
                     title = entry.key,
-                    subtitle = "Nama pengeluaran",
+                    subtitle = "",
                     amount = "-${Formatter.currency(entry.value)}",
                     badge = "Biaya",
                     nominal = entry.value
@@ -4491,7 +4491,7 @@ $rowXml
             val user = doc.getString("dibuatOlehNama").orEmpty().ifBlank { "Pengguna" }
             rows += BarisBukuHarianExport(
                 tanggalIso = tanggalIso,
-                uraian = if (catatan.isBlank()) "Pengeluaran $kategori" else "Pengeluaran $kategori - $catatan",
+                uraian = if (catatan.isBlank()) kategori else "$kategori - $catatan",
                 user = user,
                 debit = doc.getLong("nominal") ?: 0L,
                 kredit = 0L

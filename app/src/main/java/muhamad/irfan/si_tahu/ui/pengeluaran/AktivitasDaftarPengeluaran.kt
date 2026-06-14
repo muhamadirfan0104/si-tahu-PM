@@ -954,7 +954,7 @@ private fun ExpenseCard(
 
             HorizontalDivider(color = borderColor)
 
-            // Body: Kategori & Total Nominal
+            // Body: Nama pengeluaran & Total Nominal
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Surface(shape = RoundedCornerShape(6.dp), color = warningColor.copy(alpha = 0.1f)) {
                     Text(
